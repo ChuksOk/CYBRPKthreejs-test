@@ -186,12 +186,19 @@
     font-size: 8px;
   }
 
-  .app-header-about-label {
+  .app-header-about-label,
+  .app-header-source-label {
     display: none;
   }
 
   .app-header-about-btn .app-header-action-icon .ph-icon {
     font-size: 19px;
+  }
+
+  .app-header-source-btn {
+    height: 40px;
+    width: 40px;
+    padding: 0;
   }
 
   .app-header-icon-btn {

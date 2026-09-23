@@ -1,5 +1,6 @@
 import "./aboutPanel.css";
 import { isMobileLayout, onMobileLayoutChange } from "../../platform/deviceLayout.js";
+import { SOURCE_CODE_URL } from "../core/externalLinks.js";
 
 const CLOSE_ICON = `
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -63,6 +64,9 @@ export function createAboutPanel({ state } = {}) {
           <button type="button" class="refresh-button-panel about-link-sunag">
             Sunag
           </button>
+          <button type="button" class="refresh-button-panel about-link-source">
+            Source code
+          </button>
         </div>
         <p class="about-model-credits">
           By Anderson Mancini &amp; Sunag
@@ -87,6 +91,7 @@ export function createAboutPanel({ state } = {}) {
   const closeButton = root.querySelector(".close-button-panel");
   const andersonButton = root.querySelector(".about-link-anderson");
   const sunagButton = root.querySelector(".about-link-sunag");
+  const sourceButton = root.querySelector(".about-link-source");
   const desktopRecommended = root.querySelector(".about-recommended--desktop");
   const mobileRecommended = root.querySelector(".about-recommended--mobile");
 
@@ -118,6 +123,10 @@ export function createAboutPanel({ state } = {}) {
 
   sunagButton.addEventListener("click", () => {
     window.open("https://x.com/sea3dformat", "_blank", "noopener,noreferrer");
+  });
+
+  sourceButton.addEventListener("click", () => {
+    window.open(SOURCE_CODE_URL, "_blank", "noopener,noreferrer");
   });
 
   function onKeyDown(event) {

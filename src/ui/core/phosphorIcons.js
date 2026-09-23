@@ -15,6 +15,7 @@ export const phosphorSparkle = phIcon("sparkle");
 export const phosphorMicrophone = phIcon("microphone");
 export const phosphorGearSix = phIcon("gear-six");
 export const phosphorInfo = phIcon("info");
+export const phosphorGithubLogo = phIcon("github-logo");
 export const phosphorArrowCounterClockwise = phIcon("arrow-counter-clockwise");
 export const phosphorX = phIcon("x");
 export const phosphorCopy = phIcon("copy");

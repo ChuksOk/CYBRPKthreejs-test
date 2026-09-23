@@ -1,0 +1,16 @@
+---
+description: TSL / WebGPU shader and post conventions for Threejs-Punk
+globs: src/tsl/**,src/post/**,src/world/weather/**,src/world/ground/**,src/world/car/applyCarSurfaceRain.js,src/clouds/**
+alwaysApply: false
+---
+
+# TSL & WebGPU in this repo
+
+Read [AGENTS.md](../../AGENTS.md) before adding effects. Rain: [docs/techniques/collision-rain.md](../../docs/techniques/collision-rain.md). README **Source map** lists entry functions.
+
+- Use `three/webgpu` + `three/tsl`; node materials (`MeshStandardNodeMaterial`, etc.), not raw GLSL files.
+- Reusable graphs live in `src/tsl/`; wire from world/post, do not duplicate drop/ripple logic.
+- Rain collision: height RT in `createCollisionHeight.js` + compute in `createCollisionRain.js`; update hide list if new fullscreen layers exist.
+- Ground wet = ripples + planar reflection RT; car wet = `surfaceRain.js` on UV1.
+- Tune cost via `src/platform/performanceProfile.js` (half-res, frame skip, instance counts).
+- Post changes: integrate through `createPostProcessing` / `rebuildSteadyOutput`; test Safari constraints (DoF off).
