@@ -5,5 +5,7 @@ Focused guides for humans and coding agents. Each doc is self-contained enough t
 | Technique | Doc | Primary code |
 |-----------|-----|----------------|
 | GPU rain + collision height texture | [collision-rain.md](./collision-rain.md) | `src/world/weather/createCollisionHeight.js`, `createCollisionRain.js` |
+| Wet ground (ripples + planar reflection) | [wet-ground.md](./wet-ground.md) | `src/world/ground/createGround.js`, `src/tsl/rainRipples.js` |
+| Car surface rain (procedural drops) | [car-surface-rain.md](./car-surface-rain.md) | `src/tsl/surfaceRain.js`, `src/world/car/applyCarSurfaceRain.js` |
 
-More techniques may be added over time; the [README](../../README.md) and [AGENTS.md](../../AGENTS.md) remain the index.
+The [README](../../README.md) and [AGENTS.md](../../AGENTS.md) remain the index.

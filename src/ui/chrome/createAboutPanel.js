@@ -26,7 +26,7 @@ export function createAboutPanel({ state } = {}) {
     <div class="about-content">
       <div class="about-body">
         <div class="about-brand">
-          <p class="about-brand-title">THREEJS CONFERENCE</p>
+          <p class="about-brand-title">THREEJS-PUNK</p>
           <small class="about-brand-subtitle">BY ANDERSON MANCINI &amp; SUNAG</small>
         </div>
         <div class="about-copy">

@@ -9,11 +9,10 @@ WebGPU + Three.js **TSL** demo: cyberpunk alley, walk mode (BVH), GPU rain with 
 ## Read order (minimal context budget)
 
 1. [README.md](README.md) — **Source map** table and **Collision rain** section (overview).
-2. [docs/techniques/collision-rain.md](docs/techniques/collision-rain.md) — **full deep dive** on height texture + compute (replicate this first).
-3. [docs/techniques/README.md](docs/techniques/README.md) — index of technique docs.
-4. [`src/world/features.js`](src/world/features.js) — what can be disabled; strip order in [STRIP.md](STRIP.md).
-5. [`src/platform/performanceProfile.js`](src/platform/performanceProfile.js) — budgets before adding passes or instances.
-6. Touch only the subtree you need (see **File routing** below).
+2. [docs/techniques/README.md](docs/techniques/README.md) — deep dives: [collision rain](docs/techniques/collision-rain.md), [wet ground](docs/techniques/wet-ground.md), [car droplets](docs/techniques/car-surface-rain.md).
+3. [`src/world/features.js`](src/world/features.js) — what can be disabled; strip order in [STRIP.md](STRIP.md).
+4. [`src/platform/performanceProfile.js`](src/platform/performanceProfile.js) — budgets before adding passes or instances.
+5. Touch only the subtree you need (see **File routing** below).
 
 ## Hard constraints
 
@@ -62,12 +61,16 @@ Code entry points: `createCollisionHeight`, `createCollisionRain`. History: rain
 
 ### B. Procedural wet car paint (no simulation texture)
 
+**Full spec:** [docs/techniques/car-surface-rain.md](docs/techniques/car-surface-rain.md).
+
 1. Port or reuse drop graph in [`surfaceRain.js`](src/tsl/surfaceRain.js) (credit rocksdanister/rain).
 2. Finite-difference normals from drop mask; drive `roughnessNode` / `normalNode` on `MeshStandardNodeMaterial`.
 3. Separate rain UV channel (here: **UV1**) from PBR maps (UV0).
 4. Fade by camera distance (`carSurfaceRainFadeStart/End`).
 
 ### C. Wet ground without SSR
+
+**Full spec:** [docs/techniques/wet-ground.md](docs/techniques/wet-ground.md).
 
 1. Tiled PBR + [`createRainRipples`](src/tsl/rainRipples.js) on world XZ.
 2. Manual mirror camera → half-res RT; mix via emissive × `(1 - roughness)` in [`createGround.js`](src/world/ground/createGround.js).

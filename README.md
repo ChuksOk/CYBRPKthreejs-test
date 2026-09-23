@@ -19,7 +19,7 @@ Thank you to everyone who took part in the workshop — it was an incredible exp
 
 This README is a **knowledge base** for human developers. Headings are stable anchors. Every major technique names its **source file** and entry **function or class**. If anything here disagrees with the repository, **the code wins**.
 
-**Coding agents (Cursor, Claude Code, etc.):** start with **[AGENTS.md](AGENTS.md)** — read order, hard constraints, file routing, step-by-step **technique recipes**, and a verification checklist. For collision rain, read **[docs/techniques/collision-rain.md](docs/techniques/collision-rain.md)** next. Cursor: [`.cursor/rules/project-context.mdc`](.cursor/rules/project-context.mdc) applies to every session; shader paths also load [`.cursor/rules/tsl-webgpu-shaders.mdc`](.cursor/rules/tsl-webgpu-shaders.mdc).
+**Coding agents (Cursor, Claude Code, etc.):** start with **[AGENTS.md](AGENTS.md)** — read order, hard constraints, file routing, step-by-step **technique recipes**, and a verification checklist. Deep dives: **[docs/techniques/](docs/techniques/README.md)** (collision rain, wet ground, car droplets). Cursor: [`.cursor/rules/project-context.mdc`](.cursor/rules/project-context.mdc) applies to every session; shader paths also load [`.cursor/rules/tsl-webgpu-shaders.mdc`](.cursor/rules/tsl-webgpu-shaders.mdc).
 
 ---
 
@@ -203,6 +203,8 @@ The September 2026 **rain update** (commit `89e766f`) replaced the older streak 
 
 Do not conflate them: **the car uses procedural droplets; the ground uses ripples + reflection.**
 
+Deep dives: [wet ground](docs/techniques/wet-ground.md) · [car surface rain](docs/techniques/car-surface-rain.md).
+
 ### Car — procedural surface rain (TSL)
 
 Files: [`src/tsl/surfaceRain.js`](src/tsl/surfaceRain.js), [`src/world/car/applyCarSurfaceRain.js`](src/world/car/applyCarSurfaceRain.js)
@@ -346,4 +348,8 @@ Enable **Development Mode** in settings to expose the Three.js **inspector** ([`
 
 ## License and assets
 
-Check repository and asset licenses before redistributing models, textures, or videos. Workshop participants contributed to the creative direction; technical authorship is **Anderson Mancini** and **Sunag** as noted above.
+**Code** in this repository is [MIT](LICENSE) — Copyright 2026 Anderson Mancini and Sunag.
+
+**Models, textures, audio, and videos** under `public/` are not covered by that license. Check each asset before you redistribute it. The car drop graph in `src/tsl/surfaceRain.js` is adapted from [rocksdanister/rain](https://github.com/rocksdanister/rain); keep that credit if you reuse the graph.
+
+Workshop participants contributed to the creative direction. Technical authorship is **Anderson Mancini** and **Sunag**, as noted above.
