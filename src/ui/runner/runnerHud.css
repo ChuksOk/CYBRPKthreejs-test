@@ -450,3 +450,38 @@
   color: #fff;
   text-shadow: 0 0 30px rgba(34, 211, 238, 0.9), 0 0 60px rgba(224, 64, 251, 0.6);
 }
+
+@media (max-width: 900px), (max-height: 560px) {
+  .rh-panel {
+    padding: 6px 10px;
+  }
+
+  .rh-score {
+    top: 64px;
+    left: 10px;
+    min-width: 0;
+  }
+
+  .rh-value,
+  .rh-ammo .rh-value {
+    font-size: 18px;
+  }
+
+  .rh-row {
+    gap: 10px;
+    font-size: 9px;
+  }
+
+  .rh-vitals {
+    width: 160px;
+    left: 10px;
+    bottom: 10px;
+  }
+
+  .rh-ammo {
+    right: 10px;
+    bottom: auto;
+    top: 64px;
+    min-width: 0;
+  }
+}
