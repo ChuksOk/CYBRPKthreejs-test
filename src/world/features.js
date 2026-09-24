@@ -2,6 +2,7 @@
  * Feature flags — flip to false (or delete the folder) when stripping the scene.
  *
  * Strip order (outer layers first):
+ * 0. runner         → runner/, weapon/, enemies/, ui/runner (back to walk demo)
  * 1. intro          → app/intro + rain-glass
  * 2. chromeUi       → header, about, settings, idle
  * 3. walkUi         → hints, joystick, HUD (walk controls may stay)
@@ -26,11 +27,15 @@ export const FEATURES = {
   chromeUi: true,
   walkUi: true,
   audio: true,
+  // First-person endless runner + shooter (tiles the alley, replaces free walk).
+  // Set false to get the original walk / orbit demo back.
+  runner: true,
   // Available in production too; setupInspector hides advanced panels outside DEV.
   inspector: true,
 };
 
 export const STRIP_ORDER = [
+  "runner",
   "intro",
   "chromeUi",
   "walkUi",

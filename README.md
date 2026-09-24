@@ -35,7 +35,29 @@ npm run preview
 npm run deploy   # Vercel production
 ```
 
-After the loader finishes, click **ENTER** on the intro overlay (or skip if `FEATURES.intro` is false), then **click to look around** in walk mode. Settings expose look presets, audio, and (in Development Mode) the Three.js inspector.
+After the loader finishes, click **ENTER** on the intro overlay (or skip if `FEATURES.intro` is false), then **START RUN**. Settings expose look presets, audio, and (in Development Mode) the Three.js inspector.
+
+### Neon Run: endless runner + drone shooter
+
+With `FEATURES.runner` on (the default), the alley becomes a first-person endless runner. You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
+
+| Action | Desktop | Touch |
+|--------|---------|-------|
+| Switch lane | A / D, ← / → | Swipe left half ← → |
+| Jump | Space, W | Swipe left half ↑ |
+| Slide | S, C, Ctrl | Swipe left half ↓ |
+| Aim | Mouse (pointer lock) | Drag right half |
+| Fire | Hold left click | Auto-fire when on target |
+| Reload | R | Automatic |
+| Pause | Esc | — |
+
+- **Drones:** scouts strafe and fire single bolts; gunships charge a 3-bolt burst; kamikazes dive at you. Bolts can be dodged or shot down.
+- **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
+- **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
+- **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).
+- **Assets:** the rifle, drone, barrier and sounds are CC0 from Kenney's Starter Kit FPS (`public/models/runner/CREDITS.md`, `public/audio/runner/CREDITS.md`).
+
+Set `FEATURES.runner = false` to get the original walk / orbit demo back.
 
 ---
 
@@ -337,6 +359,12 @@ The through-line: **every flashy effect either moved to the GPU, dropped in reso
 | Feature flags | `src/world/features.js` | `FEATURES` |
 | Scene strip guide | `STRIP.md` | — |
 | GLTF + Draco + KTX2 | `src/world/loaders/createGltfLoaders.js` | `getGltfLoader` |
+| Runner: tiled city + wrap | `src/runner/createTrack.js`, `src/runner/sliceGeometry.js` | `createTrack`, `sliceGeometryX` |
+| Runner: game loop / spawner | `src/runner/createRunnerGame.js` | `createRunnerGame` |
+| Runner: lanes / jump / slide / aim | `src/controls/createRunnerControls.js` | `createRunnerControls` |
+| Rifle viewmodel + hitscan | `src/weapon/createViewmodel.js`, `src/weapon/createWeapon.js` | `createViewmodel`, `createWeapon` |
+| Drones + bolts | `src/enemies/createDroneManager.js`, `src/enemies/createEnemyProjectiles.js` | `createDroneManager` |
+| Runner HUD | `src/ui/runner/createRunnerHud.js` | `createRunnerHud` |
 
 ---
 

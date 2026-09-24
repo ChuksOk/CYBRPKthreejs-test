@@ -2,6 +2,7 @@ import * as THREE from "three/webgpu";
 import gsap from "gsap";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createWalkControls } from "../controls/createWalkControls.js";
+import { FEATURES } from "../world/features.js";
 import {
     FREE_CAMERA_START,
     cameraParams,
@@ -53,6 +54,10 @@ export function createCameraDirector({
   let focusTween = null;
   let walkControls = null;
   let footstepAudio = null;
+  /** Runner game (FEATURES.runner) — owns the camera while in "runner" mode. */
+  let runner = null;
+  let runnerMode = false;
+  const defaultMode = FEATURES.runner ? "runner" : "walk";
 
   function focusOnPoint(point) {
     focusTween?.kill();
@@ -82,6 +87,7 @@ export function createCameraDirector({
     if (
       !getFinishedIntro?.() ||
       walkControls?.isActive() ||
+      runnerMode ||
       isCameraModeInputBlocked(event.target)
     ) {
       return;
@@ -107,7 +113,7 @@ export function createCameraDirector({
 
   renderer.domElement.addEventListener("pointerdown", onDofPointerDown);
 
-  if (world.ground && (world.city || world.colliders?.length)) {
+  if (!FEATURES.runner && world.ground && (world.city || world.colliders?.length)) {
     walkControls = createWalkControls({
       camera,
       domElement: renderer.domElement,
@@ -131,6 +137,17 @@ export function createCameraDirector({
   }
 
   function setCameraMode(mode) {
+    runnerMode = mode === "runner" && Boolean(runner);
+    runner?.controls.setActive(runnerMode);
+    if (runnerMode) {
+      cameraModeState.orbitEnabled = false;
+      walkControls?.setActive(false);
+      controls.enabled = false;
+      onWalkModeChange?.(false);
+      syncWalkFocusPoint();
+      return;
+    }
+
     const walk = mode === "walk";
     cameraModeState.orbitEnabled = !walk;
     walkControls?.setActive(walk);
@@ -162,6 +179,16 @@ export function createCameraDirector({
   }
 
   function preparePreRevealPose() {
+    if (runner) {
+      // Intro reveals the runner start pose down the alley.
+      controls.enabled = false;
+      cameraModeState.orbitEnabled = false;
+      runnerMode = true;
+      runner.placeAtStart();
+      syncWalkFocusPoint();
+      return;
+    }
+
     camera.position.set(...FREE_CAMERA_START.position);
     controls.target.set(...FREE_CAMERA_START.target);
     controls.enabled = false;
@@ -177,6 +204,12 @@ export function createCameraDirector({
   }
 
   function update(delta) {
+    if (runnerMode) {
+      // Runner controls already posed the camera (see createRenderLoop).
+      setWalkFocusPoint();
+      return;
+    }
+
     if (walkControls?.isActive()) {
       // Keep the camera frozen during the title/glass sequence — walk is
       // active only so the pose matches revealAppUi without a late snap.
@@ -202,12 +235,19 @@ export function createCameraDirector({
     footstepAudio = audio;
   }
 
+  function setRunner(game) {
+    runner = game;
+  }
+
   return {
     controls,
     walkControls,
     focusPoint,
     cameraModeState,
     setFootstepAudio,
+    setRunner,
+    defaultMode,
+    isRunnerMode: () => runnerMode,
     setCameraMode,
     syncWalkFocusPoint,
     resetCameraPose,

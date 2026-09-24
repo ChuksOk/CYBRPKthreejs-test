@@ -51,6 +51,16 @@ export const performanceProfile = {
   collisionRainResolution: 512,
   collisionRainFrameSkip: 1,
   collisionRainCount: 5000,
+
+  // Endless runner / shooter budgets.
+  /** City tiles kept behind / ahead of the live tile (each is a full slab clone). */
+  runnerSegmentsBehind: 1,
+  runnerSegmentsAhead: 2,
+  runnerMaxDrones: 8,
+  runnerSparkCount: 256,
+  runnerTracerCount: 24,
+  /** Muzzle / explosion point lights (one extra light for every lit material). */
+  runnerWeaponLight: true,
 };
 
 /**
@@ -71,6 +81,12 @@ export function applyDevicePerformanceDefaults() {
   performanceProfile.lensflare = false;
   performanceProfile.billboardsEnabled = false;
   performanceProfile.ao = false;
+
+  performanceProfile.runnerSegmentsAhead = 1;
+  performanceProfile.runnerMaxDrones = 5;
+  performanceProfile.runnerSparkCount = 128;
+  performanceProfile.runnerTracerCount = 12;
+  performanceProfile.runnerWeaponLight = false;
 
   if (isAppleMobile() || isSafari()) {
     performanceProfile.maxPixelRatio = 1.25;

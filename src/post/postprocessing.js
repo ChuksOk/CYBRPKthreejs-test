@@ -26,6 +26,7 @@ import { applyRainGlass, createRainGlassUniforms } from "../tsl/rainGlass.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import { isSafari } from "../platform/deviceLayout.js";
 import { FEATURES } from "../world/features.js";
+import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
 
 export function createPostProcessing(renderer, scene, camera, { rain, smoke } = {}) {
   const post = new RenderPipeline(renderer);
@@ -34,6 +35,7 @@ export function createPostProcessing(renderer, scene, camera, { rain, smoke } = 
   const rainUsesDedicatedPass = rain?.useDedicatedPass !== false && rainLayer !== null;
 
   const aoCamera = camera.clone();
+  aoCamera.layers.disable(VIEWMODEL_LAYER);
   if (rainLayer !== null) {
     aoCamera.layers.disable(rainLayer);
   }
@@ -65,6 +67,8 @@ export function createPostProcessing(renderer, scene, camera, { rain, smoke } = 
 
   function syncCameras(sourceCamera) {
     aoCamera.copy(sourceCamera, false);
+    // First-person rifle is too close for GTAO; keep it out of the pre-pass.
+    aoCamera.layers.disable(VIEWMODEL_LAYER);
     if (rainLayer !== null) {
       aoCamera.layers.disable(rainLayer);
     }

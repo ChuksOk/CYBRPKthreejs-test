@@ -23,7 +23,8 @@ WebGPU + Three.js **TSL** demo: cyberpunk alley, walk mode (BVH), GPU rain with 
 | Do not reintroduce SSR for wet ground | Removed in favor of planar RT + roughness ([README](README.md#the-ssr-fork-historical-important)) |
 | Ground wetness ≠ car droplets | Ground: [`rainRipples.js`](src/tsl/rainRipples.js) + [`createGround.js`](src/world/ground/createGround.js). Car: [`surfaceRain.js`](src/tsl/surfaceRain.js) + [`applyCarSurfaceRain.js`](src/world/car/applyCarSurfaceRain.js) |
 | Collision rain uses `useDedicatedPass: false` | [`createCollisionRain.js`](src/world/weather/createCollisionRain.js); do not assume a separate rain composite pass is active |
-| Hide rain/sky/smoke/planes from height pass | [`collisionHideObjects.js`](src/world/weather/collisionHideObjects.js) |
+| Hide rain/sky/smoke/planes from height pass | [`collisionHideObjects.js`](src/world/weather/collisionHideObjects.js) (runner dynamics via `world.collisionHideExtra`) |
+| Runner: player stays in tile 0 | New dynamic runner objects need a `shiftX(dx)` called from `applyWrap` in [`createRunnerGame.js`](src/runner/createRunnerGame.js) |
 | New expensive work: half-res, frame-skip, or distance fade | Match existing patterns in `performanceProfile` |
 | Safari / mobile | Respect [`applyDevicePerformanceDefaults`](src/platform/performanceProfile.js) (DoF off on Safari, etc.) |
 
@@ -41,6 +42,8 @@ WebGPU + Three.js **TSL** demo: cyberpunk alley, walk mode (BVH), GPU rain with 
 | Startup / compile hitches | [`warmup.js`](src/runtime/warmup.js) |
 | Walk / collision | [`createWalkControls.js`](src/controls/createWalkControls.js), [`bvh.js`](src/world/bvh.js) |
 | Feature toggle | [`features.js`](src/world/features.js) |
+| Runner / shooter gameplay | [`createRunnerGame.js`](src/runner/createRunnerGame.js), [`runnerConfig.js`](src/runner/runnerConfig.js) — see [endless-runner.md](docs/techniques/endless-runner.md) |
+| Rifle / drones | [`src/weapon/`](src/weapon/), [`src/enemies/`](src/enemies/) |
 
 ## Technique recipes (replicate elsewhere)
 

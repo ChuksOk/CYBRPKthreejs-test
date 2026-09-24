@@ -1,0 +1,459 @@
+import * as THREE from "three/webgpu";
+import { isCoarsePointerDevice } from "../platform/deviceLayout.js";
+import { RUNNER } from "../runner/runnerConfig.js";
+
+const RUN_HEADING = -Math.PI / 2; // camera yaw that looks down +X
+const MOUSE_SENSITIVITY = 0.0021;
+const TOUCH_LOOK_SENSITIVITY = 0.0048;
+const SWIPE_MIN_DISTANCE = 28;
+const SWIPE_MAX_TIME = 450;
+const HEAD_BOB_FREQ = 1.55; // strides per meter-ish scale
+const HEAD_BOB_AMOUNT = 0.045;
+
+function expLerpFactor(delta, speed) {
+  return 1 - Math.exp(-delta * speed);
+}
+
+function isEditableTarget(target) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  );
+}
+
+/**
+ * First-person runner input + camera. The player auto-runs along +X; lanes,
+ * jump and slide are discrete actions while mouse / right-thumb aim freely
+ * inside a cone around the run heading.
+ */
+export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
+  const state = {
+    active: false,
+    inputEnabled: false,
+    x: RUNNER.startX,
+    lane: 1,
+    z: RUNNER.laneZ[1],
+    laneVelocity: 0,
+    feetY: RUNNER.floorY,
+    vy: 0,
+    grounded: true,
+    slideTime: 0,
+    eyeHeight: RUNNER.eyeHeight,
+    speed: RUNNER.startSpeed,
+    yaw: 0,
+    pitch: 0,
+    recoilPitch: 0,
+    recoilYaw: 0,
+    shakeTime: 0,
+    shakeStrength: 0,
+    bobPhase: 0,
+    trigger: false,
+    pointerLocked: false,
+  };
+
+  let currentBaseFov = baseFov;
+  const euler = new THREE.Euler(0, 0, 0, "YXZ");
+  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), lockChange: new Set(), reload: new Set() };
+  const actionQueue = [];
+
+  const touchLook = new Map();
+  const touchSwipes = new Map();
+  const coarse = isCoarsePointerDevice();
+
+  function emit(name, payload) {
+    for (const listener of listeners[name]) {
+      listener(payload);
+    }
+  }
+
+  function on(name, listener) {
+    listeners[name].add(listener);
+    return () => listeners[name].delete(listener);
+  }
+
+  function queue(action) {
+    if (!state.active || !state.inputEnabled) {
+      return;
+    }
+    actionQueue.push(action);
+  }
+
+  function applyLookDelta(dx, dy) {
+    state.yaw = THREE.MathUtils.clamp(state.yaw - dx, -RUNNER.maxYaw, RUNNER.maxYaw);
+    state.pitch = THREE.MathUtils.clamp(state.pitch - dy, RUNNER.minPitch, RUNNER.maxPitch);
+  }
+
+  // ── Keyboard ────────────────────────────────────────────────────────────
+  function onKeyDown(event) {
+    if (!state.active || isEditableTarget(event.target) || event.repeat) {
+      return;
+    }
+    switch (event.code) {
+      case "KeyA":
+      case "ArrowLeft":
+        queue("left");
+        break;
+      case "KeyD":
+      case "ArrowRight":
+        queue("right");
+        break;
+      case "Space":
+      case "KeyW":
+      case "ArrowUp":
+        queue("jump");
+        event.preventDefault();
+        break;
+      case "KeyS":
+      case "ArrowDown":
+      case "ControlLeft":
+      case "KeyC":
+        queue("slide");
+        break;
+      case "KeyR":
+        if (state.inputEnabled) {
+          emit("reload");
+        }
+        break;
+      default:
+        return;
+    }
+  }
+
+  // ── Mouse (pointer lock) ────────────────────────────────────────────────
+  function onMouseMove(event) {
+    if (!state.active || !state.inputEnabled || !state.pointerLocked) {
+      return;
+    }
+    applyLookDelta(event.movementX * MOUSE_SENSITIVITY, event.movementY * MOUSE_SENSITIVITY);
+  }
+
+  function onMouseDown(event) {
+    if (event.button !== 0 || !state.active) {
+      return;
+    }
+    if (state.pointerLocked && state.inputEnabled) {
+      state.trigger = true;
+    }
+  }
+
+  function onMouseUp(event) {
+    if (event.button === 0) {
+      state.trigger = false;
+    }
+  }
+
+  function onPointerLockChange() {
+    state.pointerLocked = document.pointerLockElement === domElement;
+    if (!state.pointerLocked) {
+      state.trigger = false;
+    }
+    emit("lockChange", state.pointerLocked);
+  }
+
+  function requestPointerLock() {
+    if (coarse || state.pointerLocked) {
+      return;
+    }
+    try {
+      const result = domElement.requestPointerLock?.();
+      result?.catch?.(() => {});
+    } catch {
+      // Pointer lock may be refused (iframe / user setting) — aim still works unlocked.
+    }
+  }
+
+  function exitPointerLock() {
+    if (document.pointerLockElement === domElement) {
+      document.exitPointerLock?.();
+    }
+  }
+
+  // ── Touch: left half = swipes, right half = aim drag ─────────────────────
+  function onPointerDown(event) {
+    if (!state.active || event.pointerType === "mouse") {
+      return;
+    }
+    const leftHalf = event.clientX < window.innerWidth * 0.5;
+    if (leftHalf) {
+      touchSwipes.set(event.pointerId, { x: event.clientX, y: event.clientY, t: performance.now() });
+    } else {
+      touchLook.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+  }
+
+  function onPointerMove(event) {
+    const look = touchLook.get(event.pointerId);
+    if (!look || !state.inputEnabled) {
+      return;
+    }
+    applyLookDelta(
+      (event.clientX - look.x) * TOUCH_LOOK_SENSITIVITY,
+      (event.clientY - look.y) * TOUCH_LOOK_SENSITIVITY,
+    );
+    look.x = event.clientX;
+    look.y = event.clientY;
+  }
+
+  function onPointerUp(event) {
+    touchLook.delete(event.pointerId);
+    const swipe = touchSwipes.get(event.pointerId);
+    touchSwipes.delete(event.pointerId);
+    if (!swipe) {
+      return;
+    }
+    const dx = event.clientX - swipe.x;
+    const dy = event.clientY - swipe.y;
+    const dt = performance.now() - swipe.t;
+    if (dt > SWIPE_MAX_TIME || Math.hypot(dx, dy) < SWIPE_MIN_DISTANCE) {
+      return;
+    }
+    if (Math.abs(dx) > Math.abs(dy)) {
+      queue(dx < 0 ? "left" : "right");
+    } else {
+      queue(dy < 0 ? "jump" : "slide");
+    }
+  }
+
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("mousemove", onMouseMove);
+  domElement.addEventListener("mousedown", onMouseDown);
+  document.addEventListener("mouseup", onMouseUp);
+  document.addEventListener("pointerlockchange", onPointerLockChange);
+  domElement.addEventListener("pointerdown", onPointerDown);
+  domElement.addEventListener("pointermove", onPointerMove);
+  domElement.addEventListener("pointerup", onPointerUp);
+  domElement.addEventListener("pointercancel", onPointerUp);
+
+  // ── Simulation ──────────────────────────────────────────────────────────
+  function processActions() {
+    while (actionQueue.length > 0) {
+      const action = actionQueue.shift();
+      if (action === "left" && state.lane > 0) {
+        state.lane -= 1;
+        emit("lane", state.lane);
+      } else if (action === "right" && state.lane < RUNNER.laneZ.length - 1) {
+        state.lane += 1;
+        emit("lane", state.lane);
+      } else if (action === "jump") {
+        if (state.grounded) {
+          state.vy = RUNNER.jumpVelocity;
+          state.grounded = false;
+          state.slideTime = 0;
+          emit("jump");
+        }
+      } else if (action === "slide") {
+        if (!state.grounded) {
+          // Fast-fall into a slide.
+          state.vy = Math.min(state.vy, -RUNNER.jumpVelocity);
+        }
+        state.slideTime = RUNNER.slideDuration;
+        emit("slide");
+      }
+    }
+  }
+
+  function simulate(delta) {
+    processActions();
+
+    state.x += state.speed * delta;
+
+    // Lane: critically damped spring toward the lane center.
+    const targetZ = RUNNER.laneZ[state.lane];
+    const previousZ = state.z;
+    state.z += (targetZ - state.z) * expLerpFactor(delta, RUNNER.laneChangeSpeed);
+    state.laneVelocity = delta > 0 ? (state.z - previousZ) / delta : 0;
+
+    // Vertical.
+    if (!state.grounded) {
+      state.vy -= RUNNER.gravity * delta;
+      state.feetY += state.vy * delta;
+      if (state.feetY <= RUNNER.floorY) {
+        state.feetY = RUNNER.floorY;
+        state.vy = 0;
+        state.grounded = true;
+        emit("land");
+      }
+    }
+
+    if (state.slideTime > 0) {
+      state.slideTime = Math.max(0, state.slideTime - delta);
+    }
+    const targetEye = state.slideTime > 0 ? RUNNER.slideEyeHeight : RUNNER.eyeHeight;
+    state.eyeHeight += (targetEye - state.eyeHeight) * expLerpFactor(delta, 16);
+
+    if (state.grounded) {
+      state.bobPhase += delta * state.speed * HEAD_BOB_FREQ * 0.5;
+    }
+
+    // Recoil recovers toward zero.
+    const recover = expLerpFactor(delta, 9);
+    state.recoilPitch -= state.recoilPitch * recover;
+    state.recoilYaw -= state.recoilYaw * recover;
+
+    if (state.shakeTime > 0) {
+      state.shakeTime = Math.max(0, state.shakeTime - delta);
+    }
+  }
+
+  const _shake = new THREE.Vector3();
+
+  function applyCamera(delta) {
+    const bobActive = state.grounded && state.slideTime <= 0 ? 1 : 0;
+    const bobY = Math.abs(Math.sin(state.bobPhase * Math.PI)) * HEAD_BOB_AMOUNT * bobActive;
+    const bobRoll = Math.sin(state.bobPhase * Math.PI) * 0.004 * bobActive;
+
+    const shake = state.shakeTime > 0 ? state.shakeStrength * (state.shakeTime / 0.35) : 0;
+    _shake.set(
+      (Math.random() - 0.5) * shake,
+      (Math.random() - 0.5) * shake,
+      (Math.random() - 0.5) * shake,
+    );
+
+    camera.position.set(
+      state.x,
+      state.feetY + state.eyeHeight + bobY - HEAD_BOB_AMOUNT * 0.5 + _shake.y,
+      state.z + _shake.z,
+    );
+
+    const roll = THREE.MathUtils.clamp(-state.laneVelocity * 0.012, -0.12, 0.12) + bobRoll;
+    euler.set(
+      state.pitch + state.recoilPitch + _shake.x * 0.4,
+      RUN_HEADING + state.yaw + state.recoilYaw,
+      roll,
+      "YXZ",
+    );
+    camera.quaternion.setFromEuler(euler);
+
+    // Speed FOV kick.
+    const speedT = THREE.MathUtils.clamp(
+      (state.speed - RUNNER.startSpeed) / (RUNNER.maxSpeed - RUNNER.startSpeed),
+      0,
+      1,
+    );
+    const targetFov = currentBaseFov + 4 + speedT * 10;
+    const nextFov = camera.fov + (targetFov - camera.fov) * expLerpFactor(delta, 3);
+    if (Math.abs(nextFov - camera.fov) > 0.001) {
+      camera.fov = nextFov;
+      camera.updateProjectionMatrix();
+    }
+    camera.updateMatrixWorld();
+  }
+
+  function update(delta, { simulateMovement = true } = {}) {
+    if (!state.active) {
+      return;
+    }
+    if (simulateMovement && delta > 0) {
+      simulate(delta);
+    } else {
+      actionQueue.length = 0;
+    }
+    applyCamera(delta);
+  }
+
+  function reset() {
+    state.x = RUNNER.startX;
+    state.lane = 1;
+    state.z = RUNNER.laneZ[1];
+    state.laneVelocity = 0;
+    state.feetY = RUNNER.floorY;
+    state.vy = 0;
+    state.grounded = true;
+    state.slideTime = 0;
+    state.eyeHeight = RUNNER.eyeHeight;
+    state.speed = RUNNER.startSpeed;
+    state.yaw = 0;
+    state.pitch = 0;
+    state.recoilPitch = 0;
+    state.recoilYaw = 0;
+    state.shakeTime = 0;
+    state.trigger = false;
+    actionQueue.length = 0;
+    applyCamera(1);
+  }
+
+  function setActive(value) {
+    state.active = Boolean(value);
+    if (!state.active) {
+      state.trigger = false;
+      exitPointerLock();
+    }
+  }
+
+  function setInputEnabled(value) {
+    state.inputEnabled = Boolean(value);
+    if (!state.inputEnabled) {
+      state.trigger = false;
+      actionQueue.length = 0;
+    }
+  }
+
+  function addRecoil(pitch, yaw) {
+    state.recoilPitch += pitch;
+    state.recoilYaw += yaw;
+  }
+
+  function shake(strength, duration = 0.35) {
+    state.shakeStrength = Math.max(strength, state.shakeTime > 0 ? state.shakeStrength : 0);
+    state.shakeTime = Math.max(state.shakeTime, duration);
+  }
+
+  /** Floating-origin wrap: move the player without any visual change. */
+  function shiftX(dx) {
+    state.x += dx;
+    camera.position.x += dx;
+    camera.updateMatrixWorld();
+  }
+
+  /** Aim-down direction snapshot used by aim assist on touch. */
+  function getPlayerBox(target) {
+    const halfW = 0.3;
+    target.min.set(state.x - halfW, state.feetY, state.z - 0.35);
+    target.max.set(state.x + halfW, state.feetY + state.eyeHeight + 0.15, state.z + 0.35);
+    return target;
+  }
+
+  function dispose() {
+    document.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("mousemove", onMouseMove);
+    domElement.removeEventListener("mousedown", onMouseDown);
+    document.removeEventListener("mouseup", onMouseUp);
+    document.removeEventListener("pointerlockchange", onPointerLockChange);
+    domElement.removeEventListener("pointerdown", onPointerDown);
+    domElement.removeEventListener("pointermove", onPointerMove);
+    domElement.removeEventListener("pointerup", onPointerUp);
+    domElement.removeEventListener("pointercancel", onPointerUp);
+  }
+
+  return {
+    state,
+    on,
+    update,
+    reset,
+    setActive,
+    setInputEnabled,
+    isActive: () => state.active,
+    isPointerLocked: () => state.pointerLocked,
+    isTouch: () => coarse,
+    requestPointerLock,
+    exitPointerLock,
+    setBaseFov: (value) => {
+      currentBaseFov = value;
+    },
+    setSpeed: (value) => {
+      state.speed = value;
+    },
+    isTriggerHeld: () => state.trigger,
+    addRecoil,
+    shake,
+    shiftX,
+    getPlayerBox,
+    dispose,
+  };
+}

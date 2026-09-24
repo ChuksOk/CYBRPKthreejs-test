@@ -11,6 +11,8 @@ import { createSmoke } from "./effects/createSmoke.js";
 import { createFlyingPlanes } from "./effects/createFlyingPlanes.js";
 import { createCloudSky } from "../clouds/createCloudSky.js";
 import { FEATURES } from "./features.js";
+import { createTrack } from "../runner/createTrack.js";
+import { RUNNER } from "../runner/runnerConfig.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import * as THREE from "three/webgpu";
 
@@ -101,7 +103,8 @@ export async function createWorld({
     addModel(scene, city);
   }
 
-  if (boundsCollider) {
+  // The walk-mode bounds collider is not used by the runner (lanes are fixed).
+  if (boundsCollider && !FEATURES.runner) {
     addModel(scene, boundsCollider);
   }
 
@@ -114,15 +117,38 @@ export async function createWorld({
     addModel(scene, quadraCar);
   }
 
-  if (quadraCollider) {
+  if (quadraCollider && !FEATURES.runner) {
     scene.add(quadraCollider);
     requestShadowMapUpdate?.("quadra-car");
   }
 
-  const ground = FEATURES.ground ? createGround(scene) : null;
+  const groundSize = 400;
+  const ground = FEATURES.ground
+    ? createGround(
+        scene,
+        FEATURES.runner
+          ? // Tile size must divide the runner segment so the wrap is seamless.
+            { size: groundSize, uvRepeat: groundSize / RUNNER.groundTile }
+          : undefined,
+      )
+    : null;
+
+  let track = null;
+  if (FEATURES.runner && city) {
+    loaderOverlay.setStatus("TILING SECTOR");
+    track = createTrack({
+      scene,
+      slicedSources: [city, billboards],
+      wholeSources: [quadraCar],
+      ground,
+      behind: performanceProfile.runnerSegmentsBehind,
+      ahead: performanceProfile.runnerSegmentsAhead,
+    });
+  }
 
   let smoke = null;
-  if (FEATURES.smoke && quadraCar) {
+  // Exhaust smoke hangs off the one original car and would pop across tiles.
+  if (FEATURES.smoke && quadraCar && !FEATURES.runner) {
     smoke = await createSmoke({ scene, car: quadraCar });
   }
 
@@ -157,11 +183,13 @@ export async function createWorld({
     });
   }
 
-  const colliders = buildColliders({
-    city,
-    boundsCollider,
-    carCollider: quadraCollider,
-  });
+  const colliders = FEATURES.runner
+    ? []
+    : buildColliders({
+        city,
+        boundsCollider,
+        carCollider: quadraCollider,
+      });
   const focusTargets = buildFocusTargets({
     city,
     car: quadraCar,
@@ -186,6 +214,11 @@ export async function createWorld({
     colliders,
     focusTargets,
     primaryPlaneAnchor: planes?.primaryAnchor ?? null,
+    track,
+    /** Filled by the runner: dynamic objects to hide from the rain height pass. */
+    collisionHideExtra: null,
+    /** Filled by the runner: warmup hooks for pooled objects. */
+    runnerWarm: null,
   };
 }
 

@@ -4,6 +4,7 @@ Progressively simplify the scene by toggling flags in [`src/world/features.js`](
 
 ## Order
 
+0. `runner: false` — back to the original walk / orbit demo (no tiling, rifle, drones, runner HUD)
 1. `intro: false` — skip rain-glass + title overlay
 2. `chromeUi: false` — header, about, settings, idle manager
 3. `walkUi: false` — hints, joystick, HUD (walk controls remain)
@@ -28,6 +29,7 @@ bootstrap + scene + city + ground + post + walk/orbit + render loop
 
 | Remove flag | Delete or ignore folder |
 |-------------|-------------------------|
+| `runner` | `src/runner/`, `src/weapon/`, `src/enemies/`, `src/ui/runner/`, `src/controls/createRunnerControls.js`, `src/audio/createRunnerAudio.js`, `public/models/runner/`, `public/audio/runner/` |
 | `intro` | `src/app/createIntroFlow.js`, `src/ui/intro/` |
 | `chromeUi` | `src/ui/chrome/` (except shared state if needed) |
 | `walkUi` | `src/ui/walk/` |

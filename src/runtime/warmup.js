@@ -99,6 +99,7 @@ export async function finalizeStartupLighting({
 
   // Hide rain / smoke / planes so beauty compile only builds core pipelines.
   setObjectsVisible(deferredObjects, false);
+  world.runnerWarm?.begin();
   try {
     await renderer.compileAsync(scene, beautyCamera);
 
@@ -113,6 +114,7 @@ export async function finalizeStartupLighting({
       includeReflection: false,
     });
   } finally {
+    world.runnerWarm?.end();
     setObjectsVisible(deferredObjects, true);
   }
 }
@@ -136,7 +138,12 @@ export async function compileDeferredStartup({
   world?.rain?.update(0, camera);
 
   // Smoke / planes / rain were skipped on the critical path — compile them now.
-  await renderer.compileAsync(scene, beautyCamera);
+  world?.runnerWarm?.begin();
+  try {
+    await renderer.compileAsync(scene, beautyCamera);
+  } finally {
+    world?.runnerWarm?.end();
+  }
 
   if (pipeline.rainCamera) {
     await renderer.compileAsync(scene, pipeline.rainCamera);

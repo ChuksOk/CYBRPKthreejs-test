@@ -12,6 +12,7 @@ export function createRenderLoop({
   getRainGlassIntro,
   getIntroActive,
   onFrame,
+  runnerGame = null,
 }) {
   const timer = new THREE.Timer();
 
@@ -19,6 +20,9 @@ export function createRenderLoop({
     timer.update();
     const delta = timer.getDelta();
 
+    // Runner owns the camera pose in runner mode; it must be final before
+    // the height map, rain, reflection and post passes read it.
+    runnerGame?.update(delta);
     cameraDirector.update(delta);
     onFrame?.(delta);
 

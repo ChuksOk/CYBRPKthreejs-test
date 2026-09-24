@@ -1,5 +1,6 @@
 const DEVELOPMENT_MODE_KEY = "threejs-punk-development-mode";
 const LOOK_PRESET_KEY = "threejs-punk-look-preset";
+const RUNNER_BEST_KEY = "threejs-punk-runner-best";
 
 let developmentModeEnabled = false;
 
@@ -47,6 +48,22 @@ export function clearAllStoredPreferences() {
   try {
     localStorage.removeItem(DEVELOPMENT_MODE_KEY);
     localStorage.removeItem(LOOK_PRESET_KEY);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+export function getStoredRunnerBest() {
+  try {
+    return Number(localStorage.getItem(RUNNER_BEST_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setStoredRunnerBest(score) {
+  try {
+    localStorage.setItem(RUNNER_BEST_KEY, String(Math.floor(score)));
   } catch {
     // localStorage may be unavailable
   }

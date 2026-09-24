@@ -11,6 +11,7 @@ import {
   createCamera,
   createCameraLayoutSync,
   cameraParams,
+  getBaseFovForLayout,
 } from "./bootstrap/createCamera.js";
 import {
   createRenderer,
@@ -18,6 +19,9 @@ import {
   resizeRenderer,
 } from "./bootstrap/createRenderer.js";
 import { createCameraDirector } from "./runtime/createCameraDirector.js";
+import { createRunnerGame } from "./runner/createRunnerGame.js";
+import { RUNNER } from "./runner/runnerConfig.js";
+import { FEATURES } from "./world/features.js";
 import { createRenderLoop } from "./runtime/createRenderLoop.js";
 import {
   compileDeferredStartup,
@@ -164,6 +168,27 @@ async function init(loaderOverlay) {
     onWalkModeChange: (walk) => walkModeBridge.onChange?.(walk),
   });
 
+  let runnerGame = null;
+  if (FEATURES.runner && world.track) {
+    loaderOverlay.setStatus("ARMING DRONES");
+    runnerGame = await createRunnerGame({
+      scene,
+      renderer,
+      camera,
+      world,
+      baseFov: getBaseFovForLayout(),
+    });
+    world.collisionHideExtra = runnerGame.collisionHideObjects;
+    world.runnerWarm = runnerGame.warm;
+    cameraDirector.setRunner(runnerGame);
+    // Tiles beyond the last clone are empty — never draw past them.
+    camera.far = Math.min(
+      300,
+      RUNNER.segmentLength * performanceProfile.runnerSegmentsAhead - 5,
+    );
+    camera.updateProjectionMatrix();
+  }
+
   const cameraLayout = createCameraLayoutSync({
     camera,
     getWalkControls: () => cameraDirector.walkControls,
@@ -203,6 +228,9 @@ async function init(loaderOverlay) {
     camera,
     controls: cameraDirector.controls,
   });
+  if (devApp && runnerGame) {
+    devApp.runner = runnerGame;
+  }
   attachDevPerf(devApp, performanceTools.perfApi);
 
   const { carEngineAudio, planeEngineAudio, wetFootstepAudio } =
@@ -221,6 +249,7 @@ async function init(loaderOverlay) {
     loaderOverlay,
     revealAppUi: () => {
       appShell.revealAppUi();
+      runnerGame?.enterMenu();
       adaptiveSampleGate.allow = true;
     },
     world,
@@ -237,6 +266,7 @@ async function init(loaderOverlay) {
     getRainGlassIntro: introFlow.getRainGlassIntro,
     getIntroActive: introFlow.isIntroActive,
     onFrame: (delta) => appShell.updateHud(delta),
+    runnerGame,
   });
 
   await finalizeStartupLighting({
@@ -270,6 +300,7 @@ async function init(loaderOverlay) {
   window.addEventListener("resize", () => {
     syncLayoutClass();
     cameraLayout.onWindowResizeAspect();
+    runnerGame?.controls.setBaseFov(getBaseFovForLayout());
     resizeRenderer(renderer, pipeline, adaptiveDpr);
     requestShadowMapUpdate("resize");
   });
@@ -277,6 +308,7 @@ async function init(loaderOverlay) {
   onMobileLayoutChange(() => {
     syncLayoutClass();
     cameraLayout.applyCameraFovForLayout();
+    runnerGame?.controls.setBaseFov(getBaseFovForLayout());
   });
 
   await introFlow.run();

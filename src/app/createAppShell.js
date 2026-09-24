@@ -101,7 +101,7 @@ export function createAppShell({
   let moveHint = null;
   let virtualJoystick = null;
 
-  if (FEATURES.walkUi && walkFacade) {
+  if (FEATURES.walkUi && !FEATURES.runner && walkFacade) {
     walkControlsHint = createWalkControlsHint({
       state: uiState,
       domElement: renderer.domElement,
@@ -161,7 +161,9 @@ export function createAppShell({
   }
 
   async function initAudio() {
-    if (!FEATURES.audio || !world.car) {
+    // Runner tiles the car, so the single positional engine would pop; the
+    // runner has its own SFX bus (createRunnerAudio).
+    if (!FEATURES.audio || !world.car || FEATURES.runner) {
       return {
         carEngineAudio: null,
         planeEngineAudio: null,
@@ -240,7 +242,7 @@ export function createAppShell({
 
   function revealAppUi() {
     finishedIntro = true;
-    cameraDirector.setCameraMode("walk");
+    cameraDirector.setCameraMode(cameraDirector.defaultMode ?? "walk");
     uiVisibilityCoordinator?.refresh();
     header?.show();
     audioButton?.setVisible(true);

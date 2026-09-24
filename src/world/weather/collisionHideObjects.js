@@ -1,5 +1,10 @@
-export function collectCollisionHideObjects({ rain, smoke, planes, sky } = {}) {
+export function collectCollisionHideObjects({ rain, smoke, planes, sky, collisionHideExtra } = {}) {
   const hideObjects = [];
+
+  // Runner drones / bolts / fx / pickups / viewmodel (see createRunnerGame).
+  if (collisionHideExtra) {
+    hideObjects.push(...collisionHideExtra);
+  }
 
   if (rain?.group) {
     hideObjects.push(rain.group);
