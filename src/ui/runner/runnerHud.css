@@ -2230,3 +2230,22 @@ html.runner-playing.runner-touch body .audio-btn-root {
   .up-head b { font-size: 30px; }
   .up-desc { font-size: 10px; }
 }
+
+/* Speed lines: thin radial streaks, masked to the screen edges. */
+.rh-speedlines {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  opacity: 0;
+  background: repeating-conic-gradient(from 0deg at 50% 50%,
+    rgba(233, 247, 255, 0.5) 0deg 0.3deg,
+    transparent 0.3deg 4.1deg,
+    rgba(125, 249, 255, 0.3) 4.1deg 4.3deg,
+    transparent 4.3deg 11.7deg,
+    rgba(255, 255, 255, 0.4) 11.7deg 11.9deg,
+    transparent 11.9deg 17deg);
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 38%, #000 78%);
+  mask-image: radial-gradient(ellipse at center, transparent 38%, #000 78%);
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}

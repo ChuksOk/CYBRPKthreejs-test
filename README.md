@@ -39,7 +39,7 @@ After the loader finishes, click **ENTER** on the intro overlay (or skip if `FEA
 
 ### Neon Run: endless runner + drone shooter
 
-With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first-person endless runner by ChuksOk (name and links live in `src/app/credits.js`). You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
+With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first-person endless runner by Adair Interactive (https://adair.lovable.app/; name and links live in `src/app/credits.js`). You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
 
 | Action | Desktop | Touch |
 |--------|---------|-------|
@@ -58,6 +58,7 @@ With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first
 - **Special attacks:** landing shots charges a special, and you pick one per run on the start ticket. **Ally drone** deploys a small sphere drone that fights for you until it's destroyed; **Seeker** fires a heat-seeking grenade that homes in on the nearest drone and detonates (`src/weapon/createSpecials.js`).
 - **Mobile HUD:** shows only score, two slim bars, target brackets, the current weapon chip, and the FIRE / SPECIAL buttons. The header and audio button hide while you play.
 - **Day-night cycle:** a full day every 2 minutes of running (night → dawn → day → dusk). It drives the sun/moon light, environment light, sky gradient and clouds, and a clock on the score ticket (`src/runner/createDayNightCycle.js`; `cycleSeconds` to tune).
+- **Visuals:** neon lane markers with a pulse that runs toward you (one instanced draw, `src/runner/createLaneLights.js`); explosions with a billowing fireball, a shockwave ring and rising smoke, tinted by your Armory explosion colour; speed lines near top speed and during overclock.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier that heats up (colour and glow) as it climbs.
 - **Fair deaths:** when a lethal hit is 0.3 s away, time drops to 35% for a moment (8 s cooldown). The game-over ticket names exactly what killed you, e.g. `GUNSHIP BURST · 12 DMG` or `BARRIER · LANE 2 · 64 KM/H`. **RUN AGAIN** (or Enter) restarts instantly, with no countdown.

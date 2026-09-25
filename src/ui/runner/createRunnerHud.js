@@ -6,6 +6,7 @@ import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
 import { SPECIALS } from "../../weapon/createSpecials.js";
 import { GAME_TITLE } from "../../app/credits.js";
+import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
 
 const ARROW_COUNT = 8;
@@ -211,6 +212,9 @@ export function createRunnerHud({ isTouch = false } = {}) {
   const prompt = el("div", "rh-prompt", root, '<span class="t-meta">TRAINING</span><b></b>');
   const promptText = prompt.querySelector("b");
   const slowmo = el("div", "rh-slowmo", root);
+  // Speed lines: radial streaks that fade in near top speed (pure CSS layer).
+  const speedLines = el("div", "rh-speedlines", root);
+  let speedLinesOpacity = -1;
 
   const touchHint = el("div", "rh-touch-hint t-meta", root,
     "SWIPE LEFT SIDE TO MOVE — HOLD FIRE — AIM IS AUTOMATIC");
@@ -597,6 +601,16 @@ export function createRunnerHud({ isTouch = false } = {}) {
       if (hintTime > 5) {
         touchHint.style.display = "none";
       }
+    }
+
+    const speedT = Math.max(0, Math.min(1, (s.speed - RUNNER.startSpeed) / (RUNNER.maxSpeed - RUNNER.startSpeed)));
+    const lines = Math.round(Math.min(0.6, speedT * speedT * 0.4 + (overclock ? 0.25 : 0)) * 100) / 100;
+    if (lines !== speedLinesOpacity) {
+      speedLines.style.opacity = String(lines);
+      speedLinesOpacity = lines;
+    }
+    if (lines > 0) {
+      speedLines.style.transform = `rotate(${(Math.random() * 6).toFixed(2)}deg) scale(${(1.02 + Math.random() * 0.03).toFixed(3)})`;
     }
 
     crosshair.style.setProperty("--spread", `${(7 + s.spread * 520).toFixed(1)}px`);

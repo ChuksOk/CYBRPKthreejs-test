@@ -297,7 +297,7 @@ export function createDroneManager({
   function fireBolt(drone, player) {
     _carrier.set(player.speed, 0, 0);
     computeMuzzle(drone, player, _target, _aim);
-    fx.explosions.spawn(_target, { radius: 0.28 * drone.type.scale, life: 0.09 });
+    fx.explosions.spawn(_target, { radius: 0.28 * drone.type.scale, life: 0.09, hex: drone.type.glow, ring: false, smoke: false });
     fx.emitSparks(_target, 8, { hex: drone.type.glow, speed: 4, life: 0.25, size: 0.05, gravity: 0 });
     projectiles.fire(_target, _aim, {
       speed: drone.type.boltSpeed,

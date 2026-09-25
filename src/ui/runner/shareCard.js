@@ -1,4 +1,4 @@
-import { GAME_TITLE, AUTHOR_NAME } from "../../app/credits.js";
+import { GAME_TITLE, AUTHOR_NAME, AUTHOR_URL } from "../../app/credits.js";
 
 /**
  * Draws the game-over ticket as a 1080×1350 PNG (score, distance, build,
@@ -154,7 +154,7 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   ctx.font = display(64);
   ctx.fillText("CAN YOU BEAT IT?", 100, 1080);
   ctx.font = mono(22);
-  ctx.fillText(`BY ${AUTHOR_NAME.toUpperCase()}`, 100, 1120);
+  ctx.fillText(`BY ${AUTHOR_NAME.toUpperCase()} · ${AUTHOR_URL.replace(/^https?:\/\//, "").replace(/\/$/, "").toUpperCase()}`, 100, 1120);
   barcode(ctx, 100, 1150, W - 200, 100, score % 97 + 5);
 
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));

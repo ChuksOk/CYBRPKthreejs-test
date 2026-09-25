@@ -1,4 +1,4 @@
-import { AUTHOR_NAME, GAME_TAGLINE, GAME_TITLE } from "../../app/credits.js";
+import { AUTHOR_NAME, AUTHOR_URL, GAME_TAGLINE, GAME_TITLE } from "../../app/credits.js";
 import "./introOverlay.css";
 import gsap from "gsap";
 
@@ -35,7 +35,7 @@ export function createIntroOverlay({ onStart } = {}) {
       <div class="intro-actions">
         <button type="button" class="intro-button" disabled>ENTER</button>
       </div>
-      <p class="intro-credit">A game by ${AUTHOR_NAME}</p>
+      <p class="intro-credit">A game by <a href="${AUTHOR_URL}" target="_blank" rel="noopener noreferrer" style="color:inherit;pointer-events:auto">${AUTHOR_NAME}</a></p>
     </div>
   `;
 

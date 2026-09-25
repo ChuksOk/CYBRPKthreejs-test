@@ -61,6 +61,8 @@ export const performanceProfile = {
   runnerTracerCount: 24,
   /** Muzzle / explosion point lights (one extra light for every lit material). */
   runnerWeaponLight: true,
+  /** Emissive lane markers (one instanced draw). */
+  runnerLaneLights: true,
   /** Seconds between shadow-map refreshes as the day-night sun moves (0 = never). */
   runnerSunShadowInterval: 3,
 };

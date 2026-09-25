@@ -8,6 +8,7 @@ import { createEnemyProjectiles } from "../enemies/createEnemyProjectiles.js";
 import { DRONE_TYPES } from "../enemies/droneTypes.js";
 import { createObstacles } from "./createObstacles.js";
 import { createPickups } from "./createPickups.js";
+import { createLaneLights } from "./createLaneLights.js";
 import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
 import { shareRun } from "../ui/runner/shareCard.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
@@ -86,7 +87,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
   const isTouch = controls.isTouch();
 
-  const fx = createWeaponFx({ scene });
+  const fx = createWeaponFx({ scene, camera });
   const audio = createRunnerAudio();
   const hud = createRunnerHud({ isTouch });
 
@@ -262,6 +263,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
 
   const pickups = createPickups({ scene });
+  const laneLights = performanceProfile.runnerLaneLights === false ? null : createLaneLights({ scene });
 
   const weapon = viewmodel
     ? createWeapon({
@@ -1419,6 +1421,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         break;
     }
 
+    laneLights?.update(game.state === "running" ? delta : delta * 0.3, controls.state.x, controls.state.speed);
     hud.update(rawDelta, game.state === "idle" || game.state === "menu" ? null : snapshot());
   }
 
@@ -1461,6 +1464,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     drones.group,
     projectiles.group,
     pickups.group,
+    ...(laneLights ? [laneLights.mesh] : []),
     ...fx.hideObjects,
     ...(viewmodel ? [viewmodel.rig] : []),
   ];

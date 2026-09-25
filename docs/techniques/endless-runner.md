@@ -109,6 +109,7 @@ Runner dynamics are listed in `world.collisionHideExtra`, which `collectCollisio
 | `runnerSparkCount` | 256 | 128 |
 | `runnerTracerCount` | 24 | 12 |
 | `runnerWeaponLight` | true | false |
+| `runnerLaneLights` | true | true |
 
 `camera.far` is capped at `segmentLength · runnerSegmentsAhead − 5`, so the view never reaches past the last tile.
 
