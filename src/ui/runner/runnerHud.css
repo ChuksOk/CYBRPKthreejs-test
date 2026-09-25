@@ -421,6 +421,61 @@
   transform: scaleX(0);
 }
 
+/* ── Weapon chips ─────────────────────────────────────────────────── */
+.rh-weapons {
+  position: absolute;
+  right: 20px;
+  bottom: 160px;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.rh-chip {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 48px;
+  padding: 4px 6px 5px;
+  border: 0;
+  background: rgba(12, 14, 19, 0.82);
+  color: var(--t-paper);
+  font-family: var(--t-mono);
+  text-align: left;
+  cursor: pointer;
+  clip-path: var(--t-notch-sm);
+  opacity: 0.72;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.rh-chip b {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.rh-chip span {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.rh-chip em {
+  font-style: normal;
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+}
+
+.rh-chip.is-active {
+  background: var(--t-acid);
+  color: var(--t-ink);
+  opacity: 1;
+  border-top: 3px solid var(--t-pink);
+}
+
 /* ── Banner (acid label tag) ─────────────────────────────────────────── */
 .rh-banner {
   position: absolute;
@@ -909,6 +964,20 @@
 
   .a-count b {
     font-size: 36px;
+  }
+
+  .rh-weapons {
+    right: 10px;
+    top: 170px;
+    bottom: auto;
+  }
+
+  .rh-chip {
+    min-width: 36px;
+  }
+
+  .rh-chip em {
+    display: none;
   }
 
   .ticket {

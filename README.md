@@ -39,7 +39,7 @@ After the loader finishes, click **ENTER** on the intro overlay (or skip if `FEA
 
 ### Neon Run: endless runner + drone shooter
 
-With `FEATURES.runner` on (the default), the alley becomes a first-person endless runner. You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
+With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first-person endless runner by ChuksOk (name and links live in `src/app/credits.js`). You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
 
 | Action | Desktop | Touch |
 |--------|---------|-------|
@@ -49,9 +49,11 @@ With `FEATURES.runner` on (the default), the alley becomes a first-person endles
 | Aim | Mouse (pointer lock) | Drag right half |
 | Fire | Hold left click | Auto-fire when on target |
 | Reload | R | Automatic |
+| Switch weapon | 1–4, Q, mouse wheel | Tap a weapon chip |
 | Pause | Esc | — |
 
 - **Drones:** GIGI-style drones: teal disc and white robotic-arm scouts that strafe and fire, red spider-quad gunships that charge a 3-bolt burst, and gold or blue hex bi-copter kamikazes that dive at you. Bolts can be dodged or shot down.
+- **Weapons:** four VX-series guns in off-white with neon green accents: VX-06 carbine, VX-09 SMG, VX-12 rail and VX-14 heavy. Each has its own fire rate, magazine, damage, spread and recoil (`src/weapon/weaponTypes.js`), and ammo is kept per gun.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
 - **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).

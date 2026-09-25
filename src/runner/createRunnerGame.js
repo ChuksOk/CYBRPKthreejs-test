@@ -275,6 +275,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   hud.onStart(startCountdown);
   hud.onRestart(restart);
   hud.onResume(resume);
+  hud.onWeapon((index) => {
+    if (game.state === "running") {
+      weapon?.selectWeapon(index);
+    }
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.code !== "Enter" && event.code !== "NumpadEnter") {
@@ -484,6 +489,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       reload: weapon?.getReloadProgress() ?? 0,
       overclock: weapon?.state.overclock ?? 0,
       spread: weapon?.state.spread ?? 0,
+      weaponIndex: weapon?.state.index ?? 0,
       threats: collectThreats(),
     };
   }

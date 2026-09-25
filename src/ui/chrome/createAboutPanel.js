@@ -1,6 +1,12 @@
 import "./aboutPanel.css";
 import { isMobileLayout, onMobileLayoutChange } from "../../platform/deviceLayout.js";
 import { SOURCE_CODE_URL } from "../core/externalLinks.js";
+import {
+  AUTHOR_NAME,
+  AUTHOR_URL,
+  BASE_PROJECT_CREDIT,
+  GAME_TITLE,
+} from "../../app/credits.js";
 
 const CLOSE_ICON = `
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -26,31 +32,30 @@ export function createAboutPanel({ state } = {}) {
     <div class="about-content">
       <div class="about-body">
         <div class="about-brand">
-          <p class="about-brand-title">THREEJS-PUNK</p>
-          <small class="about-brand-subtitle">BY ANDERSON MANCINI &amp; SUNAG</small>
+          <p class="about-brand-title">${GAME_TITLE}</p>
+          <small class="about-brand-subtitle">A GAME BY ${AUTHOR_NAME.toUpperCase()}</small>
         </div>
         <div class="about-copy">
           <div class="about-copy-col">
             <p class="about-lead">
-              Threejs-Punk drops you into a rain-soaked alley somewhere between a Blade
-              Runner backlot and a boot sequence — neon signs, wet asphalt, and a city
-              that never quite turns off its lights.
+              ${GAME_TITLE} is a first-person endless runner and shooter set in a
+              rain-soaked cyberpunk alley under drone curfew. Run the street, switch
+              lanes, jump barriers, slide under beams and shoot the GIGI drone fleet
+              out of the sky.
             </p>
             <p class="about-lead">
-              Every reflection, droplet and glow you see is rendered live with Three.js
-              WebGPU and TSL — no pre-baked tricks, just shaders doing the heavy lifting
-              in real time.
+              Four VX-series weapons, three drone classes and an endless tiled city,
+              all rendered live in the browser with Three.js WebGPU and TSL shaders.
             </p>
           </div>
           <div class="about-copy-col">
             <p class="about-lead">
-              That flickering readout in the corner is set dressing: a fake vitals HUD
-              borrowed from the same retro-future aesthetic, just to make the night feel
-              a little more alive.
+              Designed and built by ${AUTHOR_NAME}: game design, runner and combat
+              systems, drones, weapons and the ticket-style interface.
             </p>
-            <p class="about-lead">
-              Originally built for the Three.js Conference — a small invitation to
-              wander, look up, and let the rain do the storytelling.
+            <p class="about-lead about-lead--credit">
+              ${BASE_PROJECT_CREDIT} Sound effects: Kenney (CC0). Fonts: Barlow
+              Condensed &amp; JetBrains Mono (OFL).
             </p>
           </div>
         </div>
@@ -58,39 +63,35 @@ export function createAboutPanel({ state } = {}) {
 
       <div class="about-footer">
         <div class="about-buttons">
-          <button type="button" class="refresh-button-panel about-link-anderson">
-            Anderson Mancini
-          </button>
-          <button type="button" class="refresh-button-panel about-link-sunag">
-            Sunag
+          <button type="button" class="refresh-button-panel about-link-author">
+            ${AUTHOR_NAME}
           </button>
           <button type="button" class="refresh-button-panel about-link-source">
             Source code
           </button>
         </div>
         <p class="about-model-credits">
-          By Anderson Mancini &amp; Sunag
+          © ${new Date().getFullYear()} ${AUTHOR_NAME}
         </p>
         <p class="about-recommended about-recommended--desktop">
           <span class="about-recommended-title">Recommended setup</span>
           GPU power and 16 GB RAM are what matter most. Mac: M2 or newer.
           PC: discrete GPU, 16 GB RAM.
           Chrome or Edge (latest) · WebGPU required · 1080p fullscreen (4K scales down automatically).
-          WASD + Shift sprint · click to look · Settings for Look · headphones recommended.
+          A/D lanes · Space jump · S slide · mouse aim · click fire · 1–4 / Q weapons · headphones recommended.
         </p>
         <p class="about-recommended about-recommended--mobile">
           <span class="about-recommended-title">Recommended setup</span>
           iPhone 15 or newer · Android: 2023 flagship or newer (Snapdragon 8 Gen 2 / equivalent, 8 GB RAM).
           Chrome (latest) · WebGPU required · landscape orientation.
-          On-screen joystick · Settings for Look · headphones recommended.
+          Swipe left side to move · drag right side to aim · tap weapon chip to switch · headphones recommended.
         </p>
       </div>
     </div>
   `;
 
   const closeButton = root.querySelector(".close-button-panel");
-  const andersonButton = root.querySelector(".about-link-anderson");
-  const sunagButton = root.querySelector(".about-link-sunag");
+  const authorButton = root.querySelector(".about-link-author");
   const sourceButton = root.querySelector(".about-link-source");
   const desktopRecommended = root.querySelector(".about-recommended--desktop");
   const mobileRecommended = root.querySelector(".about-recommended--mobile");
@@ -117,12 +118,8 @@ export function createAboutPanel({ state } = {}) {
 
   closeButton.addEventListener("click", close);
 
-  andersonButton.addEventListener("click", () => {
-    window.open("https://andersonmancini.dev", "_blank", "noopener,noreferrer");
-  });
-
-  sunagButton.addEventListener("click", () => {
-    window.open("https://x.com/sea3dformat", "_blank", "noopener,noreferrer");
+  authorButton.addEventListener("click", () => {
+    window.open(AUTHOR_URL, "_blank", "noopener,noreferrer");
   });
 
   sourceButton.addEventListener("click", () => {

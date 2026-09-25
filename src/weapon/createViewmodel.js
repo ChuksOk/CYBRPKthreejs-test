@@ -1,10 +1,11 @@
 import * as THREE from "three/webgpu";
-import { createRifleModel } from "../runner/models/createRifleModel.js";
+import { createGunModel } from "../runner/models/createGunModels.js";
+import { WEAPONS } from "./weaponTypes.js";
 import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
 import { createMuzzleFlash } from "./createWeaponFx.js";
 
 /** Grip sits bottom-right; the procedural carbine is modelled in meters. */
-const BASE_OFFSET = new THREE.Vector3(0.175, -0.185, -0.27);
+const BASE_OFFSET = new THREE.Vector3(0.19, -0.2, -0.31);
 
 function expLerpFactor(delta, speed) {
   return 1 - Math.exp(-delta * speed);
@@ -25,16 +26,29 @@ export function createViewmodel({ scene, camera }) {
   sway.add(pivot);
   pivot.position.copy(BASE_OFFSET);
 
-  const rifle = createRifleModel();
-  const gun = rifle.root;
-  // Slight cant toward the screen center reads better than a dead-straight gun.
-  gun.rotation.set(0.015, 0.03, -0.035);
-  pivot.add(gun);
-  const muzzle = rifle.muzzle;
+  // All VX guns are built up front (shared materials) and toggled on switch.
+  const guns = WEAPONS.map((weapon) => {
+    const model = createGunModel(weapon.id);
+    // Slight cant toward the screen center reads better than a dead-straight gun.
+    model.root.rotation.set(0.015, 0.03, -0.035);
+    model.root.visible = false;
+    pivot.add(model.root);
+    return model;
+  });
+  let current = 0;
+  let pending = 0;
+  let switchT = 1; // 0 → 1; lowers the old gun, raises the new one
+  guns[0].root.visible = true;
+  let muzzle = guns[0].muzzle;
 
   const flash = createMuzzleFlash();
   flash.mesh.visible = false;
   muzzle.add(flash.mesh);
+
+  function setWeapon(index) {
+    pending = index;
+    switchT = 0;
+  }
 
   rig.traverse((object) => {
     object.layers.set(VIEWMODEL_LAYER);
@@ -71,6 +85,18 @@ export function createViewmodel({ scene, camera }) {
    */
   function update(delta, motion) {
     flash.update(delta);
+    let switchDip = 0;
+    if (switchT < 1) {
+      switchT = Math.min(1, switchT + delta / 0.35);
+      if (switchT >= 0.5 && current !== pending) {
+        guns[current].root.visible = false;
+        current = pending;
+        guns[current].root.visible = true;
+        muzzle = guns[current].muzzle;
+        muzzle.add(flash.mesh);
+      }
+      switchDip = -0.22 * Math.sin(Math.PI * switchT);
+    }
     if (!visible) {
       return;
     }
@@ -106,11 +132,11 @@ export function createViewmodel({ scene, camera }) {
 
     pivot.position.set(
       BASE_OFFSET.x + swayOffset.x + bobX,
-      BASE_OFFSET.y + swayOffset.y + bobY + airLift + slideDip + reloadDip,
+      BASE_OFFSET.y + swayOffset.y + bobY + airLift + slideDip + reloadDip + switchDip,
       BASE_OFFSET.z + recoil * 0.05,
     );
     pivot.rotation.set(
-      recoil * 0.12 - reloadRoll * 0.4,
+      recoil * 0.12 - reloadRoll * 0.4 + switchDip * 1.5,
       swayOffset.x * 1.5,
       THREE.MathUtils.clamp(-motion.laneVelocity * 0.02, -0.25, 0.25) + reloadRoll * 0.6,
     );
@@ -127,17 +153,21 @@ export function createViewmodel({ scene, camera }) {
 
   return {
     rig,
-    muzzle,
+    setWeapon,
+    getWeaponIndex: () => current,
     kick,
     update,
     setReloadProgress,
     setVisible,
     setOverclock: () => {},
     /** Live ammo counter on the receiver screen. */
-    setAmmoDisplay: (ammo, mag, overclock, reloading) => rifle.drawAmmo(ammo, mag, overclock, reloading),
+    setAmmoDisplay: (ammo, mag, overclock, reloading) => guns[current].drawAmmo(ammo, mag, overclock, reloading),
     getMuzzleWorldPosition,
     setWarmupVisible(value) {
       flash.mesh.visible = value;
+      guns.forEach((gun, index) => {
+        gun.root.visible = value || index === current;
+      });
     },
   };
 }

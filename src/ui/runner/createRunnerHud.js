@@ -3,6 +3,8 @@ import "@fontsource/barlow-condensed/latin-800.css";
 import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "./runnerHud.css";
+import { WEAPONS } from "../../weapon/weaponTypes.js";
+import { GAME_TITLE } from "../../app/credits.js";
 
 const ARROW_COUNT = 8;
 const MAG_TICKS = 32;
@@ -49,6 +51,7 @@ const pad = (value, length) => String(Math.max(0, Math.floor(value))).padStart(l
 export function createRunnerHud({ isTouch = false } = {}) {
   document.documentElement.classList.add("runner-mode");
   const root = el("div", "runner-hud", document.body);
+  const handlers = { start: null, restart: null, resume: null, weapon: null };
 
   // ── Crosshair ──────────────────────────────────────────────────────────
   const crosshair = el("div", "rh-crosshair", root,
@@ -99,14 +102,29 @@ export function createRunnerHud({ isTouch = false } = {}) {
   // ── Ammo label (bottom-right) ──────────────────────────────────────────
   const ammo = el("div", "rh-card rh-ammo", root);
   ammo.innerHTML = `
-    <div class="a-tab"><span>REPEATER</span><span>M-32</span></div>
+    <div class="a-tab"><span class="rh-weapon-name">CARBINE</span><span class="rh-weapon-code">VX-06</span></div>
     <div class="a-body">
-      <div class="a-count"><b class="rh-ammo-num">32</b><span>/ 32</span></div>
+      <div class="a-count"><b class="rh-ammo-num">32</b><span class="rh-mag">/ 32</span></div>
       <div class="a-status t-meta rh-ammo-status">READY</div>
     </div>
     <div class="a-mag">${'<i></i>'.repeat(MAG_TICKS)}</div>
     <div class="a-reload"><i></i></div>`;
   const ammoNum = ammo.querySelector(".rh-ammo-num");
+  const magLabel = ammo.querySelector(".rh-mag");
+  const weaponName = ammo.querySelector(".rh-weapon-name");
+  const weaponCode = ammo.querySelector(".rh-weapon-code");
+
+  // Weapon chips (keys 1–4 / Q / wheel; tappable on touch).
+  const chips = el("div", "rh-weapons", root);
+  const chipEls = WEAPONS.map((weapon, index) => {
+    const chip = el("button", "rh-chip", chips, `<b>${index + 1}</b><span>${weapon.code}</span><em>${weapon.name}</em>`);
+    chip.type = "button";
+    chip.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      handlers.weapon?.(index);
+    });
+    return chip;
+  });
   const ammoStatus = ammo.querySelector(".rh-ammo-status");
   const magTicks = [...ammo.querySelectorAll(".a-mag i")];
   const reloadBar = ammo.querySelector(".a-reload i");
@@ -125,7 +143,6 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   // ── Screens ─────────────────────────────────────────────────────────────
   const screen = el("div", "runner-screen", document.body);
-  const handlers = { start: null, restart: null, resume: null };
 
   const controls = isTouch
     ? [
@@ -133,6 +150,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         ["SWIPE ↑", "JUMP"],
         ["SWIPE ↓", "SLIDE"],
         ["DRAG (RIGHT)", "AIM / AUTO-FIRE"],
+        ["TAP CHIP", "SWITCH WEAPON"],
       ]
     : [
         ["A / D", "SWITCH LANE"],
@@ -141,6 +159,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         ["MOUSE", "AIM"],
         ["L-CLICK", "FIRE"],
         ["R", "RELOAD"],
+        ["1–4 / Q", "WEAPON"],
         ["ESC", "PAUSE"],
       ];
   const controlsHtml = controls
@@ -158,7 +177,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
             <span class="tk-arrow">↗</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag"><span class="t-meta">SECTOR:</span><span class="tk-title">NEON<br>RUN</span></div>
+            <div class="tk-tag"><span class="t-meta">SECTOR:</span><span class="tk-title">${GAME_TITLE.split(" ").join("<br>")}</span></div>
             <div class="tk-side">
               <span class="tk-ghost">2077</span>
               <div class="tk-keys">${controlsHtml}</div>
@@ -276,7 +295,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     damageLevel = Math.min(1, damageLevel + amount);
   }
 
-  const last = { score: -1, ammo: -1, dist: -1, speed: -1, combo: "", shield: -1, health: -1, sector: -1, status: "" };
+  const last = { weapon: -1, score: -1, ammo: -1, dist: -1, speed: -1, combo: "", shield: -1, health: -1, sector: -1, status: "" };
 
   function update(delta, s) {
     if (hitTimer > 0) {
@@ -341,6 +360,16 @@ export function createRunnerHud({ isTouch = false } = {}) {
       last.health = healthInt;
     }
 
+    if (s.weaponIndex !== last.weapon) {
+      last.weapon = s.weaponIndex;
+      last.ammo = -1;
+      const weapon = WEAPONS[s.weaponIndex];
+      weaponName.textContent = weapon.name;
+      weaponCode.textContent = weapon.code;
+      magLabel.textContent = `/ ${weapon.magSize}`;
+      chipEls.forEach((chip, index) => chip.classList.toggle("is-active", index === s.weaponIndex));
+    }
+
     const overclock = s.overclock > 0;
     const ammoKey = overclock ? -2 : s.ammo;
     if (ammoKey !== last.ammo) {
@@ -354,13 +383,13 @@ export function createRunnerHud({ isTouch = false } = {}) {
       ? `OVERCLOCK ${s.overclock.toFixed(1)}S`
       : s.reloading
         ? "RELOADING…"
-        : s.ammo <= 6
+        : s.ammo <= Math.max(1, Math.ceil(s.magSize * 0.2))
           ? "LOW — PRESS R"
           : "READY";
     if (status !== last.status) {
       ammoStatus.textContent = status;
       ammo.classList.toggle("is-overclock", overclock);
-      ammo.classList.toggle("is-low", !overclock && !s.reloading && s.ammo <= 6);
+      ammo.classList.toggle("is-low", !overclock && !s.reloading && s.ammo <= Math.max(1, Math.ceil(s.magSize * 0.2)));
       last.status = status;
     }
 
@@ -401,6 +430,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     onStart: (fn) => { handlers.start = fn; },
     onRestart: (fn) => { handlers.restart = fn; },
     onResume: (fn) => { handlers.resume = fn; },
+    onWeapon: (fn) => { handlers.weapon = fn; },
     getScreenMode: () => screen.dataset.mode || "",
   };
 }

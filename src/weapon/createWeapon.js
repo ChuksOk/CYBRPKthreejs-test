@@ -1,15 +1,9 @@
 import * as THREE from "three/webgpu";
+import { WEAPONS } from "./weaponTypes.js";
 
-const FIRE_RATE = 11;
-const OVERCLOCK_FIRE_RATE = 19;
-const MAG_SIZE = 32;
-const RELOAD_TIME = 1.25;
-const BASE_SPREAD = 0.003;
-const SPREAD_PER_SHOT = 0.0028;
-const MAX_SPREAD = 0.028;
 const SPREAD_RECOVERY = 0.09;
+const SWITCH_TIME = 0.35;
 const RANGE = 220;
-const DAMAGE = 1;
 /** Touch aim assist: auto-fire + magnetism inside this cone. */
 const ASSIST_ANGLE = THREE.MathUtils.degToRad(4.5);
 
@@ -41,27 +35,64 @@ export function createWeapon({
   const raycaster = new THREE.Raycaster();
   raycaster.firstHitOnly = true;
 
+  // Ammo is tracked per gun so switching never refills a magazine.
+  const ammoByWeapon = WEAPONS.map((w) => w.magSize);
+  let def = WEAPONS[0];
+
   const state = {
-    ammo: MAG_SIZE,
-    magSize: MAG_SIZE,
+    index: 0,
+    weapon: def,
+    ammo: def.magSize,
+    magSize: def.magSize,
     reloading: false,
     reloadTimer: 0,
     cooldown: 0,
-    spread: BASE_SPREAD,
+    spread: def.baseSpread,
     overclock: 0,
     shotsFired: 0,
+    switchTimer: 0,
   };
 
   function startReload() {
-    if (state.reloading || state.ammo === MAG_SIZE || state.overclock > 0) {
+    if (state.reloading || state.ammo === def.magSize || state.overclock > 0 || state.switchTimer > 0) {
       return;
     }
     state.reloading = true;
-    state.reloadTimer = RELOAD_TIME;
+    state.reloadTimer = def.reloadTime;
     audio?.play("reload", { volume: 0.7 });
   }
 
+  function selectWeapon(index) {
+    const next = ((index % WEAPONS.length) + WEAPONS.length) % WEAPONS.length;
+    if (next === state.index) {
+      return;
+    }
+    ammoByWeapon[state.index] = state.ammo;
+    state.index = next;
+    def = WEAPONS[next];
+    state.weapon = def;
+    state.ammo = ammoByWeapon[next];
+    state.magSize = def.magSize;
+    state.reloading = false;
+    state.reloadTimer = 0;
+    state.spread = def.baseSpread;
+    state.cooldown = Math.max(state.cooldown, 0);
+    state.switchTimer = SWITCH_TIME;
+    viewmodel.setReloadProgress(-1);
+    viewmodel.setWeapon(next);
+    audio?.play("reload", { volume: 0.45, detune: 500 });
+  }
+
   const unsubscribeReload = controls.on("reload", startReload);
+  const unsubscribeWeapon = controls.on("weapon", (value) => {
+    if (value === "next") {
+      selectWeapon(state.index + 1);
+    } else if (value === "prev") {
+      selectWeapon(state.index - 1);
+    } else {
+      selectWeapon(value);
+    }
+  });
 
   function aimDirection(target) {
     camera.getWorldDirection(target);
@@ -125,14 +156,14 @@ export function createWeapon({
     _hitPoint.copy(_origin).addScaledVector(_direction, nearest);
 
     viewmodel.getMuzzleWorldPosition(_muzzle);
-    fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xfff27a : 0x7df9ff);
+    fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xff4f74 : def.tracer);
     fx.muzzleLight(_muzzle);
-    viewmodel.kick(1);
-    controls.addRecoil(0.011 + Math.random() * 0.004, (Math.random() - 0.5) * 0.006);
-    audio?.play("shot", { volume: 0.32, detune: (Math.random() - 0.5) * 180 });
+    viewmodel.kick(Math.min(2, def.recoil));
+    controls.addRecoil((0.011 + Math.random() * 0.004) * def.recoil, (Math.random() - 0.5) * 0.006 * def.recoil);
+    audio?.play("shot", { volume: def.sound.volume, detune: def.sound.detune + (Math.random() - 0.5) * 180 });
 
     if (hitKind === "drone") {
-      drones.damage(hitDrone, DAMAGE, _hitPoint);
+      drones.damage(hitDrone, def.damage, _hitPoint);
       fx.impact(_hitPoint, _direction.clone().negate(), { hex: 0xff5577, count: 6 });
       onHit?.("drone", hitDrone);
     } else if (hitKind === "bolt") {
@@ -142,7 +173,7 @@ export function createWeapon({
       fx.impact(_hitPoint, _normal, { hex: 0xffc36b, count: 7 });
     }
 
-    state.spread = Math.min(MAX_SPREAD, state.spread + SPREAD_PER_SHOT);
+    state.spread = Math.min(def.maxSpread, state.spread + def.spreadPerShot);
     state.shotsFired += 1;
     onShot?.();
   }
@@ -153,7 +184,8 @@ export function createWeapon({
    */
   function update(delta, { canFire }) {
     state.cooldown = Math.max(-0.05, state.cooldown - delta);
-    state.spread = Math.max(BASE_SPREAD, state.spread - SPREAD_RECOVERY * delta);
+    state.spread = Math.max(def.baseSpread, state.spread - SPREAD_RECOVERY * delta);
+    state.switchTimer = Math.max(0, state.switchTimer - delta);
 
     if (state.overclock > 0) {
       state.overclock = Math.max(0, state.overclock - delta);
@@ -162,10 +194,10 @@ export function createWeapon({
 
     if (state.reloading) {
       state.reloadTimer -= delta;
-      viewmodel.setReloadProgress(1 - Math.max(0, state.reloadTimer) / RELOAD_TIME);
+      viewmodel.setReloadProgress(1 - Math.max(0, state.reloadTimer) / def.reloadTime);
       if (state.reloadTimer <= 0) {
         state.reloading = false;
-        state.ammo = MAG_SIZE;
+        state.ammo = def.magSize;
         viewmodel.setReloadProgress(-1);
       }
     }
@@ -182,11 +214,11 @@ export function createWeapon({
       wantsFire = wantsFire || Boolean(assistTarget);
     }
 
-    if (!wantsFire || state.reloading) {
+    if (!wantsFire || state.reloading || state.switchTimer > 0) {
       return;
     }
 
-    const rate = state.overclock > 0 ? OVERCLOCK_FIRE_RATE : FIRE_RATE;
+    const rate = state.overclock > 0 ? def.overclockRate : def.fireRate;
     while (state.cooldown <= 0) {
       if (state.ammo <= 0 && state.overclock <= 0) {
         startReload();
@@ -207,17 +239,21 @@ export function createWeapon({
   function addOverclock(seconds) {
     state.overclock = Math.max(state.overclock, seconds);
     state.reloading = false;
-    state.ammo = MAG_SIZE;
+    state.ammo = def.magSize;
     viewmodel.setReloadProgress(-1);
     viewmodel.setOverclock(true);
   }
 
   function reset() {
-    state.ammo = MAG_SIZE;
+    WEAPONS.forEach((w, i) => {
+      ammoByWeapon[i] = w.magSize;
+    });
+    state.ammo = def.magSize;
+    state.switchTimer = 0;
     state.reloading = false;
     state.reloadTimer = 0;
     state.cooldown = 0;
-    state.spread = BASE_SPREAD;
+    state.spread = def.baseSpread;
     state.overclock = 0;
     state.shotsFired = 0;
     viewmodel.setReloadProgress(-1);
@@ -230,10 +266,12 @@ export function createWeapon({
     reset,
     startReload,
     addOverclock,
+    selectWeapon,
     getReloadProgress: () =>
-      state.reloading ? 1 - Math.max(0, state.reloadTimer) / RELOAD_TIME : 0,
+      state.reloading ? 1 - Math.max(0, state.reloadTimer) / def.reloadTime : 0,
     dispose() {
       unsubscribeReload();
+      unsubscribeWeapon();
     },
   };
 }

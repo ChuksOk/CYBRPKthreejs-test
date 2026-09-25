@@ -59,7 +59,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
 
   let currentBaseFov = baseFov;
   const euler = new THREE.Euler(0, 0, 0, "YXZ");
-  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), lockChange: new Set(), reload: new Set() };
+  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), lockChange: new Set(), reload: new Set(), weapon: new Set() };
   const actionQueue = [];
 
   const touchLook = new Map();
@@ -120,6 +120,19 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
           emit("reload");
         }
         break;
+      case "Digit1":
+      case "Digit2":
+      case "Digit3":
+      case "Digit4":
+        if (state.inputEnabled) {
+          emit("weapon", Number(event.code.slice(5)) - 1);
+        }
+        break;
+      case "KeyQ":
+        if (state.inputEnabled) {
+          emit("weapon", "next");
+        }
+        break;
       default:
         return;
     }
@@ -146,6 +159,19 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     if (event.button === 0) {
       state.trigger = false;
     }
+  }
+
+  let wheelCooldown = 0;
+  function onWheel(event) {
+    if (!state.active || !state.inputEnabled || !state.pointerLocked) {
+      return;
+    }
+    const now = performance.now();
+    if (now < wheelCooldown || Math.abs(event.deltaY) < 1) {
+      return;
+    }
+    wheelCooldown = now + 180;
+    emit("weapon", event.deltaY > 0 ? "next" : "prev");
   }
 
   function onPointerLockChange() {
@@ -225,6 +251,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   domElement.addEventListener("mousedown", onMouseDown);
   document.addEventListener("mouseup", onMouseUp);
   document.addEventListener("pointerlockchange", onPointerLockChange);
+  document.addEventListener("wheel", onWheel, { passive: true });
   domElement.addEventListener("pointerdown", onPointerDown);
   domElement.addEventListener("pointermove", onPointerMove);
   domElement.addEventListener("pointerup", onPointerUp);
@@ -425,6 +452,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     domElement.removeEventListener("mousedown", onMouseDown);
     document.removeEventListener("mouseup", onMouseUp);
     document.removeEventListener("pointerlockchange", onPointerLockChange);
+    document.removeEventListener("wheel", onWheel);
     domElement.removeEventListener("pointerdown", onPointerDown);
     domElement.removeEventListener("pointermove", onPointerMove);
     domElement.removeEventListener("pointerup", onPointerUp);
@@ -450,6 +478,8 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       state.speed = value;
     },
     isTriggerHeld: () => state.trigger,
+    /** Programmatic weapon select (HUD chips on touch). */
+    selectWeapon: (index) => emit("weapon", index),
     addRecoil,
     shake,
     shiftX,
