@@ -29,7 +29,7 @@ bootstrap + scene + city + ground + post + walk/orbit + render loop
 
 | Remove flag | Delete or ignore folder |
 |-------------|-------------------------|
-| `runner` | `src/runner/`, `src/weapon/`, `src/enemies/`, `src/ui/runner/`, `src/controls/createRunnerControls.js`, `src/audio/createRunnerAudio.js`, `public/models/runner/`, `public/audio/runner/` |
+| `runner` | `src/runner/`, `src/weapon/`, `src/enemies/`, `src/ui/runner/`, `src/controls/createRunnerControls.js`, `src/audio/createRunnerAudio.js`, `public/audio/runner/` |
 | `intro` | `src/app/createIntroFlow.js`, `src/ui/intro/` |
 | `chromeUi` | `src/ui/chrome/` (except shared state if needed) |
 | `walkUi` | `src/ui/walk/` |

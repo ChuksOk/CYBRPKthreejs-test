@@ -17,7 +17,8 @@ Primary code:
 | Drones | `src/enemies/createDroneManager.js`, `droneTypes.js` |
 | Enemy bolts | `src/enemies/createEnemyProjectiles.js` |
 | Obstacles / pickups | `src/runner/createObstacles.js`, `createPickups.js` |
-| HUD + screens | `src/ui/runner/createRunnerHud.js`, `runnerHud.css` |
+| HUD + screens (ticket / label style) | `src/ui/runner/createRunnerHud.js`, `runnerHud.css`, chrome theme `src/ui/core/ticketTheme.css` |
+| Procedural PBR models | `src/runner/models/` (`modelKit.js`, `materials.js`, rifle, drones, barrier) |
 | SFX | `src/audio/createRunnerAudio.js` |
 
 Toggle with `FEATURES.runner` in `src/world/features.js` (false restores the walk / orbit demo).
@@ -77,7 +78,13 @@ It sits on `VIEWMODEL_LAYER` (5):
 - The `aoCamera` explicitly disables it, so GTAO does not darken the gun.
 - The ground mirror and rain height cameras only see layer 0 (plus rain).
 
-The CC0 Kenney models are restyled in code: gunmetal `MeshStandardNodeMaterial` over the palette texture. The palette's saturated cells become `emissiveNode` glow, measured as `max(rgb) − min(rgb)`, so bloom picks them up.
+The rifle, drones and obstacles are **procedural hard-surface models** (`src/runner/models/`), built at real-world scale:
+
+- **Parts:** `createPartKit` adds bevelled boxes, extruded side profiles, tubes and tori under a material key, then merges each key into **one mesh**. A ~70-part carbine is ~12 draw calls.
+- **Surface detail:** `materials.js` adds detail with TSL noise on `positionLocal`: anodizing variation, grip stipple, carbon twill, chipped paint, hazard stripes, concrete grime. There are no textures to load, and the scene env map and neon lights do the rest.
+- **Per-drone state:** hit flash, sensor glow and accent color come from `uniform().onObjectUpdate(({ object }) => object.userData.fx…)`. All drones of a type share materials and pipelines.
+- **Rotors:** they are single discs whose blades are animated in the fragment shader (no per-rotor transforms).
+- **Rifle screen:** the rifle's receiver has a small `CanvasTexture` screen that mirrors the ammo count.
 
 ## 5. Combat without per-object raycasts
 

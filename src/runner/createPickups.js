@@ -1,13 +1,36 @@
 import * as THREE from "three/webgpu";
 import { color, float, oscSine, time } from "three/tsl";
 import { RUNNER } from "./runnerConfig.js";
+import { createPartKit } from "./models/modelKit.js";
+import { chrome } from "./models/materials.js";
 
+/** Palette follows the ticket HUD: acid / cobalt / paper / pink. */
 export const PICKUP_TYPES = {
-  shard: { hex: 0x22d3ee, score: 25, geometry: () => new THREE.OctahedronGeometry(0.22) },
-  shield: { hex: 0xe040fb, geometry: () => new THREE.IcosahedronGeometry(0.34) },
-  health: { hex: 0x3dff8a, geometry: () => new THREE.BoxGeometry(0.42, 0.42, 0.42) },
-  overclock: { hex: 0xffe14a, geometry: () => new THREE.TorusGeometry(0.28, 0.08, 8, 20) },
+  shard: { hex: 0xd9ff3b, score: 25, core: () => new THREE.OctahedronGeometry(0.14), cage: 0.2 },
+  shield: { hex: 0x5d87f6, core: () => new THREE.IcosahedronGeometry(0.2, 1), cage: 0.3 },
+  health: { hex: 0xe9ebee, core: () => new THREE.BoxGeometry(0.2, 0.2, 0.2), cage: 0.3 },
+  overclock: { hex: 0xff4f74, core: () => new THREE.TorusGeometry(0.14, 0.05, 10, 24), cage: 0.3 },
 };
+
+/** Glowing core inside a chrome gimbal cage (two crossed rings + cap nubs). */
+function buildPickupTemplate(type) {
+  const kit = createPartKit();
+  kit.add("core", type.core());
+  const r = type.cage;
+  kit.torus("cage", r, 0.012, { rotation: [Math.PI / 2, 0, 0], tubular: 40 });
+  kit.torus("cage", r, 0.012, { rotation: [0, 0, 0], tubular: 40 });
+  for (const y of [-r, r]) {
+    kit.tube("cage", 0.025, 0.03, "y", { position: [0, y, 0], radial: 12 });
+  }
+  return kit.build({
+    core: (() => {
+      const material = new THREE.MeshStandardNodeMaterial({ color: 0x050608, metalness: 0.4, roughness: 0.2 });
+      material.emissiveNode = color(type.hex).mul(oscSine(time.mul(0.9)).mul(1.4).add(float(3)));
+      return material;
+    })(),
+    cage: chrome({ tint: 0x9aa0a8 }),
+  }, { name: "pickup" });
+}
 
 const COLLECT_RADIUS = 1.05;
 const _center = new THREE.Vector3();
@@ -23,17 +46,10 @@ export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health
 
   const pool = [];
   for (const [id, type] of Object.entries(PICKUP_TYPES)) {
-    const geometry = type.geometry();
-    const material = new THREE.MeshStandardNodeMaterial({
-      color: 0x0a0a10,
-      metalness: 0.2,
-      roughness: 0.3,
-    });
-    material.emissiveNode = color(type.hex).mul(oscSine(time.mul(0.9)).mul(1.5).add(float(2.6)));
+    const template = buildPickupTemplate(type);
     for (let i = 0; i < (poolSize[id] ?? 2); i++) {
-      const mesh = new THREE.Mesh(geometry, material);
+      const mesh = template.clone(true);
       mesh.visible = false;
-      mesh.castShadow = false;
       group.add(mesh);
       pool.push({ id, type, mesh, active: false, baseY: 0, phase: Math.random() * 6 });
     }

@@ -1,4 +1,5 @@
 import "./ui/core/global.css";
+import "./ui/core/ticketTheme.css";
 import * as THREE from "three/webgpu";
 import { createScene } from "./world/scene.js";
 import { createWorld, createLightingController } from "./world/createWorld.js";

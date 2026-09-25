@@ -55,7 +55,8 @@ With `FEATURES.runner` on (the default), the alley becomes a first-person endles
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
 - **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).
-- **Assets:** the rifle, drone, barrier and sounds are CC0 from Kenney's Starter Kit FPS (`public/models/runner/CREDITS.md`, `public/audio/runner/CREDITS.md`).
+- **Assets:** the rifle, drones, barrier, beam and pickups are procedural PBR models built in code (`src/runner/models/`). Sounds are CC0 from Kenney's Starter Kit FPS (`public/audio/runner/CREDITS.md`).
+- **UI:** the HUD and screens use a transit-ticket / utility-label style: acid lime, cobalt, paper, ink and signal pink, with Barlow Condensed and JetBrains Mono (OFL, via `@fontsource`). It lives in `src/ui/runner/runnerHud.css` plus `src/ui/core/ticketTheme.css` for the app chrome.
 
 Set `FEATURES.runner = false` to get the original walk / orbit demo back.
 

@@ -1,42 +1,13 @@
 import * as THREE from "three/webgpu";
-import { color, float, max, min, texture, uniform } from "three/tsl";
+import { createRifleModel } from "../runner/models/createRifleModel.js";
 import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
 import { createMuzzleFlash } from "./createWeaponFx.js";
 
-const BASE_OFFSET = new THREE.Vector3(0.16, -0.16, -0.3);
-const MODEL_SCALE = 0.17;
-/** Barrel tip in model space (Kenney blaster-repeater points its barrels along +Z). */
-const MUZZLE_LOCAL = new THREE.Vector3(0, 0.3, 1.28);
+/** Grip sits bottom-right; the procedural carbine is modelled in meters. */
+const BASE_OFFSET = new THREE.Vector3(0.175, -0.185, -0.27);
 
 function expLerpFactor(delta, speed) {
   return 1 - Math.exp(-delta * speed);
-}
-
-/**
- * Restyle the low-poly CC0 blaster to the scene: gunmetal PBR over the Kenney
- * colormap, saturated palette cells turned into a cyan neon glow.
- */
-function restyle(root, uGlow) {
-  root.traverse((child) => {
-    if (!child.isMesh) {
-      return;
-    }
-    const map = child.material?.map ?? null;
-    const material = new THREE.MeshStandardNodeMaterial({
-      color: 0x5c6273,
-      metalness: 0.7,
-      roughness: 0.32,
-      map,
-    });
-    if (map) {
-      const sample = texture(map).rgb;
-      const saturation = max(sample.r, max(sample.g, sample.b)).sub(min(sample.r, min(sample.g, sample.b)));
-      material.emissiveNode = color(0x22d3ee).mul(saturation.smoothstep(0.3, 0.5)).mul(uGlow);
-    }
-    child.material = material;
-    child.castShadow = false;
-    child.receiveShadow = false;
-  });
 }
 
 /**
@@ -45,7 +16,7 @@ function restyle(root, uGlow) {
  * pose every frame. It sits on VIEWMODEL_LAYER, which the AO pre-pass, ground
  * mirror and rain height cameras never see.
  */
-export function createViewmodel({ scene, camera, model }) {
+export function createViewmodel({ scene, camera }) {
   const rig = new THREE.Group();
   rig.name = "runner-viewmodel";
   const sway = new THREE.Group();
@@ -54,23 +25,12 @@ export function createViewmodel({ scene, camera, model }) {
   sway.add(pivot);
   pivot.position.copy(BASE_OFFSET);
 
-  const uGlow = uniform(2.2);
-  const gun = model;
-  gun.scale.setScalar(MODEL_SCALE);
-  gun.rotation.y = Math.PI;
-  restyle(gun, uGlow);
+  const rifle = createRifleModel();
+  const gun = rifle.root;
+  // Slight cant toward the screen center reads better than a dead-straight gun.
+  gun.rotation.set(0.015, 0.03, -0.035);
   pivot.add(gun);
-
-  // Neon rail strip along the receiver.
-  const railMaterial = new THREE.MeshBasicNodeMaterial({ color: 0x000000 });
-  railMaterial.emissiveNode = color(0xe040fb).mul(float(3).mul(uGlow.div(2.2)));
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.009, 0.15), railMaterial);
-  rail.position.set(0.072, 0.1, -0.015);
-  pivot.add(rail);
-
-  const muzzle = new THREE.Object3D();
-  muzzle.position.copy(MUZZLE_LOCAL);
-  gun.add(muzzle);
+  const muzzle = rifle.muzzle;
 
   const flash = createMuzzleFlash();
   flash.mesh.visible = false;
@@ -172,9 +132,9 @@ export function createViewmodel({ scene, camera, model }) {
     update,
     setReloadProgress,
     setVisible,
-    setOverclock: (active) => {
-      uGlow.value = active ? 5 : 2.2;
-    },
+    setOverclock: () => {},
+    /** Live ammo counter on the receiver screen. */
+    setAmmoDisplay: (ammo, mag, overclock, reloading) => rifle.drawAmmo(ammo, mag, overclock, reloading),
     getMuzzleWorldPosition,
     setWarmupVisible(value) {
       flash.mesh.visible = value;

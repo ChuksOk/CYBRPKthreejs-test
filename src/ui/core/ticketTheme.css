@@ -1,0 +1,248 @@
+/*
+ * Ticket / utility-label theme for the app chrome (loader, intro, header,
+ * settings, about, audio, notices) so it matches the runner HUD
+ * (src/ui/runner/runnerHud.css). Loaded last from main.js; selectors are
+ * prefixed with `html body` where component styles or the runtime-injected
+ * loader <style> would otherwise win.
+ */
+@import "@fontsource/barlow-condensed/latin-600.css";
+@import "@fontsource/barlow-condensed/latin-800.css";
+@import "@fontsource/jetbrains-mono/latin-500.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
+
+:root {
+  --t-acid: #d9ff3b;
+  --t-cobalt: #3b5cf0;
+  --t-cobalt-2: #5d87f6;
+  --t-paper: #e9ebee;
+  --t-ink: #0c0e13;
+  --t-grey: #8b919c;
+  --t-pink: #ff4f74;
+  --t-display: "Barlow Condensed", "Orbitron", sans-serif;
+  --t-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Re-token the existing chrome (header / settings / about use these). */
+  --cyber-bg: rgba(12, 14, 19, 0.9);
+  --cyber-bg-hover: rgba(217, 255, 59, 0.14);
+  --cyber-border: rgba(217, 255, 59, 0.4);
+  --cyber-border-hover: #d9ff3b;
+  --cyber-text: #d9ff3b;
+  --cyber-text-muted: #e9ebee;
+  --cyber-glow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --cyber-glow-hover: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --cyber-clip-sm: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+html body .app-header,
+html body .app-header *,
+html body .settings-overlay,
+html body .settings-overlay *,
+html body .about-overlay,
+html body .about-overlay *,
+html body .audio-btn-root,
+html body .audio-btn-root *,
+html body .performance-notice,
+html body .performance-notice *,
+html body .intro-container,
+html body .intro-container * {
+  font-family: var(--t-mono);
+}
+
+/* ── Loader ──────────────────────────────────────────────────────────── */
+html body #app-loader {
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1.2px) 0 0 / 11px 11px,
+    var(--t-ink);
+  color: var(--t-paper);
+}
+
+html body #app-loader .app-loader__ring-bg {
+  stroke: #232833;
+  stroke-width: 6;
+}
+
+html body #app-loader .app-loader__ring-fill {
+  stroke: var(--t-acid);
+  stroke-width: 6;
+  stroke-linecap: butt;
+}
+
+html body #app-loader .app-loader__percent {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 44px;
+  letter-spacing: 0;
+  color: var(--t-acid);
+}
+
+html body #app-loader .app-loader__status {
+  padding: 4px 10px;
+  background: var(--t-acid);
+  color: var(--t-ink);
+  font-family: var(--t-mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+
+/* ── Intro overlay ───────────────────────────────────────────────────── */
+html body .intro-kicker {
+  padding: 3px 9px;
+  background: var(--t-cobalt);
+  color: var(--t-paper);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-shadow: none;
+  border-bottom: 3px solid var(--t-pink);
+}
+
+html body .intro-brand-line {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: clamp(4rem, 16vw, 9rem);
+  letter-spacing: -0.01em;
+  line-height: 0.82;
+}
+
+html body .intro-brand-line--accent {
+  padding: 0 0.12em;
+  background: var(--t-acid);
+  color: var(--t-ink);
+  letter-spacing: 0.02em;
+  text-shadow: none;
+  clip-path: polygon(0 0, calc(100% - 0.18em) 0, 100% 0.18em, 100% 100%, 0.18em 100%, 0 calc(100% - 0.18em));
+}
+
+html body .intro-rule {
+  height: 5px;
+  width: min(12rem, 40vw);
+  background: linear-gradient(90deg, var(--t-paper) 0 60%, transparent 60% 64%, var(--t-cobalt) 64% 88%, transparent 88% 91%, var(--t-pink) 91%);
+}
+
+html body .intro-container .intro-tagline {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+html body .intro-button {
+  border: 0;
+  border-radius: 0;
+  background: var(--t-acid);
+  color: var(--t-ink);
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+
+html body .intro-button:not(:disabled):hover {
+  background: var(--t-pink);
+  color: var(--t-ink);
+  box-shadow: none;
+}
+
+html body .intro-credit {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+}
+
+/* ── Header / buttons ────────────────────────────────────────────────── */
+html body .app-header {
+  background-image: linear-gradient(180deg, rgba(12, 14, 19, 0.55) 0%, rgba(12, 14, 19, 0) 100%);
+}
+
+html body .app-header-about-btn,
+html body .app-header-action-btn {
+  border: 0;
+  border-left: 3px solid var(--t-acid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-weight: 700;
+}
+
+html body .app-header-about-btn:hover,
+html body .app-header-action-btn:hover {
+  background: var(--t-acid);
+  color: var(--t-ink);
+}
+
+/* The walk-mode vitals card duplicates the runner HUD. */
+html.runner-mode body .cyber-hud {
+  display: none;
+}
+
+/* ── Settings / about panels ─────────────────────────────────────────── */
+html body .settings-glass,
+html body .about-content {
+  border-radius: 0;
+  border: 0;
+  border-top: 8px solid var(--t-acid);
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.2px) 0 0 / 9px 9px,
+    rgba(12, 14, 19, 0.96);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+}
+
+html body .settings-section-title,
+html body .about-brand-subtitle {
+  color: var(--t-acid);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+html body .about-brand-title,
+html body .settings-header {
+  font-family: var(--t-display);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+html body .settings-look-btn {
+  border-radius: 0;
+}
+
+html body .settings-look-btn--active {
+  background: var(--t-acid);
+  color: var(--t-ink);
+  border-color: var(--t-acid);
+}
+
+html body .settings-toggle-input:checked + .settings-toggle {
+  background: var(--t-acid);
+}
+
+/* ── Audio button + notices ──────────────────────────────────────────── */
+html body .audio-btn {
+  border-radius: 0;
+  clip-path: var(--cyber-clip-sm);
+}
+
+html body .performance-notice {
+  border-radius: 0;
+  border: 0;
+  border-left: 4px solid var(--t-acid);
+  background: rgba(12, 14, 19, 0.92);
+  color: var(--t-paper);
+  letter-spacing: 0.12em;
+}
+
+/* Runner: bottom-right belongs to the ammo card. */
+html.runner-mode body .audio-btn-root {
+  top: 96px;
+  bottom: auto;
+}
+
+@media (max-width: 640px) {
+  html.runner-mode body .audio-btn-root {
+    top: 74px;
+    right: 16px;
+  }
+}

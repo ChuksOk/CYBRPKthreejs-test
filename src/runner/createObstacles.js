@@ -1,5 +1,7 @@
 import * as THREE from "three/webgpu";
-import { color, float, fract, max, min, mix, step, texture, uv } from "three/tsl";
+import { createPartKit } from "./models/modelKit.js";
+import { createBarrierModel } from "./models/createBarrierModel.js";
+import { chrome, emissive, gunmetal, hazard } from "./models/materials.js";
 import { RUNNER } from "./runnerConfig.js";
 
 const _box = new THREE.Box3();
@@ -11,60 +13,46 @@ export const OBSTACLE_KINDS = {
   car: { answer: "lane" },
 };
 
-function restyleBarrier(root) {
-  root.traverse((child) => {
-    if (!child.isMesh) {
-      return;
-    }
-    const map = child.material?.map ?? null;
-    const material = new THREE.MeshStandardNodeMaterial({
-      color: 0x5a6070,
-      metalness: 0.55,
-      roughness: 0.45,
-      map,
-    });
-    if (map) {
-      const sample = texture(map).rgb;
-      const saturation = max(sample.r, max(sample.g, sample.b)).sub(min(sample.r, min(sample.g, sample.b)));
-      material.emissiveNode = color(0xff2d55).mul(saturation.smoothstep(0.2, 0.45)).mul(3.2);
-    }
-    child.material = material;
-    child.castShadow = true;
-    child.receiveShadow = true;
-  });
-}
-
+/** Hanging steel I-beam with hazard chevrons, chains and a blinking lamp. */
 function createBeamVisual() {
-  const group = new THREE.Group();
-  const stripes = step(0.5, fract(uv().x.add(uv().y).mul(7)));
-  const barMaterial = new THREE.MeshStandardNodeMaterial({ roughness: 0.5, metalness: 0.3 });
-  barMaterial.colorNode = mix(color(0x111114), color(0xffc400), stripes);
-  barMaterial.emissiveNode = color(0xffb300).mul(stripes).mul(1.6);
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.42, 3.1), barMaterial);
-  bar.position.y = 1.5;
-  bar.castShadow = true;
-  group.add(bar);
-
-  const cableMaterial = new THREE.MeshStandardNodeMaterial({ color: 0x111111, roughness: 0.8 });
-  for (const z of [-1.35, 1.35]) {
-    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 7, 5), cableMaterial);
-    cable.position.set(0, 1.5 + 3.5, z);
-    group.add(cable);
+  const kit = createPartKit();
+  const span = 3.1;
+  const y = 1.5;
+  // I-beam: flanges + web.
+  kit.box("steel", [0.3, 0.035, span], { position: [0, y + 0.19, 0], radius: 0.006 });
+  kit.box("steel", [0.3, 0.035, span], { position: [0, y - 0.19, 0], radius: 0.006 });
+  kit.box("steel", [0.03, 0.36, span], { position: [0, y, 0], radius: 0.004 });
+  // Hazard plate on the approach face.
+  kit.box("hazard", [0.012, 0.3, span * 0.94], { position: [-0.155, y, 0], radius: 0.003 });
+  // Chains up into the dark.
+  for (const z of [-1.3, 1.3]) {
+    for (let i = 0; i < 18; i++) {
+      kit.torus("chain", 0.028, 0.007, {
+        position: [0, y + 0.25 + i * 0.075, z],
+        rotation: [0, i % 2 ? Math.PI / 2 : 0, Math.PI / 2],
+        tubular: 10,
+        radial: 5,
+      });
+    }
   }
-
-  const warnMaterial = new THREE.MeshBasicNodeMaterial({ color: 0x000000 });
-  warnMaterial.emissiveNode = color(0xff2d55).mul(float(5));
-  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 2.9), warnMaterial);
-  lamp.position.set(-0.19, 1.28, 0);
-  group.add(lamp);
-  return group;
+  // Warning lamps.
+  for (const z of [-0.9, 0.9]) {
+    kit.tube("steel", 0.035, 0.05, "y", { position: [0, y - 0.23, z] });
+    kit.sphere("lamp", 0.03, { position: [0, y - 0.27, z], width: 12, height: 8 });
+  }
+  return kit.build({
+    steel: gunmetal({ tint: 0x3d3f42, roughness: 0.55 }),
+    hazard: hazard({ scale: 7 }),
+    chain: chrome({ tint: 0x55585c }),
+    lamp: emissive(0xffb300, 7, { blink: { rate: 1.6, duty: 0.5 } }),
+  }, { name: "beam", castShadow: true });
 }
 
 /**
  * Pooled lane obstacles. Hitboxes are world AABBs derived from each visual
  * once at load, so collision is a box test instead of a mesh raycast.
  */
-export function createObstacles({ scene, barrierModel, carModel, poolSize = 6 }) {
+export function createObstacles({ scene, carModel, poolSize = 6 }) {
   const group = new THREE.Group();
   group.name = "runner-obstacles";
   scene.add(group);
@@ -91,24 +79,20 @@ export function createObstacles({ scene, barrierModel, carModel, poolSize = 6 })
     return new THREE.Box3().setFromObject(visual, true);
   }
 
-  // Barrier (jump over).
-  if (barrierModel) {
-    restyleBarrier(barrierModel);
-    for (let i = 0; i < poolSize; i++) {
-      const visual = new THREE.Group();
-      const wall = barrierModel.clone(true);
-      wall.rotation.y = Math.PI / 2;
-      wall.scale.set(1.3, 1, 1.1);
-      visual.add(wall);
-      const localBox = measure(visual);
-      localBox.max.y = Math.min(localBox.max.y, 0.82);
-      register("barrier", visual, localBox);
-    }
+  // Barrier (jump over): procedural concrete jersey barrier.
+  const barrierTemplate = createBarrierModel();
+  for (let i = 0; i < poolSize; i++) {
+    const visual = new THREE.Group();
+    visual.add(barrierTemplate.clone(true));
+    const localBox = measure(visual);
+    localBox.max.y = Math.min(localBox.max.y, 0.82);
+    register("barrier", visual, localBox);
   }
 
   // Overhead beam (slide under).
+  const beamTemplate = createBeamVisual();
   for (let i = 0; i < poolSize; i++) {
-    const visual = createBeamVisual();
+    const visual = beamTemplate.clone(true);
     const localBox = new THREE.Box3(
       new THREE.Vector3(-0.3, 1.2, -1.55),
       new THREE.Vector3(0.3, 2.8, 1.55),

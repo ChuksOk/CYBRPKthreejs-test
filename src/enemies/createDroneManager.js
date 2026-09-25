@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { color, max, min, texture, uniform, vec3 } from "three/tsl";
+import { createDroneModel } from "../runner/models/createDroneModel.js";
 import { DRONE_TYPES } from "./droneTypes.js";
 
 const _oc = new THREE.Vector3();
@@ -19,50 +19,42 @@ function expLerpFactor(delta, speed) {
 }
 
 /**
- * Restyled clone of the CC0 Kenney flying enemy: dark metal shell, the
- * saturated palette cells (face plate, antenna) become the type's glow color.
- * Materials are per drone so hit flash / charge glow are independent; they
- * share one node graph shape, so no extra pipelines are compiled.
+ * Procedural airframe (src/runner/models/createDroneModel.js). All drones of
+ * a type share materials; hit flash, sensor glow and accent color are read
+ * per mesh from `userData.fx`, so there is one pipeline per material and no
+ * per-drone shader compiles.
  */
-function buildDroneVisual(source, type) {
+function buildDroneVisual(type) {
   const root = new THREE.Group();
-  const body = source.clone(true);
+  const body = createDroneModel(type.id);
   body.scale.setScalar(type.scale);
-  body.position.y = -0.45 * type.scale;
   root.add(body);
 
-  const uGlow = uniform(2.4);
-  const uFlash = uniform(0);
-  const uColor = uniform(new THREE.Color(type.glow));
-
+  const fx = { flash: 0, glow: 2.4, color: new THREE.Color(type.glow) };
   body.traverse((child) => {
-    if (!child.isMesh) {
-      return;
+    if (child.isMesh) {
+      child.userData.fx = fx;
     }
-    const map = child.material?.map ?? null;
-    const material = new THREE.MeshStandardNodeMaterial({
-      color: 0x3a3f4d,
-      metalness: 0.75,
-      roughness: 0.3,
-      map,
-    });
-    const base = map
-      ? (() => {
-          const sample = texture(map).rgb;
-          const saturation = max(sample.r, max(sample.g, sample.b)).sub(
-            min(sample.r, min(sample.g, sample.b)),
-          );
-          return saturation.smoothstep(0.18, 0.4);
-        })()
-      : null;
-    const glow = base ? uColor.mul(base).mul(uGlow) : vec3(0);
-    material.emissiveNode = glow.add(color(0xffffff).mul(uFlash));
-    child.material = material;
-    child.castShadow = false;
-    child.receiveShadow = false;
   });
 
-  return { root, uGlow, uFlash };
+  // Keep the old uniform-style API used by the state machine below.
+  const uGlow = {
+    get value() {
+      return fx.glow;
+    },
+    set value(v) {
+      fx.glow = v;
+    },
+  };
+  const uFlash = {
+    get value() {
+      return fx.flash;
+    },
+    set value(v) {
+      fx.flash = v;
+    },
+  };
+  return { root, uGlow, uFlash, fx };
 }
 
 /**
@@ -72,7 +64,6 @@ function buildDroneVisual(source, type) {
  */
 export function createDroneManager({
   scene,
-  model,
   fx,
   projectiles,
   audio,
@@ -89,7 +80,7 @@ export function createDroneManager({
   for (const type of Object.values(DRONE_TYPES)) {
     const count = type.id === "gunship" ? Math.ceil(maxAlive / 3) : maxAlive;
     for (let i = 0; i < count; i++) {
-      const visual = buildDroneVisual(model, type);
+      const visual = buildDroneVisual(type);
       visual.root.visible = false;
       group.add(visual.root);
       drones.push({

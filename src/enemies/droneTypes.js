@@ -5,7 +5,7 @@ export const DRONE_TYPES = {
   scout: {
     id: "scout",
     hp: 3,
-    scale: 1.5,
+    scale: 1.3,
     radius: 1.05,
     glow: 0xff2d55,
     score: 100,
@@ -25,7 +25,7 @@ export const DRONE_TYPES = {
   gunship: {
     id: "gunship",
     hp: 9,
-    scale: 2.5,
+    scale: 1.75,
     radius: 1.7,
     glow: 0xffa21f,
     score: 300,
@@ -45,7 +45,7 @@ export const DRONE_TYPES = {
   kamikaze: {
     id: "kamikaze",
     hp: 2,
-    scale: 1.25,
+    scale: 1.2,
     radius: 0.95,
     glow: 0xff6a00,
     score: 150,

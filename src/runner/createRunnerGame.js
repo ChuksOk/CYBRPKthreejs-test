@@ -1,5 +1,4 @@
 import * as THREE from "three/webgpu";
-import { getGltfLoader } from "../world/loaders/createGltfLoaders.js";
 import { createRunnerControls } from "../controls/createRunnerControls.js";
 import { createViewmodel } from "../weapon/createViewmodel.js";
 import { createWeapon } from "../weapon/createWeapon.js";
@@ -14,12 +13,6 @@ import { createRunnerAudio } from "../audio/createRunnerAudio.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import { getStoredRunnerBest, setStoredRunnerBest } from "../platform/userPreferences.js";
 import { RUNNER } from "./runnerConfig.js";
-
-const MODEL_PATHS = {
-  rifle: "/models/runner/blaster-repeater.glb",
-  drone: "/models/runner/enemy-flying.glb",
-  barrier: "/models/runner/wall-low.glb",
-};
 
 const STREET_CENTER_Z = RUNNER.laneZ[1];
 const OBSTACLE_LOOKAHEAD = 115;
@@ -49,22 +42,6 @@ function pickWeighted(entries) {
   return entries[entries.length - 1].value;
 }
 
-async function loadModels(renderer) {
-  const loader = getGltfLoader(renderer);
-  const entries = await Promise.all(
-    Object.entries(MODEL_PATHS).map(async ([key, url]) => {
-      try {
-        const gltf = await loader.loadAsync(url);
-        return [key, gltf.scene];
-      } catch (error) {
-        console.warn(`[runner] Failed to load ${url}:`, error);
-        return [key, null];
-      }
-    }),
-  );
-  return Object.fromEntries(entries);
-}
-
 /**
  * First-person endless runner + shooter on top of the Threejs-Punk scene.
  *
@@ -74,7 +51,6 @@ async function loadModels(renderer) {
  */
 export async function createRunnerGame({ scene, renderer, camera, world, baseFov }) {
   const track = world.track;
-  const models = await loadModels(renderer);
 
   const controls = createRunnerControls({
     camera,
@@ -86,9 +62,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   const audio = createRunnerAudio();
   const hud = createRunnerHud({ isTouch: controls.isTouch() });
 
-  const viewmodel = models.rifle
-    ? createViewmodel({ scene, camera, model: models.rifle })
-    : null;
+  const viewmodel = createViewmodel({ scene, camera });
 
   const projectiles = createEnemyProjectiles({ scene, fx });
 
@@ -124,7 +98,6 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const drones = createDroneManager({
     scene,
-    model: models.drone ?? new THREE.Mesh(new THREE.OctahedronGeometry(0.5)),
     fx,
     projectiles,
     audio,
@@ -145,7 +118,6 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const obstacles = createObstacles({
     scene,
-    barrierModel: models.barrier,
     carModel: world.car ?? null,
     poolSize: 6,
   });
@@ -282,6 +254,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       setStoredRunnerBest(game.best);
     }
     controls.exitPointerLock();
+    hud.setVisible(false);
     hud.showScreen("gameover", {
       score: game.score,
       distance: game.distance,
@@ -295,6 +268,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   function restart() {
     resetRun();
+    hud.setVisible(true);
     startCountdown();
   }
 
@@ -557,6 +531,14 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
 
     weapon?.update(delta, { canFire: running });
+    if (weapon) {
+      viewmodel?.setAmmoDisplay(
+        weapon.state.ammo,
+        weapon.state.magSize,
+        weapon.state.overclock > 0,
+        weapon.state.reloading,
+      );
+    }
     viewmodel?.update(delta, controls.state);
     fx.update(delta);
   }
