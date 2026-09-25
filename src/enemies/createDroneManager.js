@@ -24,9 +24,9 @@ function expLerpFactor(delta, speed) {
  * per mesh from `userData.fx`, so there is one pipeline per material and no
  * per-drone shader compiles.
  */
-function buildDroneVisual(type) {
+function buildDroneVisual(type, variantIndex = 0) {
   const root = new THREE.Group();
-  const body = createDroneModel(type.id);
+  const body = createDroneModel(type.id, variantIndex);
   body.scale.setScalar(type.scale);
   root.add(body);
 
@@ -80,7 +80,7 @@ export function createDroneManager({
   for (const type of Object.values(DRONE_TYPES)) {
     const count = type.id === "gunship" ? Math.ceil(maxAlive / 3) : maxAlive;
     for (let i = 0; i < count; i++) {
-      const visual = buildDroneVisual(type);
+      const visual = buildDroneVisual(type, i);
       visual.root.visible = false;
       group.add(visual.root);
       drones.push({

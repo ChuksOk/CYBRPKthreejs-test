@@ -51,7 +51,7 @@ With `FEATURES.runner` on (the default), the alley becomes a first-person endles
 | Reload | R | Automatic |
 | Pause | Esc | — |
 
-- **Drones:** scouts strafe and fire single bolts; gunships charge a 3-bolt burst; kamikazes dive at you. Bolts can be dodged or shot down.
+- **Drones:** GIGI-style drones: teal disc and white robotic-arm scouts that strafe and fire, red spider-quad gunships that charge a 3-bolt burst, and gold or blue hex bi-copter kamikazes that dive at you. Bolts can be dodged or shot down.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
 - **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).

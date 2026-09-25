@@ -46,7 +46,7 @@ export const DRONE_TYPES = {
     id: "kamikaze",
     hp: 2,
     scale: 1.2,
-    radius: 0.95,
+    radius: 1.1,
     glow: 0xff6a00,
     score: 150,
     ahead: [22, 30],

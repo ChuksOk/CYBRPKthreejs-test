@@ -72,10 +72,10 @@ export function carbon({ scale = 90 } = {}) {
 }
 
 /** Painted panels with slight chipping toward bare metal. */
-export function paint({ tint = 0x9aa1ab, roughness = 0.42, flashKey = null } = {}) {
+export function paint({ tint = 0x9aa1ab, roughness = 0.42, flashKey = null, wear: wearAmount = 1 } = {}) {
   const material = new THREE.MeshStandardNodeMaterial({ color: tint });
   const chips = mx_noise_float(positionLocal.mul(38)).add(mx_noise_float(positionLocal.mul(160)).mul(0.4));
-  const wear = chips.smoothstep(0.55, 0.75);
+  const wear = chips.smoothstep(0.55, 0.75).mul(wearAmount);
   material.colorNode = mix(color(tint).mul(float(1).add(micro(5, 0.08))), color(0x4b4f55), wear);
   material.metalnessNode = mix(float(0.18), float(0.85), wear);
   material.roughnessNode = mix(float(roughness), float(0.3), wear).add(micro(260, 0.05));
