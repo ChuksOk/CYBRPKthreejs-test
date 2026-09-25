@@ -23,6 +23,7 @@ export const DRONE_VARIANTS = {
   scout: ["teal", "white"],
   gunship: ["red"],
   kamikaze: ["gold", "blue"],
+  carrier: ["red"],
 };
 
 const SHELL = {

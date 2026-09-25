@@ -59,7 +59,18 @@ With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first
 - **Mobile HUD:** shows only score, two slim bars, target brackets, the current weapon chip, and the FIRE / SPECIAL buttons. The header and audio button hide while you play.
 - **Day-night cycle:** a full day every 2 minutes of running (night → dawn → day → dusk). It drives the sun/moon light, environment light, sky gradient and clouds, and a clock on the score ticket (`src/runner/createDayNightCycle.js`; `cycleSeconds` to tune).
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
-- **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
+- **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier that heats up (colour and glow) as it climbs.
+- **Fair deaths:** when a lethal hit is 0.3 s away, time drops to 35% for a moment (8 s cooldown). The game-over ticket names exactly what killed you, e.g. `GUNSHIP BURST · 12 DMG` or `BARRIER · LANE 2 · 64 KM/H`. **RUN AGAIN** (or Enter) restarts instantly, with no countdown.
+- **Close calls:** a bolt passing within 0.5 m, or a last-moment jump, slide or lane change, gives score, combo and special charge, plus a `CLOSE CALL` pop-up.
+- **Juice:** hit-stop on kills (about 45 ms for scouts, 90 ms for gunships, 260 ms for the carrier); screen shake that pushes away from the event; debris along the shot line; floating `+300 ×1.8` pop-ups; phone vibration; and a procedural soundtrack whose layers (bass, hats, lead) enter as the combo rises (`src/audio/createAdaptiveMusic.js`).
+- **Sector gates (every 500 m):** the run pauses and you pick 1 of 3 mods: rapid cycle, extended mags, hollow points, piercing rounds, rail detonator, quick hands, capacitor (2× shield regen), second wind, shard magnet, special battery, double charge, twin guns (ally), cluster seeker (`src/runner/upgrades.js`). Each sector also gets its own colour grade.
+- **Carrier boss (every 1,500 m):** a heavily armoured carrier that launches scouts. It only takes full damage while its weak point is open (while it charges or fires); the boss bar says `WEAK POINT OPEN — FIRE`.
+- **Set pieces:** barrier/beam rhythm gauntlets, zig-zag car pile-ups, and drone ambushes from behind.
+- **Armory (meta progression):** shards bank after every run (× daily streak bonus) and buy the VX-09/12/14 (the VX-06 carbine is the starter), permanent tiers (armour, damage, magnet, pre-charge), and tracer and explosion colours. Everything is saved in `localStorage` (`src/runner/progression.js`).
+- **Missions and rank:** three missions at a time feed an XP rank from 1 to 50, and completing a mission during a run shows a toast. There is also a local top-10 **Records** board.
+- **Daily Run:** a toggle on the start ticket. It uses a date-seeded layout and drone-wave stream that is the same for every player that day, with its own best score (`src/runner/rng.js`).
+- **First-run tutorial:** guided prompts for lane, jump, slide, shoot and special, with non-lethal obstacles.
+- **Share:** the game-over ticket's **SHARE** button draws a 1080×1350 ticket image (score, distance, build, date). It uses the system share sheet, or downloads a PNG where sharing isn't available (`src/ui/runner/shareCard.js`).
 - **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).
 - **Assets:** the rifle, drones, barrier, beam and pickups are procedural PBR models built in code (`src/runner/models/`). Sounds are CC0 from Kenney's Starter Kit FPS (`public/audio/runner/CREDITS.md`).
 - **UI:** the HUD and screens use a transit-ticket / utility-label style: acid lime, cobalt, paper, ink and signal pink, with Barlow Condensed and JetBrains Mono (OFL, via `@fontsource`). It lives in `src/ui/runner/runnerHud.css` plus `src/ui/core/ticketTheme.css` for the app chrome.
@@ -372,6 +383,11 @@ The through-line: **every flashy effect either moved to the GPU, dropped in reso
 | Rifle viewmodel + hitscan | `src/weapon/createViewmodel.js`, `src/weapon/createWeapon.js` | `createViewmodel`, `createWeapon` |
 | Drones + bolts | `src/enemies/createDroneManager.js`, `src/enemies/createEnemyProjectiles.js` | `createDroneManager` |
 | Runner HUD | `src/ui/runner/createRunnerHud.js` | `createRunnerHud` |
+| Armory / missions / records / upgrade screens | `src/ui/runner/metaScreens.js` | `renderArmory`, `renderUpgradePicker` |
+| Progression (shards, rank, missions, daily) | `src/runner/progression.js` | `createProgression` |
+| In-run upgrades | `src/runner/upgrades.js` | `UPGRADES`, `rollUpgradeChoices` |
+| Seeded run RNG (Daily Run) | `src/runner/rng.js` | `setRunSeed`, `rr` |
+| Adaptive music | `src/audio/createAdaptiveMusic.js` | `createAdaptiveMusic` |
 
 ---
 

@@ -97,6 +97,8 @@ export function createDroneManager({
   /** Optional decoy (player's ally drone) that enemies sometimes shoot at. */
   getDecoy = null,
   onKamikazeHit,
+  /** Cosmetic explosion colour (Armory). */
+  getBlastHex = () => 0xff9a3c,
 }) {
   const group = new THREE.Group();
   group.name = "runner-drones";
@@ -109,7 +111,7 @@ export function createDroneManager({
   aimGeometry.rotateX(Math.PI / 2);
   aimGeometry.translate(0, 0, 0.5);
   for (const type of Object.values(DRONE_TYPES)) {
-    const count = type.id === "gunship" ? Math.ceil(maxAlive / 3) : maxAlive;
+    const count = type.boss ? 1 : type.id === "gunship" ? Math.ceil(maxAlive / 3) : maxAlive;
     for (let i = 0; i < count; i++) {
       const visual = buildDroneVisual(type, i);
       visual.root.visible = false;
@@ -163,8 +165,8 @@ export function createDroneManager({
     drone.repositionTimer = rand(3.5, 6);
   }
 
-  function spawn(typeId, player) {
-    if (countAlive() >= maxAlive) {
+  function spawn(typeId, player, { fromBehind = false, from = null, force = false } = {}) {
+    if (!force && countAlive() >= maxAlive) {
       return null;
     }
     const drone = drones.find((d) => !d.alive && d.type.id === typeId);
@@ -182,12 +184,22 @@ export function createDroneManager({
     drone.charge = 0;
     drone.flash = 0;
     pickStation(drone, player);
-    // Enter from far ahead and high, off to one side.
-    drone.position.set(
-      player.x + drone.ahead + rand(35, 55),
-      player.floorY + drone.height + rand(6, 12),
-      player.streetCenterZ + rand(-14, 14),
-    );
+    drone.open = 0;
+    drone.launchTimer = type.launchInterval ?? 0;
+    if (from) {
+      // Launched from a carrier.
+      drone.position.copy(from);
+    } else if (fromBehind) {
+      // Ambush: swoop in from behind the runner.
+      drone.position.set(player.x - rand(10, 16), player.floorY + drone.height + rand(1, 3), player.streetCenterZ + rand(-6, 6));
+    } else {
+      // Enter from far ahead and high, off to one side.
+      drone.position.set(
+        player.x + drone.ahead + rand(35, 55),
+        player.floorY + drone.height + rand(6, 12),
+        player.streetCenterZ + rand(-14, 14),
+      );
+    }
     drone.velocity.set(0, 0, 0);
     drone.root.visible = true;
     drone.root.rotation.set(0, 0, 0);
@@ -207,7 +219,7 @@ export function createDroneManager({
     fx.emitSparks(drone.position, 18, { hex: drone.type.glow, speed: 6, life: 0.6, size: 0.07 });
     // The boom plays the instant it is destroyed (mid-air burst); the wreck
     // hitting the street later only adds a smaller thud.
-    fx.explosion(drone.position, { radius: 0.8 + drone.type.scale * 0.35, velocity: _carrier.set(player.speed * 0.8, 0, 0) });
+    fx.explosion(drone.position, { radius: 0.8 + drone.type.scale * 0.35, velocity: _carrier.set(player.speed * 0.8, 0, 0), hex: getBlastHex() });
     audio?.play("explosion", { volume: 1.15, detune: (Math.random() - 0.5) * 250 });
     if (byPlayer) {
       onKill?.(drone);
@@ -218,6 +230,7 @@ export function createDroneManager({
     fx.explosion(drone.position, {
       radius: 1.3 + drone.type.scale * 0.5,
       velocity: _carrier.set(drone.velocity.x * 0.6, 0, 0),
+      hex: getBlastHex(),
     });
     audio?.play("explosion", wreck
       ? { volume: 0.4, detune: -700 + Math.random() * 200 }
@@ -236,14 +249,23 @@ export function createDroneManager({
     if (!drone?.alive || drone.state === "dying") {
       return false;
     }
-    drone.hp -= amount;
-    drone.flash = 0.07;
-    audio?.play("hit", { volume: 0.18, detune: (Math.random() - 0.5) * 400 });
+    // Boss armor: only 20% damage unless the weak point is open.
+    const armored = drone.type.boss && !isOpen(drone);
+    drone.hp -= armored ? amount * 0.2 : amount;
+    drone.flash = armored ? 0.03 : 0.07;
+    if (armored) {
+      fx.emitSparks(drone.position, 2, { hex: 0xffffff, speed: 5, life: 0.2, size: 0.04 });
+    }
+    audio?.play("hit", { volume: 0.18, detune: (armored ? 800 : 0) + (Math.random() - 0.5) * 400 });
     if (drone.hp <= 0 && lastPlayer) {
       kill(drone, lastPlayer);
       return true;
     }
     return false;
+  }
+
+  function isOpen(drone) {
+    return drone.open > 0 || drone.charge > 0 || drone.burstLeft > 0;
   }
 
   /** Muzzle point (out) slightly in front of the drone toward the aim point. */
@@ -282,6 +304,7 @@ export function createDroneManager({
       damage: drone.type.boltDamage,
       hex: drone.type.glow,
       carrierVelocity: _carrier,
+      source: `${drone.type.id.toUpperCase()} ${drone.type.burst > 1 ? "BURST" : "BOLT"}`,
     });
     audio?.play("droneShot", { volume: 0.3, detune: (Math.random() - 0.5) * 200 });
   }
@@ -387,6 +410,24 @@ export function createDroneManager({
       drone.root.lookAt(_look);
       drone.root.rotateZ(THREE.MathUtils.clamp(-(drone.velocity.z) * 0.03, -0.4, 0.4));
 
+      if (drone.open > 0) {
+        drone.open = Math.max(0, drone.open - delta);
+      }
+      // Carrier: periodically opens its bay and launches scouts.
+      if (type.boss && drone.state === "attack" && allowFire) {
+        drone.launchTimer -= delta;
+        if (drone.launchTimer <= 0) {
+          drone.launchTimer = type.launchInterval;
+          drone.open = 2.2;
+          for (let i = 0; i < 2; i++) {
+            spawn("scout", player, { from: drone.position, force: true });
+          }
+          fx.emitSparks(drone.position, 20, { hex: type.glow, speed: 6, life: 0.6, size: 0.08 });
+          audio?.play("droneSpawn", { volume: 0.5, detune: -500 });
+        }
+        drone.uGlow.value = drone.open > 0 ? 6 + Math.sin(drone.time * 20) * 3 : drone.uGlow.value;
+      }
+
       if (drone.state !== "attack" || !allowFire) {
         drone.charge = 0;
         drone.uGlow.value = 2.4;
@@ -433,11 +474,11 @@ export function createDroneManager({
     }
   }
 
-  function raycast(origin, direction, maxDistance) {
+  function raycast(origin, direction, maxDistance, exclude = null) {
     let best = null;
     let bestDistance = maxDistance;
     for (const drone of drones) {
-      if (!drone.alive || drone.state === "dying") {
+      if (!drone.alive || drone.state === "dying" || drone === exclude) {
         continue;
       }
       _oc.copy(drone.position).sub(origin);
@@ -520,8 +561,14 @@ export function createDroneManager({
     }
   }
 
+  function getBoss() {
+    return drones.find((d) => d.alive && d.type.boss && d.state !== "dying") ?? null;
+  }
+
   return {
     group,
+    getBoss,
+    isOpen,
     spawn,
     kill,
     damage,

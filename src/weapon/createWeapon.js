@@ -31,9 +31,20 @@ export function createWeapon({
   audio,
   onShot,
   onHit,
+  /** In-run upgrade modifiers (see src/runner/upgrades.js). */
+  getMods = () => null,
+  /** Permanent damage multiplier from the Armory. */
+  getMetaDamage = () => 1,
+  isUnlocked = () => true,
+  onLocked = null,
+  getTracerHex = null,
 }) {
   const raycaster = new THREE.Raycaster();
   raycaster.firstHitOnly = true;
+
+  const mod = (key, fallback) => getMods()?.[key] ?? fallback;
+  const magOf = (w) => Math.max(1, Math.round(w.magSize * mod("mag", 1)));
+  const reloadOf = (w) => w.reloadTime / mod("reload", 1);
 
   // Ammo is tracked per gun so switching never refills a magazine.
   const ammoByWeapon = WEAPONS.map((w) => w.magSize);
@@ -54,17 +65,30 @@ export function createWeapon({
   };
 
   function startReload() {
-    if (state.reloading || state.ammo === def.magSize || state.overclock > 0 || state.switchTimer > 0) {
+    if (state.reloading || state.ammo === magOf(def) || state.overclock > 0 || state.switchTimer > 0) {
       return;
     }
     state.reloading = true;
-    state.reloadTimer = def.reloadTime;
+    state.reloadTimer = reloadOf(def);
     audio?.play("reload", { volume: 0.7 });
   }
 
-  function selectWeapon(index) {
-    const next = ((index % WEAPONS.length) + WEAPONS.length) % WEAPONS.length;
-    if (next === state.index) {
+  /**
+   * @param {number} index
+   * @param {{ cycle?: 1 | -1 }} [options]  cycle skips locked guns; a direct
+   *   pick of a locked gun is refused (onLocked).
+   */
+  function selectWeapon(index, { cycle = 0 } = {}) {
+    let next = ((index % WEAPONS.length) + WEAPONS.length) % WEAPONS.length;
+    if (cycle) {
+      for (let guard = 0; guard < WEAPONS.length && !isUnlocked(next); guard++) {
+        next = (((next + cycle) % WEAPONS.length) + WEAPONS.length) % WEAPONS.length;
+      }
+    } else if (!isUnlocked(next)) {
+      onLocked?.(next);
+      return;
+    }
+    if (next === state.index || !isUnlocked(next)) {
       return;
     }
     ammoByWeapon[state.index] = state.ammo;
@@ -72,7 +96,7 @@ export function createWeapon({
     def = WEAPONS[next];
     state.weapon = def;
     state.ammo = ammoByWeapon[next];
-    state.magSize = def.magSize;
+    state.magSize = magOf(def);
     state.reloading = false;
     state.reloadTimer = 0;
     state.spread = def.baseSpread;
@@ -86,9 +110,9 @@ export function createWeapon({
   const unsubscribeReload = controls.on("reload", startReload);
   const unsubscribeWeapon = controls.on("weapon", (value) => {
     if (value === "next") {
-      selectWeapon(state.index + 1);
+      selectWeapon(state.index + 1, { cycle: 1 });
     } else if (value === "prev") {
-      selectWeapon(state.index - 1);
+      selectWeapon(state.index - 1, { cycle: -1 });
     } else {
       selectWeapon(value);
     }
@@ -156,16 +180,35 @@ export function createWeapon({
     _hitPoint.copy(_origin).addScaledVector(_direction, nearest);
 
     viewmodel.getMuzzleWorldPosition(_muzzle);
-    fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xff4f74 : def.tracer);
+    fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xff4f74 : getTracerHex?.() ?? def.tracer);
     fx.muzzleLight(_muzzle);
     viewmodel.kick(Math.min(2, def.recoil));
     controls.addRecoil((0.011 + Math.random() * 0.004) * def.recoil, (Math.random() - 0.5) * 0.006 * def.recoil);
     audio?.play("shot", { volume: def.sound.volume, detune: def.sound.detune + (Math.random() - 0.5) * 180 });
 
     if (hitKind === "drone") {
-      drones.damage(hitDrone, def.damage, _hitPoint);
+      const damage = def.damage * mod("damage", 1) * getMetaDamage();
+      drones.damage(hitDrone, damage, _hitPoint);
+      // Piercing rounds carry on into the next drone along the ray.
+      if (mod("pierce", false)) {
+        const second = drones.raycast(_hitPoint.clone().addScaledVector(_direction, 0.5), _direction, RANGE, hitDrone);
+        if (second) {
+          drones.damage(second.drone, damage * 0.7, _hitPoint);
+          onHit?.("drone", second.drone, damage * 0.7);
+        }
+      }
+      // Rail detonator: splash around the impact.
+      if (def.id === "rail" && mod("railExplosive", false)) {
+        fx.explosion(_hitPoint, { radius: 1.6 });
+        const splashPoint = _hitPoint.clone();
+        drones.forEachThreat((other) => {
+          if (other !== hitDrone && other.position.distanceTo(splashPoint) < 4 + other.type.radius) {
+            drones.damage(other, damage * 0.5, splashPoint);
+          }
+        });
+      }
       fx.impact(_hitPoint, _direction.clone().negate(), { hex: 0xff5577, count: 6 });
-      onHit?.("drone", hitDrone);
+      onHit?.("drone", hitDrone, damage);
     } else if (hitKind === "bolt") {
       projectiles.destroy(hitBolt, true);
       onHit?.("bolt", hitBolt);
@@ -194,10 +237,11 @@ export function createWeapon({
 
     if (state.reloading) {
       state.reloadTimer -= delta;
-      viewmodel.setReloadProgress(1 - Math.max(0, state.reloadTimer) / def.reloadTime);
+      viewmodel.setReloadProgress(1 - Math.max(0, state.reloadTimer) / reloadOf(def));
       if (state.reloadTimer <= 0) {
         state.reloading = false;
-        state.ammo = def.magSize;
+        state.ammo = magOf(def);
+        state.magSize = magOf(def);
         viewmodel.setReloadProgress(-1);
       }
     }
@@ -219,7 +263,7 @@ export function createWeapon({
       return;
     }
 
-    const rate = state.overclock > 0 ? def.overclockRate : def.fireRate;
+    const rate = (state.overclock > 0 ? def.overclockRate : def.fireRate) * mod("fireRate", 1);
     while (state.cooldown <= 0) {
       if (state.ammo <= 0 && state.overclock <= 0) {
         startReload();
@@ -240,7 +284,8 @@ export function createWeapon({
   function addOverclock(seconds) {
     state.overclock = Math.max(state.overclock, seconds);
     state.reloading = false;
-    state.ammo = def.magSize;
+    state.ammo = magOf(def);
+    state.magSize = magOf(def);
     viewmodel.setReloadProgress(-1);
     viewmodel.setOverclock(true);
   }
@@ -249,7 +294,15 @@ export function createWeapon({
     WEAPONS.forEach((w, i) => {
       ammoByWeapon[i] = w.magSize;
     });
-    state.ammo = def.magSize;
+    // New runs start on the carbine (always unlocked).
+    if (state.index !== 0) {
+      state.index = 0;
+      def = WEAPONS[0];
+      state.weapon = def;
+      viewmodel.setWeapon(0);
+    }
+    state.ammo = magOf(def);
+    state.magSize = magOf(def);
     state.switchTimer = 0;
     state.reloading = false;
     state.reloadTimer = 0;
@@ -268,8 +321,19 @@ export function createWeapon({
     startReload,
     addOverclock,
     selectWeapon,
+    /** Re-apply magazine size after an upgrade. */
+    refreshMods: () => {
+      const mag = magOf(def);
+      state.ammo = Math.min(mag, state.ammo + Math.max(0, mag - state.magSize));
+      state.magSize = mag;
+      WEAPONS.forEach((w, i) => {
+        if (i !== state.index) {
+          ammoByWeapon[i] = Math.max(ammoByWeapon[i], magOf(w));
+        }
+      });
+    },
     getReloadProgress: () =>
-      state.reloading ? 1 - Math.max(0, state.reloadTimer) / def.reloadTime : 0,
+      state.reloading ? 1 - Math.max(0, state.reloadTimer) / reloadOf(def) : 0,
     dispose() {
       unsubscribeReload();
       unsubscribeWeapon();

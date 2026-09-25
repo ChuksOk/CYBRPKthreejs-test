@@ -75,16 +75,22 @@ function buildSeekerModel() {
   }, { name: "seeker" });
 }
 
-export function createSpecials({ scene, fx, drones, audio }) {
+export function createSpecials({ scene, fx, drones, audio, getMods = () => null }) {
   const group = new THREE.Group();
   group.name = "runner-specials";
   scene.add(group);
 
+  const mod = (key, fallback) => getMods()?.[key] ?? fallback;
+
   const state = {
     type: "ally",
+    /** Progress toward the next charge (0..1). */
     charge: 0,
+    /** Charges banked and ready to use. */
+    charges: 0,
     ready: false,
     locked: false,
+    used: 0,
   };
 
   // ── Ally drone ──────────────────────────────────────────────────────────
@@ -95,8 +101,6 @@ export function createSpecials({ scene, fx, drones, audio }) {
     hp: ALLY_HP,
     life: 0,
     fireTimer: 0,
-    t: 0,
-    from: new THREE.Vector3(),
     velocity: new THREE.Vector3(),
     position: null,
     side: 1,
@@ -105,23 +109,22 @@ export function createSpecials({ scene, fx, drones, audio }) {
   ally.root.visible = false;
   group.add(ally.root);
 
-  // ── Seeker grenade ──────────────────────────────────────────────────────
-  const seeker = {
-    root: buildSeekerModel(),
-    active: false,
-    life: 0,
-    target: null,
-    velocity: new THREE.Vector3(),
-    position: null,
-  };
-  seeker.position = seeker.root.position;
-  seeker.root.visible = false;
-  group.add(seeker.root);
+  // ── Seeker grenades (pool of 3 for the Cluster Seeker upgrade) ────────
+  const seekerTemplate = buildSeekerModel();
+  const seekers = Array.from({ length: 3 }, (_, i) => {
+    const root = i === 0 ? seekerTemplate : seekerTemplate.clone(true);
+    root.visible = false;
+    group.add(root);
+    return { root, active: false, life: 0, target: null, velocity: new THREE.Vector3(), position: root.position };
+  });
 
-  function nearestDrone(from, maxDistance = Infinity) {
+  function nearestDrone(from, maxDistance = Infinity, exclude = null) {
     let best = null;
     let bestDistance = maxDistance;
     drones.forEachThreat((drone) => {
+      if (exclude?.has(drone)) {
+        return;
+      }
       const d = drone.position.distanceTo(from);
       if (d < bestDistance) {
         bestDistance = d;
@@ -129,6 +132,10 @@ export function createSpecials({ scene, fx, drones, audio }) {
       }
     });
     return best;
+  }
+
+  function syncReady() {
+    state.ready = state.charges > 0;
   }
 
   function setType(type) {
@@ -139,14 +146,21 @@ export function createSpecials({ scene, fx, drones, audio }) {
   }
 
   function addCharge(damage, killed = false) {
-    if (state.ready) {
+    const maxCharges = mod("maxCharges", 1);
+    if (state.charges >= maxCharges) {
       return;
     }
-    state.charge = Math.min(1, state.charge + damage * CHARGE_PER_DAMAGE + (killed ? CHARGE_PER_KILL : 0));
-    if (state.charge >= 1) {
-      state.ready = true;
+    const gain = (damage * CHARGE_PER_DAMAGE + (killed ? CHARGE_PER_KILL : 0)) * mod("chargeRate", 1);
+    state.charge += gain;
+    while (state.charge >= 1 && state.charges < maxCharges) {
+      state.charge -= 1;
+      state.charges += 1;
       audio?.play("pickup", { volume: 0.5 });
     }
+    if (state.charges >= maxCharges) {
+      state.charge = 0;
+    }
+    syncReady();
   }
 
   /**
@@ -155,17 +169,15 @@ export function createSpecials({ scene, fx, drones, audio }) {
    * @param {object} player          { x, z, eyeY, speed }
    */
   function activate(origin, forward, player) {
-    if (!state.ready) {
+    if (state.charges <= 0) {
       return false;
     }
     if (state.type === "ally" && ally.active) {
       return false;
     }
-    if (state.type === "seeker" && seeker.active) {
-      return false;
-    }
-    state.ready = false;
-    state.charge = 0;
+    state.charges -= 1;
+    state.used += 1;
+    syncReady();
     audio?.play("jump", { volume: 0.5, detune: 600 });
 
     if (state.type === "ally") {
@@ -178,15 +190,29 @@ export function createSpecials({ scene, fx, drones, audio }) {
       ally.position.copy(origin);
       ally.velocity.copy(forward).multiplyScalar(9).add(_tmp.set(player.speed, 3.5, 0));
       ally.root.visible = true;
-    } else {
+      return true;
+    }
+
+    const count = mod("seekerSplit", false) ? 3 : 1;
+    const claimed = new Set();
+    let launched = 0;
+    for (const seeker of seekers) {
+      if (seeker.active || launched >= count) {
+        continue;
+      }
       seeker.active = true;
       seeker.life = SEEKER_LIFETIME;
-      seeker.target = nearestDrone(origin);
+      seeker.target = nearestDrone(origin, Infinity, claimed) ?? nearestDrone(origin);
+      if (seeker.target) {
+        claimed.add(seeker.target);
+      }
       seeker.position.copy(origin);
-      seeker.velocity.copy(forward).multiplyScalar(14).add(_tmp.set(player.speed, 4, 0));
+      const spread = (launched - (count - 1) / 2) * 5;
+      seeker.velocity.copy(forward).multiplyScalar(14).add(_tmp.set(player.speed, 4, spread));
       seeker.root.visible = true;
+      launched += 1;
     }
-    return true;
+    return launched > 0;
   }
 
   function destroyAlly() {
@@ -194,15 +220,15 @@ export function createSpecials({ scene, fx, drones, audio }) {
       return;
     }
     fx.explosion(ally.position, { radius: 1.2 });
-    audio?.play("explosion", { volume: 0.45, detune: 400 });
+    audio?.play("explosion", { volume: 0.7, detune: 400 });
     ally.active = false;
     ally.root.visible = false;
   }
 
-  function detonateSeeker() {
+  function detonateSeeker(seeker) {
     fx.explosion(seeker.position, { radius: 3.2, hex: 0x9bff7a });
     fx.emitSparks(seeker.position, 40, { hex: NEON_GREEN, speed: 14, life: 0.7, size: 0.08, gravity: 4 });
-    audio?.play("explosion", { volume: 0.7, detune: -300 });
+    audio?.play("explosion", { volume: 1.1, detune: -300 });
     const blast = seeker.position.clone();
     drones.forEachThreat((drone) => {
       const d = drone.position.distanceTo(blast);
@@ -249,7 +275,7 @@ export function createSpecials({ scene, fx, drones, audio }) {
     }
     ally.fireTimer -= delta;
     if (target && ally.fireTimer <= 0) {
-      ally.fireTimer = ALLY_FIRE_INTERVAL;
+      ally.fireTimer = ALLY_FIRE_INTERVAL / (mod("allyTwin", false) ? 2 : 1);
       _dir.copy(target.position).sub(ally.position).normalize();
       _tmp.copy(ally.position).addScaledVector(_dir, 0.25);
       fx.tracer(_tmp, target.position, NEON_GREEN);
@@ -259,7 +285,7 @@ export function createSpecials({ scene, fx, drones, audio }) {
     }
   }
 
-  function updateSeeker(delta) {
+  function updateSeeker(seeker, delta) {
     if (!seeker.active) {
       return;
     }
@@ -281,13 +307,15 @@ export function createSpecials({ scene, fx, drones, audio }) {
     }
     const hit = seeker.target && seeker.position.distanceTo(seeker.target.position) < seeker.target.type.radius + 0.3;
     if (hit || seeker.life <= 0 || seeker.position.y < -5.3) {
-      detonateSeeker();
+      detonateSeeker(seeker);
     }
   }
 
   function update(delta, player) {
     updateAlly(delta, player);
-    updateSeeker(delta);
+    for (const seeker of seekers) {
+      updateSeeker(seeker, delta);
+    }
   }
 
   /** For enemy targeting / bolt hits. */
@@ -308,20 +336,27 @@ export function createSpecials({ scene, fx, drones, audio }) {
 
   function shiftX(dx) {
     ally.position.x += dx;
-    seeker.position.x += dx;
+    for (const seeker of seekers) {
+      seeker.position.x += dx;
+    }
   }
 
-  function reset() {
-    state.charge = 0;
-    state.ready = false;
+  /** @param {number} startCharge  0..1 pre-charge from the Armory. */
+  function reset(startCharge = 0) {
+    state.charge = Math.min(0.999, startCharge);
+    state.charges = 0;
+    state.used = 0;
+    syncReady();
     ally.active = false;
     ally.root.visible = false;
-    seeker.active = false;
-    seeker.root.visible = false;
+    for (const seeker of seekers) {
+      seeker.active = false;
+      seeker.root.visible = false;
+    }
   }
 
   function setWarmupVisible(visible, position) {
-    for (const item of [ally, seeker]) {
+    for (const item of [ally, ...seekers]) {
       item.root.visible = visible || item.active;
       if (visible && position) {
         item.position.copy(position);
@@ -337,6 +372,11 @@ export function createSpecials({ scene, fx, drones, audio }) {
       state.locked = locked;
     },
     addCharge,
+    /** Grant a ready charge immediately (tutorial). */
+    grantCharge: () => {
+      state.charges = Math.max(state.charges, 1);
+      syncReady();
+    },
     activate,
     update,
     getAllyTarget,

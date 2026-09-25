@@ -6,6 +6,7 @@ import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
 import { SPECIALS } from "../../weapon/createSpecials.js";
 import { GAME_TITLE } from "../../app/credits.js";
+import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
 
 const ARROW_COUNT = 8;
 const MAG_TICKS = 32;
@@ -60,6 +61,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     special: null,
     fire: null,
     specialSelect: null,
+    action: null,
   };
   root.classList.toggle("is-touch", isTouch);
   document.documentElement.classList.toggle("runner-touch", isTouch);
@@ -197,6 +199,19 @@ export function createRunnerHud({ isTouch = false } = {}) {
   );
   const arrows = Array.from({ length: ARROW_COUNT }, () => el("div", "rh-arrow", root, "<i></i><span>DRN</span>"));
 
+  // Floating score pop-ups (pooled), mission toasts, boss bar, tutorial
+  // prompt and the last-chance slow-mo vignette.
+  const popups = Array.from({ length: 12 }, () => el("div", "rh-pop", root));
+  let popCursor = 0;
+  const toasts = el("div", "rh-toasts", root);
+  const bossBar = el("div", "rh-boss", root,
+    '<div class="rb-head"><span class="t-meta">CARRIER // HOSTILE</span><span class="t-meta rb-state">ARMORED</span></div><div class="rb-bar"><i></i></div>');
+  const bossFill = bossBar.querySelector(".rb-bar i");
+  const bossState = bossBar.querySelector(".rb-state");
+  const prompt = el("div", "rh-prompt", root, '<span class="t-meta">TRAINING</span><b></b>');
+  const promptText = prompt.querySelector("b");
+  const slowmo = el("div", "rh-slowmo", root);
+
   const touchHint = el("div", "rh-touch-hint t-meta", root,
     "SWIPE LEFT SIDE TO MOVE — HOLD FIRE — AIM IS AUTOMATIC");
   if (isTouch) {
@@ -248,7 +263,8 @@ export function createRunnerHud({ isTouch = false } = {}) {
       </div>`;
   }
 
-  function renderStart(best, special = "ally") {
+  function renderStart(best, special = "ally", meta = null) {
+    const daily = meta?.daily ?? false;
     screen.innerHTML = `
       <div class="ticket ticket--start">
         <div class="tk-main">
@@ -266,14 +282,20 @@ export function createRunnerHud({ isTouch = false } = {}) {
             </div>
           </div>
           ${renderSpecialPicker(special)}
+          ${meta ? `<div class="tk-nav">
+            <button data-action="armory"><b>ARMORY</b><span class="t-meta">${meta.shards} ◆</span></button>
+            <button data-action="missions"><b>MISSIONS</b><span class="t-meta">RANK ${meta.rank}${meta.missionsReady ? " · !" : ""}</span></button>
+            <button data-action="records"><b>RECORDS</b><span class="t-meta">TOP 10</span></button>
+          </div>` : ""}
           <div class="tk-foot">
             <span class="t-meta">JUMP BARRIERS</span><span class="t-meta">SLIDE BEAMS</span><span class="t-meta">DODGE CARS</span><span class="t-meta">DROP DRONES</span>
           </div>
         </div>
         <div class="tk-stub">
           <div class="tk-stub-head"><span class="t-meta">ONE RUN ONLY</span><span class="t-meta">2B</span></div>
-          <div class="tk-best"><span class="t-meta">BEST SCORE</span><b>${pad(best, 6)}</b></div>
-          <button class="tk-button" data-action="start"><span>START RUN</span><span>→</span></button>
+          <div class="tk-best"><span class="t-meta">${daily ? "DAILY BEST" : "BEST SCORE"}</span><b>${pad(daily ? meta.dailyBest : best, 6)}</b></div>
+          ${meta ? `<button class="tk-daily${daily ? " is-on" : ""}" data-action="daily"><i></i><span><b>DAILY RUN</b><span class="t-meta">SAME SEED FOR EVERYONE TODAY</span></span></button>` : ""}
+          <button class="tk-button" data-action="start"><span>${daily ? "START DAILY" : "START RUN"}</span><span>→</span></button>
           ${barcode(3, 70)}
           <span class="t-code">/ / V X - R N 7 /</span>
         </div>
@@ -291,13 +313,14 @@ export function createRunnerHud({ isTouch = false } = {}) {
       </div>`;
   }
 
-  function renderGameOver({ score, distance, kills, best, newBest, cause }) {
+  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [] }) {
     screen.innerHTML = `
       <div class="ticket ticket--over">
         <div class="tk-main">
           <div class="tk-top">
             <span class="t-meta">STATUS</span>
-            <span class="t-meta">CAUSE<br><b>${cause}</b></span>
+            <span class="t-meta">CAUSE<br><b>${cause}</b>${detail ? `<br><b class="go-detail">${detail}</b>` : ""}</span>
+            ${daily ? '<span class="t-meta">MODE<br><b>DAILY RUN</b></span>' : ""}
             <span class="tk-arrow">↘</span>
           </div>
           <div class="tk-hero">
@@ -309,10 +332,16 @@ export function createRunnerHud({ isTouch = false } = {}) {
               <div><span class="t-meta">${newBest ? "NEW BEST ★" : "BEST"}</span><b>${pad(best, 6)}</b></div>
             </div>
           </div>
+          ${renderRewards(rewards, meta ?? { shards: 0, rank: 1 })}
+          ${build.length ? `<div class="go-build"><span class="t-meta">BUILD</span>${build.map((b) => `<em>${b}</em>`).join("")}</div>` : ""}
         </div>
         <div class="tk-stub">
           <div class="tk-stub-head"><span class="t-meta">RE-ENTRY</span><span class="t-meta">${newBest ? "★" : "N1"}</span></div>
           <button class="tk-button" data-action="restart"><span>RUN AGAIN</span><span>↻</span></button>
+          <div class="tk-row2">
+            <button class="tk-button tk-button--ghost" data-action="share"><span>SHARE</span><span>⇪</span></button>
+            <button class="tk-button tk-button--ghost" data-action="menu"><span>MENU</span><span>≡</span></button>
+          </div>
           ${barcode(score % 97 + 5, 70)}
           <span class="t-code">${isTouch ? "/ / TAP TO RE-ENTER" : "/ / ENTER TO RESTART"}</span>
         </div>
@@ -330,6 +359,12 @@ export function createRunnerHud({ isTouch = false } = {}) {
     if (action && handlers[action]) {
       event.stopPropagation();
       handlers[action]();
+    } else if (action && handlers.action) {
+      event.stopPropagation();
+      const button = event.target.closest("[data-action]");
+      if (!button.disabled) {
+        handlers.action(action, button.dataset);
+      }
     } else if (screen.dataset.mode === "pause") {
       handlers.resume?.();
     }
@@ -338,8 +373,17 @@ export function createRunnerHud({ isTouch = false } = {}) {
   function showScreen(mode, data = {}) {
     screen.dataset.mode = mode;
     screen.classList.remove("is-countdown");
+    screen.classList.toggle("is-meta", ["armory", "missions", "records", "upgrade"].includes(mode));
     if (mode === "start") {
-      renderStart(data.best ?? 0, data.special);
+      renderStart(data.best ?? 0, data.special, data.meta ?? null);
+    } else if (mode === "armory") {
+      screen.innerHTML = renderArmory(data.meta);
+    } else if (mode === "missions") {
+      screen.innerHTML = renderMissions(data.meta, data.streakMultiplier ?? 1);
+    } else if (mode === "records") {
+      screen.innerHTML = renderRecords(data.meta, data.dailyBest ?? 0);
+    } else if (mode === "upgrade") {
+      screen.innerHTML = renderUpgradePicker(data);
     } else if (mode === "pause") {
       renderPause();
     } else if (mode === "gameover") {
@@ -383,6 +427,48 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   function flashDamage(amount) {
     damageLevel = Math.min(1, damageLevel + amount);
+  }
+
+  /** Floating text at a screen position; kind: score | kill | near | boss. */
+  function popup(x, y, text, kind = "score") {
+    const node = popups[popCursor];
+    popCursor = (popCursor + 1) % popups.length;
+    node.textContent = text;
+    node.className = `rh-pop is-${kind}`;
+    node.style.left = `${x.toFixed(0)}px`;
+    node.style.top = `${y.toFixed(0)}px`;
+    void node.offsetWidth;
+    node.classList.add("is-on");
+  }
+
+  function toast(title, text) {
+    const node = el("div", "rh-toast", toasts, `<span class="t-meta">${title}</span><b>${text}</b>`);
+    setTimeout(() => node.classList.add("is-out"), 2600);
+    setTimeout(() => node.remove(), 3100);
+  }
+
+  function setBoss(boss) {
+    bossBar.classList.toggle("is-on", Boolean(boss));
+    if (boss) {
+      bossFill.style.transform = `scaleX(${boss.hp.toFixed(3)})`;
+      bossBar.classList.toggle("is-open", boss.open);
+      bossState.textContent = boss.open ? "WEAK POINT OPEN — FIRE" : "ARMORED";
+    }
+  }
+
+  function setPrompt(text) {
+    prompt.classList.toggle("is-on", Boolean(text));
+    if (text && promptText.textContent !== text) {
+      promptText.textContent = text;
+    }
+  }
+
+  function setSlowmo(on) {
+    slowmo.classList.toggle("is-on", on);
+  }
+
+  function setWeaponLocks(locked) {
+    chipEls.forEach((chip, index) => chip.classList.toggle("is-locked", Boolean(locked[index])));
   }
 
   const last = { weapon: -1, score: -1, ammo: -1, dist: -1, speed: -1, combo: "", shield: -1, health: -1, sector: -1, status: "" };
@@ -436,6 +522,8 @@ export function createRunnerHud({ isTouch = false } = {}) {
     if (combo !== last.combo) {
       comboValue.textContent = combo;
       comboCell.classList.toggle("is-hot", s.combo > 1.05);
+      // Heat 0..3 drives the meter colour / glow.
+      comboCell.dataset.heat = String(s.combo >= 3.2 ? 3 : s.combo >= 2.2 ? 2 : s.combo > 1.05 ? 1 : 0);
       last.combo = combo;
     }
 
@@ -455,13 +543,14 @@ export function createRunnerHud({ isTouch = false } = {}) {
       last.health = healthInt;
     }
 
-    if (s.weaponIndex !== last.weapon) {
-      last.weapon = s.weaponIndex;
+    const weaponKey = `${s.weaponIndex}:${s.magSize}`;
+    if (weaponKey !== last.weapon) {
+      last.weapon = weaponKey;
       last.ammo = -1;
       const weapon = WEAPONS[s.weaponIndex];
       weaponName.textContent = weapon.name;
       weaponCode.textContent = weapon.code;
-      magLabel.textContent = `/ ${weapon.magSize}`;
+      magLabel.textContent = `/ ${s.magSize || weapon.magSize}`;
       chipEls.forEach((chip, index) => chip.classList.toggle("is-active", index === s.weaponIndex));
     }
 
@@ -560,6 +649,13 @@ export function createRunnerHud({ isTouch = false } = {}) {
     hideScreen,
     hitMarker,
     showBanner,
+    popup,
+    toast,
+    setBoss,
+    setPrompt,
+    setSlowmo,
+    setWeaponLocks,
+    onAction: (fn) => { handlers.action = fn; },
     flashDamage,
     setVisible,
     onStart: (fn) => { handlers.start = fn; },

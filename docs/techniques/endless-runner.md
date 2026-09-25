@@ -112,6 +112,18 @@ Runner dynamics are listed in `world.collisionHideExtra`, which `collectCollisio
 
 `camera.far` is capped at `segmentLength · runnerSegmentsAhead − 5`, so the view never reaches past the last tile.
 
+## 8. Game-feel and meta layer
+
+- **Time control** (`updateRunning` in `createRunnerGame.js`):
+  - Hit-stop freezes the whole sim for a few real-time milliseconds.
+  - Last-chance slow-mo scales `delta` by 0.35 when `lethalHitImminent()` finds an obstacle about 0.3 s ahead in the current lane that overlaps the player's height, or a bolt that would kill you.
+  - Both count real time, so they never stretch themselves.
+- **Near misses:**
+  - Obstacles are flagged `arrived` when their front reaches the player. A near miss is the player being in that lane having jumped or slid within 0.35 s, or having left that lane within 0.35 s.
+  - Bolts track their closest distance to the player box and report it once they are behind the player.
+- **Determinism:** `rng.js` has two seeded streams, one for the layout and one for drone waves. Combat outcomes change how often the drone spawner rolls, and must never shift the Daily Run's obstacle layout. Drone *behaviour* still uses `Math.random`.
+- **New dynamic objects** (the carrier and its launched scouts) live in the existing drone pools, so `shiftX` and the rain hide list already cover them.
+
 ## Port checklist
 
 - [ ] Choose a straight slab; confirm lanes are clear (a vertical ray probe along each lane z).

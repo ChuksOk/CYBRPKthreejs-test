@@ -67,6 +67,16 @@ export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health
     return pickup;
   }
 
+  /**
+   * Shard magnet: `reach` extra metres of pickup radius (Armory tier) and
+   * `allLanes` pulls every shard within 16 m ahead toward the player.
+   */
+  const attract = { reach: 0, allLanes: false };
+  function setMagnet(reach, allLanes) {
+    attract.reach = reach;
+    attract.allLanes = allLanes;
+  }
+
   function update(delta, playerBox, playerX, onCollect) {
     playerBox.getCenter(_center);
     for (const pickup of pool) {
@@ -81,6 +91,18 @@ export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health
       if (pickup.mesh.position.x < playerX - 8) {
         despawn(pickup);
         continue;
+      }
+      if (pickup.id === "shard" && (attract.reach > 0 || attract.allLanes)) {
+        const ahead = pickup.mesh.position.x - _center.x;
+        const side = Math.abs(pickup.mesh.position.z - _center.z);
+        const range = attract.allLanes ? 16 : 1.5 + attract.reach * 2;
+        const lateral = attract.allLanes ? 9 : 0.8 + attract.reach;
+        if (ahead > -1 && ahead < range && side < lateral) {
+          const pull = Math.min(1, delta * (attract.allLanes ? 7 : 5));
+          pickup.mesh.position.z += (_center.z - pickup.mesh.position.z) * pull;
+          pickup.baseY += (_center.y - pickup.baseY) * pull * 0.6;
+          pickup.mesh.position.x += (_center.x - pickup.mesh.position.x) * pull * 0.5;
+        }
       }
       const dx = pickup.mesh.position.x - _center.x;
       const dy = pickup.mesh.position.y - _center.y;
@@ -123,5 +145,5 @@ export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health
     }
   }
 
-  return { group, spawn, update, shiftX, clear, setWarmupVisible };
+  return { group, spawn, update, shiftX, clear, setWarmupVisible, setMagnet };
 }

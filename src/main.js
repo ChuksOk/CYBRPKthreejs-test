@@ -181,6 +181,7 @@ async function init(loaderOverlay) {
       baseFov: getBaseFovForLayout(),
     });
     world.collisionHideExtra = runnerGame.collisionHideObjects;
+    runnerGame.setPipeline(pipeline);
     runnerGame.setDayNight(
       createDayNightCycle({
         sceneResult,

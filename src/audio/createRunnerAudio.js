@@ -1,4 +1,5 @@
 import { getAudioVolume, subscribe } from "./audioState.js";
+import { createAdaptiveMusic } from "./createAdaptiveMusic.js";
 
 /** CC0 Kenney "Starter Kit FPS" sounds (see public/audio/runner/CREDITS.md). */
 const SOUND_URLS = {
@@ -156,11 +157,15 @@ export async function renderExplosion(sampleRate, seed) {
  * user gesture (Start button) so autoplay policies are satisfied. Missing or
  * undecodable files are skipped; procedural fallbacks cover the rest.
  */
+
 export function createRunnerAudio() {
   let context = null;
   let master = null;
   let humGain = null;
   let humOsc = null;
+  let music = null;
+  let wantMusic = false;
+  let musicIntensity = 0;
   const buffers = new Map();
   let explosionVariants = null;
   let loading = null;
@@ -207,6 +212,12 @@ export function createRunnerAudio() {
     }
     filter.connect(humGain);
     humGain.connect(master);
+
+    music = createAdaptiveMusic(context, master);
+    music.setIntensity(musicIntensity);
+    if (wantMusic) {
+      music.start();
+    }
 
     const explosionLoading = (async () => {
       try {
@@ -267,6 +278,11 @@ export function createRunnerAudio() {
     countdown: { frequency: 520, duration: 0.12, type: "square", gain: 0.08, sweep: 1 },
     go: { frequency: 1040, duration: 0.25, type: "square", gain: 0.09, sweep: 1 },
     slide: { frequency: 300, duration: 0.2, type: "triangle", gain: 0.05, sweep: 0.6 },
+    nearMiss: { frequency: 1400, duration: 0.18, type: "triangle", gain: 0.1, sweep: 0.55 },
+    upgrade: { frequency: 660, duration: 0.3, type: "triangle", gain: 0.12, sweep: 2 },
+    mission: { frequency: 990, duration: 0.35, type: "square", gain: 0.07, sweep: 1.5 },
+    boss: { frequency: 70, duration: 1.2, type: "sawtooth", gain: 0.25, sweep: 1.8 },
+    locked: { frequency: 200, duration: 0.12, type: "square", gain: 0.08, sweep: 0.8 },
   };
 
   function play(name, { volume: gain = 0.5, detune = 0, pan = 0 } = {}) {
@@ -318,6 +334,21 @@ export function createRunnerAudio() {
     hasExplosion: () => Boolean(explosionVariants || buffers.get("explosion")),
     play,
     setHum,
+    startMusic() {
+      wantMusic = true;
+      music?.start();
+    },
+    stopMusic() {
+      wantMusic = false;
+      music?.stop();
+    },
+    setMusicIntensity(value) {
+      if (Math.abs(value - musicIntensity) < 0.02) {
+        return;
+      }
+      musicIntensity = value;
+      music?.setIntensity(value);
+    },
     dispose() {
       unsubscribe();
       context?.close();

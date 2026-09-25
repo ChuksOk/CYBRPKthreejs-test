@@ -105,7 +105,7 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
   }
   let cursor = 0;
 
-  function fire(from, target, { speed, damage, hex, carrierVelocity }) {
+  function fire(from, target, { speed, damage, hex, carrierVelocity, source = "DRONE BOLT" }) {
     let bolt = null;
     for (let i = 0; i < capacity; i++) {
       const candidate = pool[(cursor + i) % capacity];
@@ -121,6 +121,9 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
     bolt.alive = true;
     bolt.life = MAX_LIFE;
     bolt.damage = damage;
+    bolt.source = source;
+    bolt.minDist = Infinity;
+    bolt.nearDone = false;
     bolt.position.copy(from);
     bolt.velocity.copy(target).sub(from).normalize().multiplyScalar(speed);
     bolt.carrier.set(0, 0, 0);
@@ -155,7 +158,7 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
    * @param {number} delta
    * @param {{ playerBox: THREE.Box3, floorY: number, onHitPlayer: Function }} ctx
    */
-  function update(delta, { playerBox, floorY, playerX, onHitPlayer, ally = null, onHitAlly }) {
+  function update(delta, { playerBox, floorY, playerX, onHitPlayer, ally = null, onHitAlly, onNearMiss }) {
     _box.copy(playerBox).expandByScalar(0.18);
     for (const bolt of pool) {
       if (!bolt.alive) {
@@ -179,8 +182,16 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
       }
       if (_box.containsPoint(bolt.position) || _box.distanceToPoint(bolt.position) < 0.12) {
         destroy(bolt);
-        onHitPlayer?.(bolt.damage, bolt.position);
+        onHitPlayer?.(bolt.damage, bolt.position, bolt.source);
         continue;
+      }
+      // Near miss: bolt came within 0.5 m and is now behind the player.
+      bolt.minDist = Math.min(bolt.minDist, _box.distanceToPoint(bolt.position));
+      if (bolt.position.x < playerX - 1 && !bolt.nearDone) {
+        bolt.nearDone = true;
+        if (bolt.minDist < 0.5) {
+          onNearMiss?.(bolt);
+        }
       }
       if (bolt.life <= 0 || bolt.position.y < floorY + 0.05 || bolt.position.x < playerX - 30) {
         destroy(bolt);
@@ -230,5 +241,13 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
     }
   }
 
-  return { group, fire, destroy, update, raycast, shiftX, clear, setWarmupVisible };
+  function forEachAlive(fn) {
+    for (const bolt of pool) {
+      if (bolt.alive) {
+        fn(bolt);
+      }
+    }
+  }
+
+  return { group, fire, destroy, update, raycast, shiftX, clear, setWarmupVisible, forEachAlive };
 }

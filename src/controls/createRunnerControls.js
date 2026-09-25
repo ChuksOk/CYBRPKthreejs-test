@@ -461,7 +461,15 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     state.recoilYaw += yaw;
   }
 
-  function shake(strength, duration = 0.35) {
+  /**
+   * @param {{x:number,y:number}} [direction]  optional screen-space push
+   *   (x right, y up): kicks the view away from the event, then recovers.
+   */
+  function shake(strength, duration = 0.35, direction = null) {
+    if (direction) {
+      state.recoilYaw -= direction.x * strength * 0.9;
+      state.recoilPitch += direction.y * strength * 0.9;
+    }
     state.shakeStrength = Math.max(strength, state.shakeTime > 0 ? state.shakeStrength : 0);
     state.shakeTime = Math.max(state.shakeTime, duration);
   }
