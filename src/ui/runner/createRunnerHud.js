@@ -228,6 +228,37 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     event.stopPropagation();
     handlers.special?.();
   });
+  // Sky Run hull gauge (bottom-centre while flying the car).
+  const flightPanel = el("div", "rh-flight", root, `
+    <div class="fl-head"><span class="t-meta">SKY RUN</span><b class="fl-mult">×1.5</b><span class="t-meta fl-time">00.0S</span></div>
+    <div class="fl-bar"><b class="fl-trail"></b><i></i></div>
+    <div class="fl-foot"><span class="t-meta">HULL</span><b class="fl-num">100</b></div>`);
+  const flightFill = flightPanel.querySelector(".fl-bar i");
+  const flightTrail = flightPanel.querySelector(".fl-trail");
+  const flightNum = flightPanel.querySelector(".fl-num");
+  const flightTime = flightPanel.querySelector(".fl-time");
+  let flightTrailValue = 1;
+  function setFlight(data) {
+    flightPanel.classList.toggle("is-visible", Boolean(data));
+    if (!data) {
+      flightTrailValue = 1;
+      return;
+    }
+    const hull = Math.max(0, Math.min(1, data.hull));
+    flightFill.style.transform = `scaleX(${hull})`;
+    // Trail catches up to show the chunk just lost.
+    flightTrailValue = Math.max(hull, flightTrailValue - 0.012);
+    flightTrail.style.transform = `scaleX(${flightTrailValue})`;
+    flightNum.textContent = String(Math.round(hull * 100)).padStart(3, "0");
+    flightTime.textContent = `${(data.time ?? 0).toFixed(1).padStart(4, "0")}S`;
+    flightPanel.classList.toggle("is-low", hull < 0.3);
+    if (data.hit) {
+      flightPanel.classList.remove("is-hit");
+      void flightPanel.offsetWidth;
+      flightPanel.classList.add("is-hit");
+    }
+  }
+
   // Touch: pause button (top-right). Desktop pauses by releasing the mouse.
   const pauseButton = el("button", "rh-pause-btn", root, '<i></i><i></i><span class="t-meta">PAUSE</span>');
   pauseButton.type = "button";
@@ -975,6 +1006,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     toast,
     setBoss,
     setPhoto,
+    setFlight,
     setPrompt,
     setSlowmo,
     setWeaponLocks,

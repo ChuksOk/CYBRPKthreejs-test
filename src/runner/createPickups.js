@@ -10,7 +10,24 @@ export const PICKUP_TYPES = {
   shield: { hex: 0x5d87f6, core: () => new THREE.IcosahedronGeometry(0.2, 1), cage: 0.3 },
   health: { hex: 0xe9ebee, core: () => new THREE.BoxGeometry(0.2, 0.2, 0.2), cage: 0.3 },
   overclock: { hex: 0xff4f74, core: () => new THREE.TorusGeometry(0.14, 0.05, 10, 24), cage: 0.3 },
+  // Sky Run power-up: a tiny hover car in a bigger cage.
+  flycar: { hex: 0x2ff0ff, core: () => miniCarGeometry(), cage: 0.42 },
 };
+
+/** Stylised hover-car silhouette for the Sky Run pickup core. */
+function miniCarGeometry() {
+  const kit = createPartKit();
+  kit.box("core", [0.44, 0.1, 0.2], { position: [0, 0, 0], radius: 0.04 });
+  kit.box("core", [0.2, 0.08, 0.14], { position: [-0.03, 0.08, 0], radius: 0.035 });
+  for (const x of [-0.16, 0.16]) {
+    for (const z of [-0.14, 0.14]) {
+      kit.tube("core", 0.045, 0.1, "x", { position: [x, -0.02, z], radial: 12 });
+    }
+  }
+  const group = kit.build({ core: new THREE.MeshBasicMaterial() });
+  const geometry = group.children[0].geometry;
+  return geometry;
+}
 
 /** Glowing core inside a chrome gimbal cage (two crossed rings + cap nubs). */
 function buildPickupTemplate(type) {
@@ -39,7 +56,7 @@ const _center = new THREE.Vector3();
  * Floating neon collectibles. Pulsing emissive is driven by the TSL timer so
  * nothing but position is touched per frame.
  */
-export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health: 3, overclock: 3 } }) {
+export function createPickups({ scene, poolSize = { shard: 40, shield: 3, health: 3, overclock: 3, flycar: 2 } }) {
   const group = new THREE.Group();
   group.name = "runner-pickups";
   scene.add(group);
@@ -56,13 +73,18 @@ export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health
   }
 
   function spawn(id, x, lane, height = 1.0) {
+    return spawnAt(id, x, RUNNER.floorY + height, RUNNER.laneZ[lane]);
+  }
+
+  /** Free placement (Sky Run: shards in the air lanes). */
+  function spawnAt(id, x, y, z) {
     const pickup = pool.find((p) => !p.active && p.id === id);
     if (!pickup) {
       return null;
     }
     pickup.active = true;
-    pickup.baseY = RUNNER.floorY + height;
-    pickup.mesh.position.set(x, pickup.baseY, RUNNER.laneZ[lane]);
+    pickup.baseY = y;
+    pickup.mesh.position.set(x, pickup.baseY, z);
     pickup.mesh.visible = true;
     return pickup;
   }
@@ -145,5 +167,5 @@ export function createPickups({ scene, poolSize = { shard: 30, shield: 3, health
     }
   }
 
-  return { group, spawn, update, shiftX, clear, setWarmupVisible, setMagnet };
+  return { group, spawn, spawnAt, update, shiftX, clear, setWarmupVisible, setMagnet };
 }

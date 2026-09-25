@@ -12,6 +12,7 @@ import { createLaneLights } from "./createLaneLights.js";
 import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
 import { savePhoto, sharePhoto, shareRun } from "../ui/runner/shareCard.js";
 import { createRunSnapshots } from "./createRunSnapshots.js";
+import { createFlightMode } from "./createFlightMode.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
 import { createMusicPlayer } from "../audio/createMusicPlayer.js";
 import {
@@ -144,6 +145,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     build: [],
     sector: 1,
     lastRewards: null,
+    // Sky Run: next distance the flying-car pickup may appear.
+    nextFlightAt: 380,
+    flightPromptTimer: 0,
     missionTimer: 0,
   };
   const runStats = {};
@@ -279,6 +283,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
 
   const pickups = createPickups({ scene });
+  // Sky Run: flying-car power-up (Star Fox-style rail shooter mode).
+  const flight = createFlightMode({ scene, fx, pickups });
   const laneLights = performanceProfile.runnerLaneLights === false ? null : createLaneLights({ scene });
 
   const weapon = viewmodel
@@ -328,6 +334,16 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     if (game.state !== "running" || !specials.state.ready) {
       return;
     }
+    // Flying: launched straight from the car's nose (no hand throw).
+    if (flight.isActive()) {
+      flight.getMuzzle(_specialOrigin);
+      camera.getWorldDirection(_specialDir);
+      _specialOrigin.addScaledVector(_specialDir, 1.5);
+      if (specials.activate(_specialOrigin, _specialDir, player)) {
+        onSpecialLaunched();
+      }
+      return;
+    }
     // Thrown by the left hand: the special launches from the palm at the
     // release frame of the throw animation.
     if (viewmodel?.throwSpecial) {
@@ -372,6 +388,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     tutorialAction("jump");
   });
   controls.on("land", () => audio.play("land", { volume: 0.35 }));
+  controls.on("climb", () => audio.play("slide", { volume: 0.25, detune: 500 }));
   controls.on("slide", () => {
     actions.slide = game.clock;
     audio.play("slide", { volume: 0.3 });
@@ -434,6 +451,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.taken = {};
     game.build = [];
     controls.reset();
+    flight.reset();
+    hud.setFlight(null);
+    weapon?.setMuzzleProvider?.(null);
+    viewmodel?.setVisible(true);
     viewmodel?.setDeathProgress(-1);
     snapshots.reset();
     weapon?.reset();
@@ -465,6 +486,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.slowmoCooldown = 0;
     game.invuln = 0;
     game.sector = 1;
+    game.nextFlightAt = 380;
+    game.flightPromptTimer = 0;
     game.deathDetail = "";
     currentLane = 1;
     cleanRun = 0;
@@ -940,9 +963,89 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
   }
 
+  // ── Sky Run (flying car) ────────────────────────────────────────────────
+  function startFlight() {
+    if (flight.isActive() || game.state !== "running") {
+      return;
+    }
+    flight.enter(controls.state.x);
+    controls.setFlight(true);
+    // Chase cam: the rifle / hands hide; tracers leave from the car's cannons.
+    viewmodel?.setVisible(false);
+    weapon?.setMuzzleProvider?.((target) => flight.getMuzzle(target));
+    // Ground obstacles don't matter up here.
+    obstacles.clear();
+    runStats.flights = (runStats.flights ?? 0) + 1;
+    hud.showBanner("SKY RUN", 1.8);
+    hud.setPrompt(isTouch ? "SWIPE ↑↓ CLIMB / DIVE · ←→ STRAFE" : "W / S  CLIMB · DIVE   —   A / D  STRAFE");
+    game.flightPromptTimer = 3.2;
+    hud.setFlight({ hull: 1, time: 0 });
+    audio.play("upgrade", { volume: 0.7 });
+    audio.play("go", { volume: 0.5, detune: -300 });
+    controls.shake(0.08, 0.5);
+    if (isTouch) {
+      vibrate([40, 30, 80]);
+    }
+  }
+
+  /** Car destroyed: explode, drop the runner back to the street. */
+  function endFlight() {
+    if (!flight.isActive()) {
+      return;
+    }
+    flight.destroy(controls.state.speed);
+    controls.setFlight(false);
+    weapon?.setMuzzleProvider?.(null);
+    viewmodel?.setVisible(true);
+    hud.setFlight(null);
+    hud.setPrompt(null);
+    hud.showBanner("CAR DOWN — BACK ON FOOT", 2);
+    audio.play("explosion", { volume: 0.8 });
+    audio.play("crash", { volume: 0.5 });
+    controls.shake(0.22, 0.7);
+    hud.flashDamage(0.6);
+    // A breather: invulnerable landing, slow-mo, and a clear street ahead.
+    game.invuln = 2.6;
+    game.slowmo = 0.5;
+    game.nextObstacleX = controls.state.x + 70;
+    if (isTouch) {
+      vibrate([120, 60, 180]);
+    }
+  }
+
+  function damageCar(amount) {
+    game.sinceDamage = 0;
+    game.combo = 1;
+    hud.flashDamage(0.3);
+    audio.play("damage", { volume: 0.45, detune: -400 });
+    controls.shake(0.06, 0.25);
+    hud.setFlight({ hull: flight.getHullFraction(), time: flight.state.time, hit: true });
+    if (flight.damage(amount)) {
+      endFlight();
+    }
+  }
+
+  function onSkyCrash(hazard, damage) {
+    if (game.state !== "running") {
+      return;
+    }
+    const label = hazard.kind === "sign" ? "BILLBOARD" : "PYLON";
+    fx.impact?.(playerBox.getCenter(_crashPoint), new THREE.Vector3(-1, 0, 0), { hex: 0xffb300, count: 10 });
+    hud.showBanner(`HIT A ${label}`, 0.9);
+    if (game.invuln <= 0) {
+      damageCar(damage);
+    }
+  }
+  const _crashPoint = new THREE.Vector3();
+
   // ── Combat ─────────────────────────────────────────────────────────────
   function damagePlayer(amount, cause = "SHOT DOWN", detail = "") {
     if (game.state !== "running" || game.invuln > 0) {
+      return;
+    }
+    // Flying: the car's hull takes every hit instead of the runner.
+    if (flight.isActive()) {
+      damageCar(amount);
       return;
     }
     const absorbed = Math.min(game.shield, amount);
@@ -995,6 +1098,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   function spawnRewardLine(x, freeLanes, lanes) {
     const d = difficulty();
+    // Sky Run power-up: rare, never during the tutorial, spaced out.
+    if (game.tutorial < 0 && game.distance >= game.nextFlightAt && freeLanes.length && rr() < 0.22) {
+      pickups.spawn("flycar", x - 8, rrPick(freeLanes), 1.2);
+      game.nextFlightAt = game.distance + rrRange(900, 1400);
+      return;
+    }
     if (rr() < 0.09 + d * 0.04) {
       const lane = freeLanes.length ? rrPick(freeLanes) : lanes[0];
       const id = rrWeighted([
@@ -1183,6 +1292,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     player.z = s.z;
     player.eyeY = s.feetY + s.eyeHeight;
     player.speed = s.speed;
+    // Flying: drones hover relative to a virtual floor below the car, so
+    // the dogfight happens at the car's altitude.
+    player.floorY = flight.isActive() ? s.flightY - 4.5 : RUNNER.floorY;
     controls.getPlayerBox(playerBox);
   }
 
@@ -1198,6 +1310,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     pickups.shiftX(shift);
     fx.shiftX(shift);
     specials.shiftX(shift);
+    flight.shiftX(shift);
     game.nextObstacleX += shift;
   }
 
@@ -1364,8 +1477,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function simulateWorld(delta, { running }) {
     syncPlayer();
 
+    const flying = flight.isActive();
     if (running) {
-      updateObstacleSpawner();
+      if (!flying) {
+        updateObstacleSpawner();
+      }
       updateDroneSpawner(delta);
       if (game.distance >= game.nextBoss && game.tutorial < 0) {
         spawnBoss();
@@ -1389,9 +1505,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       onHitAlly: (damage) => specials.damageAlly(damage),
     });
 
+    // Sky Run: car pose, sky hazards, wreck animation (runs after a crash too).
+    flight.update(delta, controls.state, playerBox, onSkyCrash, difficulty());
+
     if (running) {
-      checkObstacleArrivals();
-      const hit = obstacles.update(playerBox, player.x);
+      const hit = flying ? null : (checkObstacleArrivals(), obstacles.update(playerBox, player.x));
       if (hit && game.tutorial < 0 && game.invuln <= 0) {
         const cause = hit.kind === "car" ? "HIT A PARKED CAR" : hit.kind === "beam" ? "CLOTHESLINED" : "TRIPPED A BARRIER";
         const detail = `${hit.kind.toUpperCase()} · LANE ${hit.lane + 1} · ${Math.round(controls.state.speed * 3.6)} KM/H`;
@@ -1412,6 +1530,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         } else if (pickup.id === "health") {
           game.health = Math.min(RUNNER.maxHealth, game.health + 35);
           hud.showBanner("INTEGRITY +35", 1.2);
+        } else if (pickup.id === "flycar") {
+          startFlight();
         } else if (pickup.id === "overclock") {
           weapon?.addOverclock(6);
           hud.showBanner("OVERCLOCK", 1.4);
@@ -1451,7 +1571,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       return;
     }
     game.slowmoCooldown -= realDelta;
-    if (game.slowmo <= 0 && game.slowmoCooldown <= 0 && game.tutorial < 0 && lethalHitImminent()) {
+    if (game.slowmo <= 0 && game.slowmoCooldown <= 0 && game.tutorial < 0 && !flight.isActive() && lethalHitImminent()) {
       game.slowmo = LAST_CHANCE_TIME;
       game.slowmoCooldown = LAST_CHANCE_COOLDOWN;
       audio.play("nearMiss", { volume: 0.3, detune: -1200 });
@@ -1467,13 +1587,25 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
     const d = difficulty();
     const eased = 1 - Math.pow(1 - d, 1.6);
-    controls.setSpeed(THREE.MathUtils.lerp(RUNNER.startSpeed, RUNNER.maxSpeed, eased));
+    const boost = flight.isActive() ? RUNNER.flightSpeedBoost : 1;
+    controls.setSpeed(THREE.MathUtils.lerp(RUNNER.startSpeed, RUNNER.maxSpeed, eased) * boost);
     controls.update(delta);
     applyWrap();
     track?.followGround(controls.state.x);
     const step = controls.state.speed * delta;
     game.distance += step;
     cleanRun += step;
+    if (game.flightPromptTimer > 0) {
+      game.flightPromptTimer -= delta;
+      if (game.flightPromptTimer <= 0 && game.tutorial < 0) {
+        hud.setPrompt(null);
+      }
+    }
+    if (flight.isActive()) {
+      // Sky Run pays ×1.5 on distance.
+      game.bonus += step * 0.5;
+      hud.setFlight({ hull: flight.getHullFraction(), time: flight.state.time });
+    }
     dayNight?.update(delta);
     weather?.update(delta);
 
@@ -1605,6 +1737,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       projectiles.setWarmupVisible(true, _warmPos);
       obstacles.setWarmupVisible(true, _warmPos);
       pickups.setWarmupVisible(true, _warmPos);
+      flight.setWarmupVisible(true, _warmPos);
       viewmodel?.setWarmupVisible(true);
     },
     end() {
@@ -1614,6 +1747,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       projectiles.setWarmupVisible(false);
       obstacles.setWarmupVisible(false);
       pickups.setWarmupVisible(false);
+      flight.setWarmupVisible(false);
       viewmodel?.setWarmupVisible(false);
     },
   };
@@ -1624,6 +1758,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     drones.group,
     projectiles.group,
     pickups.group,
+    flight.group,
     ...(laneLights ? [laneLights.mesh] : []),
     ...fx.hideObjects,
     ...(viewmodel ? [viewmodel.rig] : []),
@@ -1673,6 +1808,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     },
     enterMenu,
     placeAtStart,
+    flight,
+    /** Dev / debug: start a Sky Run now (__app.runner.startFlight()). */
+    startFlight,
     getState: () => game.state,
   };
 }

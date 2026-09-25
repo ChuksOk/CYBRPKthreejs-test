@@ -2727,3 +2727,100 @@ html.runner-playing.runner-touch body .audio-btn-root {
   width: 44px;
   padding: 10px 0;
 }
+
+/* ── Sky Run hull gauge ────────────────────────────────────────────── */
+.rh-flight {
+  position: absolute;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  width: min(360px, 60vw);
+  padding: 7px 12px 8px;
+  background: rgba(12, 14, 19, 0.82);
+  color: var(--t-paper);
+  clip-path: var(--t-notch-sm);
+  box-shadow: inset 3px 0 0 #2ff0ff;
+  opacity: 0;
+  transform: translate(-50%, 24px);
+  transition: opacity 0.3s ease, transform 0.45s var(--ui-spring, cubic-bezier(0.2, 0.9, 0.2, 1));
+  pointer-events: none;
+}
+
+.rh-flight.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.fl-head,
+.fl-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.fl-head .t-meta:first-child {
+  color: #2ff0ff;
+}
+
+.fl-mult {
+  padding: 0 5px;
+  background: var(--t-acid);
+  color: var(--t-ink);
+  font-family: var(--t-display);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.fl-time {
+  margin-left: auto;
+  color: var(--t-grey);
+}
+
+.fl-bar {
+  position: relative;
+  height: 9px;
+  margin: 6px 0 4px;
+  background: rgba(255, 255, 255, 0.1);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+
+.fl-bar i,
+.fl-bar .fl-trail {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+}
+
+.fl-bar .fl-trail {
+  background: var(--t-pink);
+}
+
+.fl-bar i {
+  background: linear-gradient(90deg, #2ff0ff, #d9ff3b);
+  transition: transform 0.12s linear;
+}
+
+.fl-foot .fl-num {
+  margin-left: auto;
+  font-family: var(--t-display);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rh-flight.is-low .fl-bar i {
+  background: var(--t-pink);
+  animation: fl-low 0.5s steps(2) infinite;
+}
+
+@keyframes fl-low {
+  50% { opacity: 0.45; }
+}
+
+.rh-flight.is-hit {
+  animation: fl-hit 0.3s ease;
+}
+
+@keyframes fl-hit {
+  30% { transform: translate(calc(-50% + 5px), 0); box-shadow: inset 3px 0 0 var(--t-pink), 0 0 0 2px var(--t-pink); }
+  60% { transform: translate(calc(-50% - 4px), 0); }
+}

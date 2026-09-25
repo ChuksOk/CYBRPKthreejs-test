@@ -179,7 +179,11 @@ export function createWeapon({
 
     _hitPoint.copy(_origin).addScaledVector(_direction, nearest);
 
-    viewmodel.getMuzzleWorldPosition(_muzzle);
+    if (muzzleProvider) {
+      muzzleProvider(_muzzle);
+    } else {
+      viewmodel.getMuzzleWorldPosition(_muzzle);
+    }
     fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xff4f74 : getTracerHex?.() ?? def.tracer);
     fx.muzzleLight(_muzzle);
     viewmodel.kick(Math.min(2, def.recoil));
@@ -314,10 +318,16 @@ export function createWeapon({
     viewmodel.setOverclock(false);
   }
 
+  /** Where tracers leave from (Sky Run: the car's cannons); null = rifle. */
+  let muzzleProvider = null;
+
   return {
     state,
     update,
     reset,
+    setMuzzleProvider: (fn) => {
+      muzzleProvider = fn;
+    },
     startReload,
     addOverclock,
     selectWeapon,

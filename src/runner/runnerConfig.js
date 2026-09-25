@@ -35,6 +35,15 @@ export const RUNNER = {
   /** Ground texture tile — segmentLength must be an integer multiple. */
   groundTile: 212 / 8,
 
+  // Sky Run (flying car power-up): wider lanes, three altitude tiers above
+  // the street floor, chase camera offsets.
+  flightLaneZ: [14.5, 22.5, 30.5],
+  flightAltitudes: [4.5, 8.5, 12.5],
+  chaseDistance: 7.2,
+  chaseHeight: 2.3,
+  flightSpeedBoost: 1.3,
+  flightHull: 100,
+
   maxHealth: 100,
   maxShield: 60,
   shieldRechargeDelay: 3.5,

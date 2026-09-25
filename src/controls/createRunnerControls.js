@@ -55,11 +55,17 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     bobPhase: 0,
     trigger: false,
     pointerLocked: false,
+    // Sky Run (flying car): discrete lanes × altitude tiers, chase camera.
+    flying: false,
+    flightBlend: 0, // 0 = first person on foot … 1 = chase cam behind the car
+    tier: 1,
+    flightY: RUNNER.floorY + RUNNER.flightAltitudes[1],
+    flightVy: 0,
   };
 
   let currentBaseFov = baseFov;
   const euler = new THREE.Euler(0, 0, 0, "YXZ");
-  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), lockChange: new Set(), reload: new Set(), weapon: new Set(), special: new Set() };
+  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), climb: new Set(), lockChange: new Set(), reload: new Set(), weapon: new Set(), special: new Set() };
   const actionQueue = [];
 
   const touchLook = new Map();
@@ -312,6 +318,24 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   function processActions() {
     while (actionQueue.length > 0) {
       const action = actionQueue.shift();
+      // Flying: the same inputs steer the car — lanes left / right, jump =
+      // climb a tier, slide = dive a tier.
+      if (state.flying) {
+        if (action === "left" && state.lane > 0) {
+          state.lane -= 1;
+          emit("lane", state.lane);
+        } else if (action === "right" && state.lane < RUNNER.flightLaneZ.length - 1) {
+          state.lane += 1;
+          emit("lane", state.lane);
+        } else if (action === "jump" && state.tier < RUNNER.flightAltitudes.length - 1) {
+          state.tier += 1;
+          emit("climb", state.tier);
+        } else if (action === "slide" && state.tier > 0) {
+          state.tier -= 1;
+          emit("climb", state.tier);
+        }
+        continue;
+      }
       if (action === "left" && state.lane > 0) {
         state.lane -= 1;
         emit("lane", state.lane);
@@ -341,14 +365,30 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
 
     state.x += state.speed * delta;
 
-    // Lane: critically damped spring toward the lane center.
-    const targetZ = RUNNER.laneZ[state.lane];
+    // Lane: critically damped spring toward the lane center (wider sky
+    // lanes while flying).
+    const targetZ = state.flying ? RUNNER.flightLaneZ[state.lane] : RUNNER.laneZ[state.lane];
     const previousZ = state.z;
-    state.z += (targetZ - state.z) * expLerpFactor(delta, RUNNER.laneChangeSpeed);
+    state.z += (targetZ - state.z) * expLerpFactor(delta, state.flying ? RUNNER.laneChangeSpeed * 0.7 : RUNNER.laneChangeSpeed);
     state.laneVelocity = delta > 0 ? (state.z - previousZ) / delta : 0;
 
+    // Flight: blend the camera and spring the car toward its altitude tier.
+    state.flightBlend = THREE.MathUtils.clamp(state.flightBlend + (state.flying ? delta / 1.1 : -delta / 0.8), 0, 1);
+    if (state.flying) {
+      const targetY = RUNNER.floorY + RUNNER.flightAltitudes[state.tier];
+      const previousY = state.flightY;
+      // Lift-off climbs from the runner's eye height.
+      state.flightY += (targetY - state.flightY) * expLerpFactor(delta, 4.5);
+      state.flightVy = delta > 0 ? (state.flightY - previousY) / delta : 0;
+    }
+
     // Vertical.
-    if (!state.grounded) {
+    if (state.flying) {
+      // The runner rides in the car: keep the body parked at the car.
+      state.feetY = state.flightY - state.eyeHeight;
+      state.vy = 0;
+      state.grounded = false;
+    } else if (!state.grounded) {
       state.vy -= RUNNER.gravity * delta;
       state.feetY += state.vy * delta;
       if (state.feetY <= RUNNER.floorY) {
@@ -380,6 +420,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   }
 
   const _shake = new THREE.Vector3();
+  const _chase = new THREE.Vector3();
 
   function applyCamera(delta) {
     const bobActive = state.grounded && state.slideTime <= 0 ? 1 : 0;
@@ -399,7 +440,19 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       state.z + _shake.z,
     );
 
-    const roll = THREE.MathUtils.clamp(-state.laneVelocity * 0.012, -0.12, 0.12) + bobRoll;
+    // Sky Run chase cam: behind and above the car, trailing its steering.
+    const chase = THREE.MathUtils.smootherstep(state.flightBlend, 0, 1);
+    if (chase > 0) {
+      _chase.set(
+        state.x - RUNNER.chaseDistance,
+        state.flightY + RUNNER.chaseHeight + _shake.y * 2,
+        state.z - state.laneVelocity * 0.06 + _shake.z * 2,
+      );
+      camera.position.lerp(_chase, chase);
+    }
+
+    const roll =
+      THREE.MathUtils.clamp(-state.laneVelocity * (0.012 + chase * 0.01), -0.12 - chase * 0.1, 0.12 + chase * 0.1) + bobRoll * (1 - chase);
     euler.set(
       state.pitch + state.recoilPitch + _shake.x * 0.4,
       RUN_HEADING + state.yaw + state.recoilYaw,
@@ -414,7 +467,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       0,
       1,
     );
-    const targetFov = currentBaseFov + 4 + speedT * 10;
+    const targetFov = currentBaseFov + 4 + speedT * 10 + state.flightBlend * 8;
     const nextFov = camera.fov + (targetFov - camera.fov) * expLerpFactor(delta, 3);
     if (Math.abs(nextFov - camera.fov) > 0.001) {
       camera.fov = nextFov;
@@ -452,8 +505,37 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     state.recoilYaw = 0;
     state.shakeTime = 0;
     state.trigger = false;
+    state.flying = false;
+    state.flightBlend = 0;
+    state.tier = 1;
+    state.flightY = RUNNER.floorY + RUNNER.flightAltitudes[1];
+    state.flightVy = 0;
     actionQueue.length = 0;
     applyCamera(1);
+  }
+
+  /**
+   * Sky Run on / off. Taking off starts the car at eye height and climbs to
+   * the middle tier; landing drops the runner from the car (gravity), and
+   * the camera blends back to first person.
+   */
+  function setFlight(on) {
+    if (Boolean(on) === state.flying) {
+      return;
+    }
+    state.flying = Boolean(on);
+    actionQueue.length = 0;
+    if (state.flying) {
+      state.tier = 1;
+      state.flightY = state.feetY + state.eyeHeight;
+      state.flightVy = 0;
+      state.lane = Math.min(state.lane, RUNNER.flightLaneZ.length - 1);
+      state.slideTime = 0;
+    } else {
+      state.feetY = Math.max(RUNNER.floorY, state.flightY - state.eyeHeight);
+      state.vy = 0;
+      state.grounded = state.feetY <= RUNNER.floorY;
+    }
   }
 
   function setActive(value) {
@@ -499,6 +581,12 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
 
   /** Aim-down direction snapshot used by aim assist on touch. */
   function getPlayerBox(target) {
+    if (state.flying && state.flightBlend > 0.35) {
+      // The car's hull (≈3.4 × 0.8 × 1.6 m).
+      target.min.set(state.x - 1.6, state.flightY - 0.35, state.z - 0.8);
+      target.max.set(state.x + 1.6, state.flightY + 0.45, state.z + 0.8);
+      return target;
+    }
     const halfW = 0.3;
     target.min.set(state.x - halfW, state.feetY, state.z - 0.35);
     target.max.set(state.x + halfW, state.feetY + state.eyeHeight + 0.15, state.z + 0.35);
@@ -549,6 +637,8 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     addRecoil,
     shake,
     shiftX,
+    setFlight,
+    isFlying: () => state.flying,
     getPlayerBox,
     dispose,
   };
