@@ -334,7 +334,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
       </div>`;
   }
 
-  function renderStart(best, special = "ally", meta = null) {
+  function renderStart(best, special = "ally", meta = null, style = "neon") {
     const daily = meta?.daily ?? false;
     screen.innerHTML = `
       <div class="ticket ticket--start">
@@ -357,6 +357,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
             <button data-action="armory"><b>ARMORY</b><span class="t-meta">${meta.shards} ◆</span></button>
             <button data-action="missions"><b>MISSIONS</b><span class="t-meta">RANK ${meta.rank}${meta.missionsReady ? " · !" : ""}</span></button>
             <button data-action="records"><b>RECORDS</b><span class="t-meta">TOP 10</span></button>
+            <button data-action="style" class="tk-style${style === "moebius" ? " is-on" : ""}" aria-pressed="${style === "moebius"}"><b>STYLE</b><span class="t-meta">${style === "moebius" ? "MOEBIUS ✎" : "NEON ◐"}</span></button>
           </div>` : ""}
           <div class="tk-foot">
             <span class="t-meta">JUMP BARRIERS</span><span class="t-meta">SLIDE BEAMS</span><span class="t-meta">DODGE CARS</span><span class="t-meta">DROP DRONES</span>
@@ -475,7 +476,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     screen.classList.remove("is-countdown");
     screen.classList.toggle("is-meta", ["armory", "missions", "records", "upgrade"].includes(mode));
     if (mode === "start") {
-      renderStart(data.best ?? 0, data.special, data.meta ?? null);
+      renderStart(data.best ?? 0, data.special, data.meta ?? null, data.style ?? "neon");
     } else if (mode === "armory") {
       screen.innerHTML = renderArmory(data.meta);
     } else if (mode === "missions") {

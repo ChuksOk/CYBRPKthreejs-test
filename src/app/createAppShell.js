@@ -76,6 +76,7 @@ export function createAppShell({
   inspectorSession,
   syncLighting,
   graphics = null,
+  visualStyle = null,
 }) {
   const uiState = createAppUiState();
   let finishedIntro = false;
@@ -141,7 +142,10 @@ export function createAppShell({
           setStoredLookPreset(presetId);
         },
         graphics,
+        getVisualStyle: () => pipeline.getVisualStyle?.() ?? "neon",
+        onVisualStyleChange: (id) => visualStyle?.set(id),
         onRestart: () => {
+          visualStyle?.set("neon");
           clearAllStoredPreferences();
           graphics?.reset();
           settingsPanelRef?.syncGraphics();

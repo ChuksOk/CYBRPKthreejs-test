@@ -47,7 +47,12 @@ import {
   applyDevicePerformanceDefaults,
   shouldCompileBeforeRenderLoop,
 } from "./platform/performanceProfile.js";
-import { getStoredLookPreset, isDevelopmentModeEnabled } from "./platform/userPreferences.js";
+import {
+  getStoredLookPreset,
+  getStoredVisualStyle,
+  isDevelopmentModeEnabled,
+  setStoredVisualStyle,
+} from "./platform/userPreferences.js";
 import { createGraphicsSettings } from "./platform/graphicsSettings.js";
 import {
   DEFAULT_LOOK_PRESET,
@@ -135,6 +140,21 @@ async function init(loaderOverlay) {
     lensflare: pipeline.lensflare,
   });
 
+  // Visual style (neon grade / Moebius cel shading), toggled from the
+  // runner menu and Settings; persisted per browser.
+  const visualStyleListeners = new Set();
+  const visualStyle = {
+    get: () => pipeline.getVisualStyle(),
+    set(id) {
+      pipeline.setVisualStyle(id);
+      setStoredVisualStyle(pipeline.getVisualStyle());
+      document.documentElement.classList.toggle("style-moebius", pipeline.getVisualStyle() === "moebius");
+      visualStyleListeners.forEach((listener) => listener(pipeline.getVisualStyle()));
+    },
+    onChange: (listener) => visualStyleListeners.add(listener),
+  };
+  visualStyle.set(getStoredVisualStyle());
+
   const adaptiveDpr = createAdaptiveDprController({
     renderer,
     pipeline,
@@ -184,6 +204,7 @@ async function init(loaderOverlay) {
     });
     world.collisionHideExtra = runnerGame.collisionHideObjects;
     runnerGame.setPipeline(pipeline);
+    runnerGame.setVisualStyle(visualStyle);
     const dayNight = createDayNightCycle({
       sceneResult,
       sky: world.sky,
@@ -244,6 +265,7 @@ async function init(loaderOverlay) {
     inspectorSession,
     syncLighting: lighting.syncLighting,
     graphics,
+    visualStyle,
   });
 
   walkModeBridge.onChange = appShell.onWalkModeChange;

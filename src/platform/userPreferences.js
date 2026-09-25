@@ -2,6 +2,7 @@ const DEVELOPMENT_MODE_KEY = "threejs-punk-development-mode";
 const LOOK_PRESET_KEY = "threejs-punk-look-preset";
 const RUNNER_BEST_KEY = "threejs-punk-runner-best";
 const RUNNER_SPECIAL_KEY = "threejs-punk-runner-special";
+const VISUAL_STYLE_KEY = "threejs-punk-visual-style";
 
 let developmentModeEnabled = false;
 
@@ -49,6 +50,7 @@ export function clearAllStoredPreferences() {
   try {
     localStorage.removeItem(DEVELOPMENT_MODE_KEY);
     localStorage.removeItem(LOOK_PRESET_KEY);
+    localStorage.removeItem(VISUAL_STYLE_KEY);
   } catch {
     // localStorage may be unavailable
   }
@@ -81,6 +83,23 @@ export function getStoredRunnerSpecial() {
 export function setStoredRunnerSpecial(id) {
   try {
     localStorage.setItem(RUNNER_SPECIAL_KEY, id);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+/** "neon" (default) or "moebius". */
+export function getStoredVisualStyle() {
+  try {
+    return localStorage.getItem(VISUAL_STYLE_KEY) === "moebius" ? "moebius" : "neon";
+  } catch {
+    return "neon";
+  }
+}
+
+export function setStoredVisualStyle(id) {
+  try {
+    localStorage.setItem(VISUAL_STYLE_KEY, id === "moebius" ? "moebius" : "neon");
   } catch {
     // localStorage may be unavailable
   }

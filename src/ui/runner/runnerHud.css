@@ -1484,7 +1484,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
 /* ── Meta: start nav, daily toggle ─────────────────────────────────── */
 .tk-nav {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin: 0 0 12px;
 }
@@ -2573,3 +2573,14 @@ html.runner-playing.runner-touch body .audio-btn-root {
 }
 
 .runner-hud.is-entering .rh-pause-btn { animation: ui-from-right 0.5s var(--ui-spring) 0.2s backwards; }
+
+/* ── Visual style toggle (start ticket) ───────────────────────────── */
+.tk-nav button.tk-style.is-on {
+  background: #f3e6c8;
+  color: #1a130e;
+  box-shadow: inset 0 0 0 2px #1a130e;
+}
+
+.tk-nav button.tk-style.is-on .t-meta {
+  color: #b8583c;
+}

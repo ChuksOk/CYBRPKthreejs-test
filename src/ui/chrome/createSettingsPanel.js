@@ -91,6 +91,8 @@ export function createSettingsPanel({
   onLookPresetChange,
   onRestart,
   graphics = null,
+  getVisualStyle = () => "neon",
+  onVisualStyleChange,
 } = {}) {
   const root = document.createElement("div");
   root.className = "settings-overlay";
@@ -108,6 +110,14 @@ export function createSettingsPanel({
           <div class="settings-look-grid" role="group" aria-label="Color look">
             ${renderLookButtons(lookOptions)}
           </div>
+          <label class="settings-option settings-option--style">
+            <span class="settings-option-text">
+              <span class="settings-option-title">Moebius comic mode</span>
+              <span class="settings-gfx-hint">Cel-shaded graphic-novel look: ink lines, flat pastel color, hatching</span>
+            </span>
+            <input type="checkbox" class="settings-toggle-input" data-visual-style aria-label="Moebius comic mode" />
+            <span class="settings-toggle" aria-hidden="true"></span>
+          </label>
         </div>
 
         ${renderGraphicsSection(graphics)}
@@ -134,7 +144,7 @@ export function createSettingsPanel({
           <span>Reset configs</span>
         </button>
         <p class="settings-restart-hint">
-          Resets look and graphics preferences and turns off development mode
+          Resets look, visual style and graphics preferences and turns off development mode
         </p>
       </div>
     </div>
@@ -146,6 +156,7 @@ export function createSettingsPanel({
   const restartButton = root.querySelector("[data-restart]");
   const lookButtons = [...root.querySelectorAll("[data-look-preset]")];
   const lookOptionIds = new Set(lookOptions.map((option) => option.id));
+  const styleToggle = root.querySelector("[data-visual-style]");
   const presetButtons = [...root.querySelectorAll("[data-graphics-preset]")];
   const graphicsInputs = [...root.querySelectorAll("[data-graphics-key]")];
   const presetLabel = root.querySelector("[data-graphics-preset-label]");
@@ -204,6 +215,7 @@ export function createSettingsPanel({
     syncLookPreset();
     graphics?.syncFromProfile?.();
     syncGraphics();
+    styleToggle.checked = getVisualStyle() === "moebius";
     root.hidden = false;
   }
 
@@ -273,6 +285,10 @@ export function createSettingsPanel({
       });
     }
   }
+
+  styleToggle.addEventListener("change", () => {
+    onVisualStyleChange?.(styleToggle.checked ? "moebius" : "neon");
+  });
 
   devToggle.addEventListener("change", () => {
     onDevelopmentModeChange?.(devToggle.checked);

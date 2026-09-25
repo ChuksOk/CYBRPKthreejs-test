@@ -379,6 +379,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   // ── Sector themes (colour grade per sector) ─────────────────────────────
   let pipeline = null;
+  let visualStyle = null;
   let basePreset = null;
   function applySectorTheme(sector) {
     if (!pipeline?.applyLookPreset) {
@@ -470,7 +471,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   function showStart() {
-    hud.showScreen("start", { best: game.best, special: specials.state.type, meta: metaSummary() });
+    hud.showScreen("start", {
+      best: game.best,
+      special: specials.state.type,
+      meta: metaSummary(),
+      style: visualStyle?.get() ?? "neon",
+    });
   }
 
   function enterMenu() {
@@ -731,6 +737,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         break;
       case "upgrade":
         hud.pickCard(data.id, () => pickUpgrade(data.id));
+        break;
+      case "style":
+        visualStyle?.set(visualStyle.get() === "moebius" ? "neon" : "moebius");
+        audio.ensureContext();
+        audio.play("pickup", { volume: 0.4 });
         break;
       case "photo-share":
         if (snapshots.getChosen()) {
@@ -1591,6 +1602,16 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     /** Post pipeline, for per-sector colour grades. */
     setPipeline: (value) => {
       pipeline = value;
+    },
+    /** { get(), set(id) } visual style controller (menu STYLE button). */
+    setVisualStyle: (value) => {
+      visualStyle = value;
+      // Keep the start ticket's STYLE chip in sync with Settings.
+      visualStyle?.onChange?.(() => {
+        if (game.state === "menu" && hud.getScreenMode() === "start") {
+          showStart();
+        }
+      });
     },
     enterMenu,
     placeAtStart,
