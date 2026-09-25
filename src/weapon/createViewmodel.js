@@ -3,9 +3,10 @@ import { createGunModel } from "../runner/models/createGunModels.js";
 import { WEAPONS } from "./weaponTypes.js";
 import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
 import { createMuzzleFlash } from "./createWeaponFx.js";
+import { createHands } from "./createHands.js";
 
 /** Grip sits bottom-right; the procedural carbine is modelled in meters. */
-const BASE_OFFSET = new THREE.Vector3(0.19, -0.2, -0.31);
+const BASE_OFFSET = new THREE.Vector3(0.165, -0.168, -0.37);
 
 function expLerpFactor(delta, speed) {
   return 1 - Math.exp(-delta * speed);
@@ -41,6 +42,9 @@ export function createViewmodel({ scene, camera }) {
   guns[0].root.visible = true;
   let muzzle = guns[0].muzzle;
 
+  const hands = createHands({ rig });
+  hands.attach(guns[0]);
+
   const flash = createMuzzleFlash();
   flash.mesh.visible = false;
   muzzle.add(flash.mesh);
@@ -68,6 +72,7 @@ export function createViewmodel({ scene, camera }) {
   function kick(strength = 1) {
     recoilVelocity += 3.2 * strength;
     flash.trigger();
+    hands.fire();
   }
 
   function setReloadProgress(t) {
@@ -94,6 +99,7 @@ export function createViewmodel({ scene, camera }) {
         guns[current].root.visible = true;
         muzzle = guns[current].muzzle;
         muzzle.add(flash.mesh);
+        hands.attach(guns[current]);
       }
       switchDip = -0.22 * Math.sin(Math.PI * switchT);
     }
@@ -126,8 +132,9 @@ export function createViewmodel({ scene, camera }) {
     let reloadRoll = 0;
     if (reloadT >= 0) {
       const s = Math.sin(Math.PI * reloadT);
-      reloadDip = -0.12 * s;
-      reloadRoll = 0.9 * s;
+      // Gentle tilt: the left hand does the visible work (createHands).
+      reloadDip = -0.035 * s;
+      reloadRoll = 0.45 * s;
     }
 
     pivot.position.set(
@@ -141,8 +148,11 @@ export function createViewmodel({ scene, camera }) {
       THREE.MathUtils.clamp(-motion.laneVelocity * 0.02, -0.25, 0.25) + reloadRoll * 0.6,
     );
 
+    hands.update(delta, reloadT);
+
     rig.position.copy(camera.position);
     rig.quaternion.copy(camera.quaternion);
+    hands.aimForearms();
     rig.updateMatrixWorld(true);
   }
 

@@ -21,6 +21,7 @@ import {
 } from "./bootstrap/createRenderer.js";
 import { createCameraDirector } from "./runtime/createCameraDirector.js";
 import { createRunnerGame } from "./runner/createRunnerGame.js";
+import { createWeatherSystem } from "./runner/createWeatherSystem.js";
 import { createDayNightCycle } from "./runner/createDayNightCycle.js";
 import { RUNNER } from "./runner/runnerConfig.js";
 import { FEATURES } from "./world/features.js";
@@ -182,15 +183,16 @@ async function init(loaderOverlay) {
     });
     world.collisionHideExtra = runnerGame.collisionHideObjects;
     runnerGame.setPipeline(pipeline);
-    runnerGame.setDayNight(
-      createDayNightCycle({
-        sceneResult,
-        sky: world.sky,
-        envMapBaseIntensity,
-        syncEnvironmentIntensity: lighting.syncEnvironmentIntensity,
-        requestShadowMapUpdate,
-      }),
-    );
+    const dayNight = createDayNightCycle({
+      sceneResult,
+      sky: world.sky,
+      envMapBaseIntensity,
+      syncEnvironmentIntensity: lighting.syncEnvironmentIntensity,
+      requestShadowMapUpdate,
+    });
+    runnerGame.setDayNight(dayNight);
+    world.weather = createWeatherSystem({ world, dayNight, audio: runnerGame.audio });
+    runnerGame.setWeather(world.weather);
     world.runnerWarm = runnerGame.warm;
     cameraDirector.setRunner(runnerGame);
     // Tiles beyond the last clone are empty — never draw past them.

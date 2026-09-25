@@ -4,6 +4,7 @@ import {
   AUTHOR_NAME,
   AUTHOR_URL,
   BASE_PROJECT_CREDIT,
+  GAME_TAGLINE,
   GAME_TITLE,
 } from "../../app/credits.js";
 
@@ -23,71 +24,111 @@ export function createAboutPanel({ state } = {}) {
   const root = document.createElement("div");
   root.className = "about-overlay";
   root.hidden = true;
+  const year = new Date().getFullYear();
+  const studioHost = AUTHOR_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const controls = [
+    ["A / D", "Switch lane"],
+    ["Space", "Jump"],
+    ["S", "Slide"],
+    ["Mouse", "Aim"],
+    ["Click", "Fire"],
+    ["R", "Reload"],
+    ["1–4 / Q", "Weapons"],
+    ["E", "Special"],
+  ];
+  const touchControls = [
+    ["Swipe ← →", "Switch lane"],
+    ["Swipe ↑", "Jump"],
+    ["Swipe ↓", "Slide"],
+    ["Auto", "Aim"],
+    ["FIRE", "Hold to shoot"],
+    ["SPECIAL", "When charged"],
+  ];
+  const controlRows = (rows) =>
+    rows.map(([key, label]) => `<li><kbd>${key}</kbd><span>${label}</span></li>`).join("");
+
   root.innerHTML = `
-    <button type="button" class="close-button-panel" aria-label="Close">
-      ${CLOSE_ICON}
-    </button>
+    <div class="ab-card" role="dialog" aria-modal="true" aria-labelledby="ab-title">
+      <button type="button" class="close-button-panel ab-close" aria-label="Close">
+        ${CLOSE_ICON}
+      </button>
 
-    <div class="about-content">
-      <div class="about-body">
-        <div class="about-brand">
-          <p class="about-brand-title">${GAME_TITLE}</p>
-          <small class="about-brand-subtitle">A GAME BY ${AUTHOR_NAME.toUpperCase()}</small>
-        </div>
-        <div class="about-copy">
-          <div class="about-copy-col">
-            <p class="about-lead">
-              ${GAME_TITLE} is a first-person endless runner and shooter set in a
-              rain-soaked cyberpunk alley under drone curfew. Run the street, switch
-              lanes, jump barriers, slide under beams and shoot the GIGI drone fleet
-              out of the sky.
+      <header class="ab-hero">
+        <span class="ab-kicker">About the game</span>
+        <h2 class="ab-title" id="ab-title">${GAME_TITLE}</h2>
+        <p class="ab-tagline">${GAME_TAGLINE}</p>
+      </header>
+
+      <div class="ab-grid">
+        <section class="ab-main">
+          <p class="ab-lead">
+            ${GAME_TITLE} is a first-person endless runner and shooter set in a
+            neon cyberpunk city under drone curfew. Sprint the street, switch lanes,
+            vault barriers, slide under beams and shoot the drone fleet out of the sky.
+          </p>
+          <p class="ab-text">
+            Every run builds on the last: pick upgrades at each sector gate, take down
+            carrier bosses, complete missions, climb 50 ranks and spend shards in the
+            Armory. The weather and the time of day change as you run.
+          </p>
+
+          <dl class="ab-stats">
+            <div><dt>Weapons</dt><dd>4</dd></div>
+            <div><dt>Drone classes</dt><dd>4</dd></div>
+            <div><dt>Upgrades</dt><dd>13</dd></div>
+            <div><dt>Ranks</dt><dd>50</dd></div>
+          </dl>
+
+          <div class="ab-section">
+            <h3 class="ab-h">Controls</h3>
+            <ul class="ab-keys ab-keys--desktop">${controlRows(controls)}</ul>
+            <ul class="ab-keys ab-keys--mobile">${controlRows(touchControls)}</ul>
+          </div>
+        </section>
+
+        <aside class="ab-side">
+          <div class="ab-studio">
+            <span class="ab-kicker">Developed by</span>
+            <p class="ab-studio-name">${AUTHOR_NAME}</p>
+            <p class="ab-text">Game design, combat systems, drones, weapons and interface.</p>
+            <a class="ab-cta about-link-author" href="${AUTHOR_URL}" target="_blank" rel="noopener noreferrer">
+              <span>Visit ${studioHost}</span><span aria-hidden="true">↗</span>
+            </a>
+          </div>
+
+          <div class="ab-section">
+            <h3 class="ab-h">Built with</h3>
+            <ul class="ab-chips">
+              <li>Three.js WebGPU</li><li>TSL shaders</li><li>Web Audio</li><li>Vite</li>
+            </ul>
+          </div>
+
+          <div class="ab-section">
+            <h3 class="ab-h">Recommended</h3>
+            <p class="ab-small about-recommended about-recommended--desktop">
+              Chrome or Edge (latest) with WebGPU · discrete GPU or Apple M2+ · 16 GB RAM · headphones.
             </p>
-            <p class="about-lead">
-              Four VX-series weapons, three drone classes and an endless tiled city,
-              all rendered live in the browser with Three.js WebGPU and TSL shaders.
+            <p class="ab-small about-recommended about-recommended--mobile">
+              iPhone 15+ or a 2023 Android flagship · Chrome (latest) with WebGPU · landscape · headphones.
             </p>
           </div>
-          <div class="about-copy-col">
-            <p class="about-lead">
-              Designed and built by ${AUTHOR_NAME}: game design, runner and combat
-              systems, drones, weapons and the ticket-style interface.
-            </p>
-            <p class="about-lead about-lead--credit">
-              ${BASE_PROJECT_CREDIT} Sound effects: Kenney (CC0). Fonts: Barlow
-              Condensed &amp; JetBrains Mono (OFL).
-            </p>
-          </div>
-        </div>
+        </aside>
       </div>
 
-      <div class="about-footer">
-        <div class="about-buttons">
-          <button type="button" class="refresh-button-panel about-link-author">
-            ${AUTHOR_NAME}
-          </button>
-        </div>
-        <p class="about-model-credits">
-          © ${new Date().getFullYear()} ${AUTHOR_NAME}
-        </p>
-        <p class="about-recommended about-recommended--desktop">
-          <span class="about-recommended-title">Recommended setup</span>
-          GPU power and 16 GB RAM are what matter most. Mac: M2 or newer.
-          PC: discrete GPU, 16 GB RAM.
-          Chrome or Edge (latest) · WebGPU required · 1080p fullscreen (4K scales down automatically).
-          A/D lanes · Space jump · S slide · mouse aim · click fire · 1–4 / Q weapons · headphones recommended.
-        </p>
-        <p class="about-recommended about-recommended--mobile">
-          <span class="about-recommended-title">Recommended setup</span>
-          iPhone 15 or newer · Android: 2023 flagship or newer (Snapdragon 8 Gen 2 / equivalent, 8 GB RAM).
-          Chrome (latest) · WebGPU required · landscape orientation.
-          Swipe left side to move · drag right side to aim · tap weapon chip to switch · headphones recommended.
-        </p>
-      </div>
+      <footer class="ab-footer">
+        <p>© ${year} ${AUTHOR_NAME}. All rights reserved.</p>
+        <p class="ab-credit">${BASE_PROJECT_CREDIT} Sound: Kenney (CC0). Fonts: Barlow Condensed &amp; JetBrains Mono (OFL).</p>
+      </footer>
     </div>
   `;
 
+  root.addEventListener("click", (event) => {
+    if (event.target === root) {
+      close();
+    }
+  });
+
   const closeButton = root.querySelector(".close-button-panel");
-  const authorButton = root.querySelector(".about-link-author");
   const desktopRecommended = root.querySelector(".about-recommended--desktop");
   const mobileRecommended = root.querySelector(".about-recommended--mobile");
 
@@ -95,6 +136,7 @@ export function createAboutPanel({ state } = {}) {
     const mobile = isMobileLayout();
     desktopRecommended.hidden = mobile;
     mobileRecommended.hidden = !mobile;
+    root.classList.toggle("ab-is-mobile", mobile);
   }
 
   syncRecommendedVisibility();
@@ -113,9 +155,6 @@ export function createAboutPanel({ state } = {}) {
 
   closeButton.addEventListener("click", close);
 
-  authorButton.addEventListener("click", () => {
-    window.open(AUTHOR_URL, "_blank", "noopener,noreferrer");
-  });
 
   function onKeyDown(event) {
     if (event.key === "Escape" && !root.hidden) {

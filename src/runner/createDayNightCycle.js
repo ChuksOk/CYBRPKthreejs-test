@@ -67,6 +67,9 @@ export function createDayNightCycle({
     fillIntensity: 0,
     env: 0,
   };
+  // Weather layer (set by createWeatherSystem): 0..1 cloud dimming, 0..1
+  // overcast sky, 0..1 lightning flash.
+  const weather = { dim: 0, overcast: 0, flash: 0 };
   let shadowTimer = 0;
   let lastShadowPhase = -1;
 
@@ -83,10 +86,18 @@ export function createDayNightCycle({
       lerpKey(KEYS.twilight, KEYS.day, THREE.MathUtils.smoothstep(day, 0.5, 1), mix);
     }
 
-    sunLight.color.copy(mix.keyColor);
-    sunLight.intensity = mix.keyIntensity;
+    // Overcast desaturates toward a cool grey and dims the key light.
+    const grey = _c.setRGB(0.62, 0.66, 0.74);
+    mix.skyTop.lerp(_a.copy(mix.skyTop).multiplyScalar(0.45).lerp(grey.clone().multiplyScalar(0.35 * day + 0.06), 0.6), weather.overcast);
+    mix.skyBottom.lerp(_b.copy(mix.skyBottom).multiplyScalar(0.55), weather.overcast);
+    sunLight.color.copy(mix.keyColor).lerp(grey, weather.overcast * 0.5);
+    sunLight.intensity = mix.keyIntensity * (1 - weather.dim * 0.65) + weather.flash * 40;
     fillLight.color.copy(mix.fillColor);
-    fillLight.intensity = mix.fillIntensity;
+    fillLight.intensity = mix.fillIntensity * (1 - weather.dim * 0.3) + weather.flash * 18;
+    mix.env = mix.env * (1 - weather.dim * 0.45) + weather.flash * 1.2;
+    if (weather.flash > 0) {
+      mix.skyTop.lerp(_a.setRGB(0.75, 0.8, 1), weather.flash * 0.6);
+    }
 
     // Arc: sun (day) or moon (night) sweeps east → west over the street.
     const sweep = Math.sin(angle);
@@ -102,6 +113,7 @@ export function createDayNightCycle({
     sky?.updateFromSun({
       evening: twilight,
       night: 1 - day,
+      overcast: weather.overcast,
       skyTop: mix.skyTop,
       skyBottom: mix.skyBottom,
     });
@@ -155,5 +167,12 @@ export function createDayNightCycle({
 
   apply();
 
-  return { state, update, setPhase, getClock, getLabel, apply, restoreBase };
+  function setWeather({ dim = 0, overcast = 0, flash = 0 }) {
+    weather.dim = dim;
+    weather.overcast = overcast;
+    weather.flash = flash;
+    apply();
+  }
+
+  return { state, update, setPhase, getClock, getLabel, apply, restoreBase, setWeather };
 }

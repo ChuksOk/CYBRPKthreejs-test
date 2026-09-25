@@ -58,6 +58,16 @@ With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first
 - **Special attacks:** landing shots charges a special, and you pick one per run on the start ticket. **Ally drone** deploys a small sphere drone that fights for you until it's destroyed; **Seeker** fires a heat-seeking grenade that homes in on the nearest drone and detonates (`src/weapon/createSpecials.js`).
 - **Mobile HUD:** shows only score, two slim bars, target brackets, the current weapon chip, and the FIRE / SPECIAL buttons. The header and audio button hide while you play.
 - **Day-night cycle:** a full day every 2 minutes of running (night → dawn → day → dusk). It drives the sun/moon light, environment light, sky gradient and clouds, and a clock on the score ticket (`src/runner/createDayNightCycle.js`; `cycleSeconds` to tune).
+- **Weather:** the sky changes as you run. It moves between CLEAR, CLOUDY, DRIZZLE, RAIN and STORM, holding each for 35–70 s and blending over about 10 s (`src/runner/createWeatherSystem.js`).
+  - Rain density and splashes follow the current state.
+  - Roads stay wet after the rain stops and dry slowly.
+  - Clouds thicken and the light dims as it gets overcast; storms add lightning and distant thunder.
+  - Each run starts in a random non-storm state, and the current weather shows on the score ticket clock.
+  - When it's dry, the rain particles and their collision-height pass are skipped entirely, so clear weather renders faster.
+- **Hands:** procedural gloved hands with off-white knuckle armour, neon trim and techwear sleeves (`src/weapon/createHands.js`).
+  - Each hand has articulated fingers and a thumb, mounted on per-gun grip anchors.
+  - The trigger finger squeezes on every shot, and the left hand reaches for the magazine on reload.
+  - The fingers idle slightly, and the forearms angle toward elbow points out of frame.
 - **Visuals:** neon lane markers with a pulse that runs toward you (one instanced draw, `src/runner/createLaneLights.js`); explosions with a billowing fireball, a shockwave ring and rising smoke, tinted by your Armory explosion colour; speed lines near top speed and during overclock.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier that heats up (colour and glow) as it climbs.

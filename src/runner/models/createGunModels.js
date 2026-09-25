@@ -89,7 +89,36 @@ function createAmmoScreen() {
 
 let sharedMaterials = null;
 
-function getSharedMaterials() {
+/**
+ * Hand pose = palm position + hand basis (finger dir, back-of-hand normal)
+ * in gun-local space, plus how tightly the fingers curl for that grip.
+ */
+function handAnchor(parent, { position, fingers, back, curl = 1, index = null }) {
+  const anchor = new THREE.Object3D();
+  const y = new THREE.Vector3(...fingers).normalize();
+  const z = new THREE.Vector3(...back).normalize();
+  const x = new THREE.Vector3().crossVectors(y, z).normalize();
+  z.crossVectors(x, y).normalize();
+  anchor.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  anchor.position.set(...position);
+  anchor.userData.curl = curl;
+  anchor.userData.index = index;
+  parent.add(anchor);
+  return anchor;
+}
+
+// Right hand: palm on the right (+Z) of the grip, fingers wrap forward and
+// round to the player side; index finger rests on the trigger.
+const RIGHT_PISTOL = { position: [-0.085, -0.085, 0.034], fingers: [0.92, -0.4, 0], back: [0, 0, 1], curl: 1, index: 0.55 };
+const RIGHT_STOCK = { position: [-0.19, -0.075, 0.042], fingers: [0.8, -0.6, 0], back: [0, 0, 1], curl: 0.95, index: 0.5 };
+// Left hand: back of the hand faces the player (−Z).
+const leftLoop = (gx) => ({ position: [gx - 0.07, -0.075, -0.036], fingers: [0.98, 0.2, 0], back: [0, 0, -1], curl: 1 });
+// Rail: hand hangs under the rod like on a handstop.
+const leftRail = (L) => ({ position: [Math.min(0.36, L * 0.38), -0.07, -0.036], fingers: [0.98, 0.2, 0], back: [0, 0, -1], curl: 0.95 });
+const magBox = (mx, h) => ({ position: [mx - 0.01, -0.06 - h * 0.7, -0.036], fingers: [0.95, 0.3, 0], back: [0, 0, -1], curl: 0.85 });
+const MAG_CELL = { position: [0.08, -0.045, -0.045], fingers: [1, 0.1, 0], back: [0, 0, -1], curl: 0.8 };
+
+export function getSharedMaterials() {
   if (!sharedMaterials) {
     sharedMaterials = {
       body: cerakote({ tint: OFF_WHITE, roughness: 0.52 }),
@@ -254,10 +283,19 @@ function buildGun(specId) {
   muzzle.rotation.y = Math.PI / 2;
   inner.add(muzzle);
 
+  // ── Hand anchors (gun-local: +X muzzle, +Y up, −Z player side) ─────────
+  // Each anchor is the palm-centre frame of a hand: local +Y = finger
+  // direction, +Z = back of the hand, curl wraps toward −Z.
+  const anchors = {
+    right: handAnchor(inner, spec.pistol ? RIGHT_PISTOL : RIGHT_STOCK),
+    left: handAnchor(inner, spec.grip === "loop" ? leftLoop(spec.stock === "skeleton" ? 0.2 : 0.24) : leftRail(L)),
+    mag: handAnchor(inner, spec.mag === "cell" ? MAG_CELL : magBox(spec.stock === "skeleton" ? 0.07 : 0.08, spec.mag === "long" ? 0.2 : 0.14)),
+  };
+
   const root = new THREE.Group();
   root.name = `gun-${specId}`;
   root.add(inner);
-  return { root, muzzle, drawAmmo: ammoScreen.draw, length: L };
+  return { root, muzzle, drawAmmo: ammoScreen.draw, length: L, anchors };
 }
 
 /** @param {"carbine"|"smg"|"rail"|"heavy"} id */

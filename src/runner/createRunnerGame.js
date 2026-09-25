@@ -465,6 +465,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     setRunSeed(game.daily ? todayKey() : null);
     game.nextObstacleX = controls.state.x + FIRST_OBSTACLE_DISTANCE;
     progression.beginRun();
+    weather?.randomize();
     applySectorTheme(1);
     game.tutorial = !meta.tutorialDone && !game.daily ? 0 : -1;
   }
@@ -1056,6 +1057,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const targets = [];
   let dayNight = null;
+  let weather = null;
 
   function collectThreats() {
     threats.length = 0;
@@ -1118,7 +1120,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       spread: weapon?.state.spread ?? 0,
       weaponIndex: weapon?.state.index ?? 0,
       threats: collectThreats(),
-      clock: dayNight ? `${dayNight.getClock()} ${dayNight.getLabel()}` : "",
+      clock: dayNight ? `${dayNight.getClock()} ${dayNight.getLabel()}${weather ? ` · ${weather.getLabel()}` : ""}` : "",
       special: {
         type: specials.state.type,
         charge: specials.state.charge,
@@ -1318,6 +1320,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.distance += step;
     cleanRun += step;
     dayNight?.update(delta);
+    weather?.update(delta);
 
     game.sinceDamage += delta;
     if (game.sinceDamage > RUNNER.shieldRechargeDelay) {
@@ -1491,6 +1494,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       dayNight = cycle;
     },
     getDayNight: () => dayNight,
+    setWeather: (system) => {
+      weather = system;
+    },
+    getWeather: () => weather,
     /** Post pipeline, for per-sector colour grades. */
     setPipeline: (value) => {
       pipeline = value;
