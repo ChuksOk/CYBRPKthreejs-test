@@ -518,3 +518,87 @@
   accent-color: #22d3ee;
   cursor: pointer;
 }
+
+/* ── Comic style (Moebius) tuning ─────────────────────────────────── */
+.settings-moebius {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings-preset-row--wrap {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+
+.settings-moebius-preset {
+  padding: 10px 6px;
+  font-size: 0.6rem;
+}
+
+.settings-gfx-group {
+  margin: 10px 0 2px;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(34, 211, 238, 0.7);
+}
+
+.settings-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 6px;
+}
+
+.settings-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+
+.settings-swatch input[type="color"] {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: none;
+  cursor: pointer;
+}
+
+.settings-swatch input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.settings-swatch input[type="color"]::-webkit-color-swatch {
+  border: 0;
+}
+
+.settings-swatch span {
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.settings-mini-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+  color: rgba(255, 190, 190, 0.95);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.settings-mini-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}

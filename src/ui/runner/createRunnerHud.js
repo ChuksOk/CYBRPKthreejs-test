@@ -317,6 +317,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
         ["1–4 / Q", "WEAPON"],
         ["E", "SPECIAL"],
         ["ESC", "PAUSE"],
+        ["T", "AIM ASSIST"],
       ];
   const controlsHtml = controls
     .map(([key, label]) => `<div class="k-row"><kbd>${key}</kbd><span>${label}</span></div>`)
@@ -398,8 +399,9 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       return "";
     }
     return `
-      <figure class="go-photo-frame">
+      <figure class="go-photo-frame" data-action="photo-view" role="button" tabindex="0" title="View full screen">
         <img src="${photo.url}" alt="Snapshot from this run" />
+        <span class="go-photo-expand" aria-hidden="true">⛶</span>
         <figcaption><span class="go-photo-rec">● REC</span><b>${photo.label}</b><span>${pad(photo.distance, 4)}M</span></figcaption>
       </figure>
       <div class="go-photo-actions">
@@ -410,13 +412,126 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
   }
 
   function setPhoto(photo) {
+    currentPhoto = photo;
     const slot = screen.querySelector("[data-photo]");
     if (slot) {
       slot.innerHTML = renderPhoto(photo);
     }
+    if (viewer.isOpen()) {
+      viewer.show(photo);
+    }
   }
 
+  // ── Full-screen snapshot viewer (game over) ──────────────────────────
+  let currentPhoto = null;
+  const viewer = (() => {
+    const el = document.createElement("div");
+    el.className = "photo-viewer";
+    el.hidden = true;
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", "Snapshot viewer");
+    el.innerHTML = `
+      <img class="pv-img" alt="Snapshot from this run" />
+      <div class="pv-top">
+        <span class="pv-rec">● REC</span>
+        <b class="pv-label"></b>
+        <span class="t-meta pv-meta"></span>
+        <button type="button" class="pv-btn pv-close" data-pv="close" aria-label="Close (Esc)">✕</button>
+      </div>
+      <div class="pv-bar">
+        <button type="button" class="pv-btn" data-pv="another" title="Another snapshot (← / →)">⟳ ANOTHER</button>
+        <button type="button" class="pv-btn" data-pv="save" title="Save photo card">↓ SAVE</button>
+        <button type="button" class="pv-btn pv-btn--main" data-pv="share" title="Share photo card">SHARE PIC ⇪</button>
+      </div>`;
+    document.body.appendChild(el);
+    const img = el.querySelector(".pv-img");
+    const label = el.querySelector(".pv-label");
+    const meta = el.querySelector(".pv-meta");
+    const another = el.querySelector('[data-pv="another"]');
+
+    function show(photo) {
+      if (!photo) {
+        return;
+      }
+      img.src = photo.url;
+      label.textContent = photo.label;
+      meta.textContent = `${pad(photo.distance, 4)} M${photo.count > 1 ? ` · ${photo.count} SHOTS THIS RUN` : ""}`;
+      another.hidden = !(photo.count > 1);
+    }
+
+    function open() {
+      if (!currentPhoto) {
+        return;
+      }
+      show(currentPhoto);
+      el.hidden = false;
+      requestAnimationFrame(() => el.classList.add("is-open"));
+      // PC: real browser fullscreen for the photo.
+      if (!isTouch && el.requestFullscreen && !document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {});
+      }
+    }
+
+    function close() {
+      if (el.hidden) {
+        return;
+      }
+      el.classList.remove("is-open");
+      el.hidden = true;
+      if (document.fullscreenElement === el) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    }
+
+    el.addEventListener("click", (event) => {
+      const cmd = event.target.closest("[data-pv]")?.dataset.pv;
+      if (!cmd) {
+        if (event.target === el) {
+          close();
+        }
+        return;
+      }
+      event.stopPropagation();
+      if (cmd === "close") {
+        close();
+      } else if (cmd === "another") {
+        handlers.action?.("photo-next", {});
+      } else if (cmd === "save") {
+        handlers.action?.("photo-save", {});
+      } else if (cmd === "share") {
+        handlers.action?.("photo-share", {});
+      }
+    });
+    // Browser Esc leaves fullscreen first: close the viewer with it.
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && !el.hidden) {
+        close();
+      }
+    });
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (el.hidden) {
+          return;
+        }
+        if (event.key === "Escape") {
+          close();
+        } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && !another.hidden) {
+          handlers.action?.("photo-next", {});
+        }
+        // While viewing, keys stay here (Enter would restart the run).
+        if (event.key !== "Tab") {
+          event.stopPropagation();
+        }
+      },
+      { capture: true },
+    );
+
+    return { open, close, show, isOpen: () => !el.hidden };
+  })();
+
   function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null }) {
+    currentPhoto = photo;
     screen.innerHTML = `
       <div class="ticket ticket--over">
         <div class="tk-main">
@@ -464,6 +579,11 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       return;
     }
     const action = event.target?.closest?.("[data-action]")?.dataset.action;
+    if (action === "photo-view") {
+      event.stopPropagation();
+      viewer.open();
+      return;
+    }
     if (action && handlers[action]) {
       event.stopPropagation();
       handlers[action]();

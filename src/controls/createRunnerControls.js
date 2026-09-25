@@ -150,6 +150,10 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       return;
     }
     applyLookDelta(event.movementX * MOUSE_SENSITIVITY, event.movementY * MOUSE_SENSITIVITY);
+    // Deliberate mouse aim briefly suspends PC aim assist (tiny jitter doesn't).
+    if (Math.abs(event.movementX) + Math.abs(event.movementY) > 4) {
+      lastMouseLook = performance.now();
+    }
   }
 
   function onMouseDown(event) {
@@ -208,14 +212,26 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
 
   // ── Touch: left half = swipes, right half = aim drag (auto-aim otherwise) ─
   let lastManualLook = -1e9;
+  let lastMouseLook = -1e9;
   const _aimDir = new THREE.Vector3();
 
   /**
    * Touch auto-aim: ease the look toward a world point (or back to the run
    * heading when null). A manual drag suspends it for a moment.
    */
-  function autoAim(target, delta) {
-    if (!state.active || !state.inputEnabled || performance.now() - lastManualLook < 900) {
+  /**
+   * @param {THREE.Vector3|null} target
+   * @param {number} delta
+   * @param {{ recenter?: boolean, speed?: number, holdMs?: number }} [options]
+   *   recenter: ease back to the run heading with no target (touch);
+   *   speed: pull rate toward a target; holdMs: pause after manual look.
+   */
+  function autoAim(target, delta, { recenter = true, speed: targetSpeed = 7, holdMs = 900 } = {}) {
+    const now = performance.now();
+    if (!state.active || !state.inputEnabled || now - lastManualLook < holdMs || now - lastMouseLook < holdMs) {
+      return;
+    }
+    if (!target && !recenter) {
       return;
     }
     let yaw = 0;
@@ -226,7 +242,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       const worldYaw = Math.atan2(-_aimDir.x, -_aimDir.z);
       yaw = THREE.MathUtils.euclideanModulo(worldYaw - RUN_HEADING + Math.PI, Math.PI * 2) - Math.PI;
       pitch = Math.asin(THREE.MathUtils.clamp(_aimDir.y, -1, 1));
-      speed = 7;
+      speed = targetSpeed;
     }
     yaw = THREE.MathUtils.clamp(yaw, -RUNNER.maxYaw, RUNNER.maxYaw);
     pitch = THREE.MathUtils.clamp(pitch, RUNNER.minPitch, RUNNER.maxPitch);

@@ -2594,3 +2594,136 @@ html.runner-playing.runner-touch body .audio-btn-root {
 .tk-nav button.tk-music .t-meta {
   color: var(--t-pink);
 }
+
+/* ── Snapshot: expand hint + full-screen viewer ───────────────────── */
+.go-photo-frame {
+  cursor: zoom-in;
+}
+
+.go-photo-expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(12, 14, 19, 0.75);
+  color: var(--t-acid);
+  font-size: 15px;
+  opacity: 0.8;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.go-photo-frame:hover .go-photo-expand {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 4vh, 48px) clamp(12px, 4vw, 64px);
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1.2px) 0 0 / 9px 9px,
+    rgba(6, 7, 10, 0.94);
+  opacity: 0;
+  cursor: zoom-out;
+  transition: opacity 0.25s ease;
+}
+
+.photo-viewer[hidden] {
+  display: none;
+}
+
+.photo-viewer.is-open {
+  opacity: 1;
+}
+
+.pv-img {
+  max-width: 100%;
+  max-height: calc(100% - 120px);
+  object-fit: contain;
+  box-shadow: 0 0 0 4px #0c0e13, 0 0 0 7px #d9ff3b, 0 30px 80px rgba(0, 0, 0, 0.6);
+  cursor: default;
+  transform: scale(0.96);
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.photo-viewer.is-open .pv-img {
+  transform: none;
+}
+
+.pv-top,
+.pv-bar {
+  position: absolute;
+  left: clamp(12px, 4vw, 64px);
+  right: clamp(12px, 4vw, 64px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+
+.pv-top {
+  top: 14px;
+  color: #e9ebee;
+}
+
+.pv-bar {
+  bottom: 16px;
+  justify-content: center;
+}
+
+.pv-rec {
+  color: #ff4f74;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pv-label {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  color: #d9ff3b;
+}
+
+.pv-meta {
+  flex: 1;
+  color: #8b919c;
+}
+
+.pv-btn {
+  appearance: none;
+  padding: 10px 16px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e9ebee;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+.pv-btn:hover {
+  background: #ff4f74;
+  color: #0c0e13;
+}
+
+.pv-btn--main {
+  background: #d9ff3b;
+  color: #0c0e13;
+}
+
+.pv-close {
+  width: 44px;
+  padding: 10px 0;
+}

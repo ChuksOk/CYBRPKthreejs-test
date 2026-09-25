@@ -81,6 +81,100 @@ function renderGraphicsSection(graphics) {
         </div>`;
 }
 
+function renderMoebiusSection(moebius) {
+  if (!moebius) {
+    return "";
+  }
+  const presets = moebius.presets
+    .map(
+      (preset) => `
+      <button type="button" class="settings-preset-btn settings-moebius-preset" data-moebius-preset="${preset.id}" aria-pressed="false" title="${preset.hint}">
+        ${preset.label}
+      </button>`,
+    )
+    .join("");
+  const groups = [...new Set(moebius.options.map((option) => option.group))];
+  const body = groups
+    .map((group) => {
+      const options = moebius.options.filter((option) => option.group === group);
+      if (group === "Palette") {
+        return `
+          <p class="settings-gfx-group">${group}</p>
+          <div class="settings-swatch-grid">
+            ${options
+              .map(
+                (option) => `
+              <label class="settings-swatch">
+                <input type="color" data-moebius-key="${option.key}" aria-label="${option.label}" />
+                <span>${option.label}</span>
+              </label>`,
+              )
+              .join("")}
+          </div>`;
+      }
+      return `
+        <p class="settings-gfx-group">${group}</p>
+        ${options
+          .map(
+            (option) => `
+          <label class="settings-gfx-row settings-gfx-row--range">
+            <span class="settings-gfx-text">
+              <span class="settings-gfx-title">${option.label}</span>
+              <span class="settings-gfx-value" data-moebius-value="${option.key}"></span>
+            </span>
+            <input type="range" class="settings-gfx-range" data-moebius-key="${option.key}"
+              min="${option.min}" max="${option.max}" step="${option.step}" aria-label="${option.label}" />
+          </label>`,
+          )
+          .join("")}`;
+    })
+    .join("");
+  return `
+          <div class="settings-moebius">
+            <p class="settings-gfx-hint">Comic style presets (applies in Moebius mode)</p>
+            <div class="settings-preset-row settings-preset-row--wrap" role="group" aria-label="Comic style preset">
+              ${presets}
+            </div>
+            <details class="settings-gfx-advanced">
+              <summary>
+                <span>Tune comic style</span>
+                <span class="settings-gfx-preset-label" data-moebius-preset-label></span>
+              </summary>
+              <div class="settings-gfx-list">
+                ${body}
+                <button type="button" class="settings-mini-btn" data-moebius-reset>Reset comic style</button>
+              </div>
+            </details>
+          </div>`;
+}
+
+function renderGameplaySection(gameplay) {
+  if (!gameplay?.showAimAssist) {
+    return "";
+  }
+  return `
+        <div class="settings-divider" role="separator"></div>
+
+        <div class="settings-section">
+          <p class="settings-section-title">Gameplay</p>
+          <label class="settings-gfx-row">
+            <span class="settings-gfx-text">
+              <span class="settings-gfx-title">Aim assist (mouse)</span>
+              <span class="settings-gfx-hint">Gently pulls your aim toward the most urgent drone · toggle in-run with T</span>
+            </span>
+            <input type="checkbox" class="settings-toggle-input" data-gameplay-key="aimAssist" aria-label="Aim assist" />
+            <span class="settings-toggle" aria-hidden="true"></span>
+          </label>
+          <label class="settings-gfx-row settings-gfx-row--range">
+            <span class="settings-gfx-text">
+              <span class="settings-gfx-title">Aim assist strength</span>
+              <span class="settings-gfx-value" data-gameplay-value="aimAssistStrength"></span>
+            </span>
+            <input type="range" class="settings-gfx-range" min="0.1" max="1" step="0.05" data-gameplay-key="aimAssistStrength" aria-label="Aim assist strength" />
+          </label>
+        </div>`;
+}
+
 export function createSettingsPanel({
   state,
   lookOptions = [],
@@ -93,6 +187,8 @@ export function createSettingsPanel({
   graphics = null,
   getVisualStyle = () => "neon",
   onVisualStyleChange,
+  moebius = null,
+  gameplay = null,
 } = {}) {
   const root = document.createElement("div");
   root.className = "settings-overlay";
@@ -113,14 +209,17 @@ export function createSettingsPanel({
           <label class="settings-option settings-option--style">
             <span class="settings-option-text">
               <span class="settings-option-title">Moebius comic mode</span>
-              <span class="settings-gfx-hint">Cel-shaded graphic-novel look: ink lines, flat pastel color, hatching</span>
+              <span class="settings-gfx-hint">Cel-shaded graphic-novel look: ink lines, bold flat color, hatching</span>
             </span>
             <input type="checkbox" class="settings-toggle-input" data-visual-style aria-label="Moebius comic mode" />
             <span class="settings-toggle" aria-hidden="true"></span>
           </label>
+          ${renderMoebiusSection(moebius)}
         </div>
 
         ${renderGraphicsSection(graphics)}
+
+        ${renderGameplaySection(gameplay)}
 
         <div class="settings-divider" role="separator"></div>
 
@@ -144,7 +243,7 @@ export function createSettingsPanel({
           <span>Reset configs</span>
         </button>
         <p class="settings-restart-hint">
-          Resets look, visual style and graphics preferences and turns off development mode
+          Resets look, visual style, comic style, graphics and gameplay preferences and turns off development mode
         </p>
       </div>
     </div>
@@ -157,6 +256,59 @@ export function createSettingsPanel({
   const lookButtons = [...root.querySelectorAll("[data-look-preset]")];
   const lookOptionIds = new Set(lookOptions.map((option) => option.id));
   const styleToggle = root.querySelector("[data-visual-style]");
+  const moebiusPresetButtons = [...root.querySelectorAll("[data-moebius-preset]")];
+  const moebiusInputs = [...root.querySelectorAll("[data-moebius-key]")];
+  const moebiusPresetLabel = root.querySelector("[data-moebius-preset-label]");
+  const gameplayInputs = [...root.querySelectorAll("[data-gameplay-key]")];
+
+  function formatMoebius(key, value) {
+    const option = moebius?.options.find((entry) => entry.key === key);
+    return option?.format ? option.format(Number(value)) : String(value);
+  }
+
+  function syncMoebius() {
+    if (!moebius) {
+      return;
+    }
+    const values = moebius.getValues();
+    const presetId = moebius.getPreset();
+    for (const button of moebiusPresetButtons) {
+      const selected = button.dataset.moebiusPreset === presetId;
+      button.classList.toggle("settings-preset-btn--active", selected);
+      button.setAttribute("aria-pressed", selected ? "true" : "false");
+    }
+    if (moebiusPresetLabel) {
+      moebiusPresetLabel.textContent =
+        presetId === "custom" ? "Custom" : moebius.presets.find((p) => p.id === presetId)?.label ?? "";
+    }
+    for (const input of moebiusInputs) {
+      const key = input.dataset.moebiusKey;
+      input.value = String(values[key]);
+      const label = root.querySelector(`[data-moebius-value="${key}"]`);
+      if (label) {
+        label.textContent = formatMoebius(key, values[key]);
+      }
+    }
+  }
+
+  function syncGameplay() {
+    if (!gameplay) {
+      return;
+    }
+    const values = gameplay.get();
+    for (const input of gameplayInputs) {
+      const key = input.dataset.gameplayKey;
+      if (input.type === "checkbox") {
+        input.checked = Boolean(values[key]);
+      } else {
+        input.value = String(values[key]);
+        const label = root.querySelector(`[data-gameplay-value="${key}"]`);
+        if (label) {
+          label.textContent = `${Math.round(values[key] * 100)}%`;
+        }
+      }
+    }
+  }
   const presetButtons = [...root.querySelectorAll("[data-graphics-preset]")];
   const graphicsInputs = [...root.querySelectorAll("[data-graphics-key]")];
   const presetLabel = root.querySelector("[data-graphics-preset-label]");
@@ -216,6 +368,8 @@ export function createSettingsPanel({
     graphics?.syncFromProfile?.();
     syncGraphics();
     styleToggle.checked = getVisualStyle() === "moebius";
+    syncMoebius();
+    syncGameplay();
     root.hidden = false;
   }
 
@@ -286,6 +440,49 @@ export function createSettingsPanel({
     }
   }
 
+  for (const button of moebiusPresetButtons) {
+    button.addEventListener("click", () => {
+      moebius?.setPreset(button.dataset.moebiusPreset);
+      // A preset is only visible in Moebius mode: switch it on.
+      if (getVisualStyle() !== "moebius") {
+        onVisualStyleChange?.("moebius");
+        styleToggle.checked = true;
+      }
+      syncMoebius();
+    });
+  }
+
+  for (const input of moebiusInputs) {
+    // Uniform updates are cheap: apply live while dragging.
+    input.addEventListener("input", () => {
+      const key = input.dataset.moebiusKey;
+      moebius?.set(key, input.type === "color" ? input.value : Number(input.value));
+      const label = root.querySelector(`[data-moebius-value="${key}"]`);
+      if (label) {
+        label.textContent = formatMoebius(key, input.value);
+      }
+      if (moebiusPresetLabel) {
+        moebiusPresetLabel.textContent = "Custom";
+      }
+      for (const button of moebiusPresetButtons) {
+        button.classList.remove("settings-preset-btn--active");
+        button.setAttribute("aria-pressed", "false");
+      }
+    });
+  }
+
+  root.querySelector("[data-moebius-reset]")?.addEventListener("click", () => {
+    moebius?.reset();
+    syncMoebius();
+  });
+
+  for (const input of gameplayInputs) {
+    input.addEventListener(input.type === "checkbox" ? "change" : "input", () => {
+      gameplay?.set(input.dataset.gameplayKey, input.type === "checkbox" ? input.checked : Number(input.value));
+      syncGameplay();
+    });
+  }
+
   styleToggle.addEventListener("change", () => {
     onVisualStyleChange?.(styleToggle.checked ? "moebius" : "neon");
   });
@@ -296,7 +493,7 @@ export function createSettingsPanel({
 
   restartButton.addEventListener("click", () => {
     const confirmed = window.confirm(
-      "Reset configs? Look and graphics preferences will return to default and development mode will turn off.",
+      "Reset configs? Look, comic style, graphics and gameplay preferences will return to default and development mode will turn off.",
     );
     if (!confirmed) {
       return;
@@ -332,6 +529,8 @@ export function createSettingsPanel({
     syncDevelopmentMode,
     syncLookPreset,
     syncGraphics,
+    syncMoebius,
+    syncGameplay,
     destroy() {
       document.removeEventListener("keydown", onKeyDown);
       root.remove();

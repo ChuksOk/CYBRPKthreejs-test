@@ -77,6 +77,8 @@ export function createAppShell({
   syncLighting,
   graphics = null,
   visualStyle = null,
+  moebiusSettings = null,
+  gameplay = null,
 }) {
   const uiState = createAppUiState();
   let finishedIntro = false;
@@ -144,8 +146,12 @@ export function createAppShell({
         graphics,
         getVisualStyle: () => pipeline.getVisualStyle?.() ?? "neon",
         onVisualStyleChange: (id) => visualStyle?.set(id),
+        moebius: moebiusSettings,
+        gameplay,
         onRestart: () => {
           visualStyle?.set("neon");
+          moebiusSettings?.reset();
+          gameplay?.reset();
           clearAllStoredPreferences();
           graphics?.reset();
           settingsPanelRef?.syncGraphics();

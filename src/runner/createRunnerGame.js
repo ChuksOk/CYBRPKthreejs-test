@@ -14,6 +14,11 @@ import { savePhoto, sharePhoto, shareRun } from "../ui/runner/shareCard.js";
 import { createRunSnapshots } from "./createRunSnapshots.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
 import { createMusicPlayer } from "../audio/createMusicPlayer.js";
+import {
+  getGameplaySettings,
+  onGameplaySettingsChange,
+  setGameplaySetting,
+} from "../platform/gameplaySettings.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import {
   getStoredRunnerBest,
@@ -88,6 +93,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     baseFov,
   });
   const isTouch = controls.isTouch();
+  // PC aim assist (Settings → Gameplay, or T in-run); touch always auto-aims.
+  let gameplayPrefs = getGameplaySettings();
+  onGameplaySettingsChange((prefs) => {
+    gameplayPrefs = prefs;
+  });
 
   const fx = createWeaponFx({ scene, camera });
   const audio = createRunnerAudio();
@@ -791,6 +801,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
 
   document.addEventListener("keydown", (event) => {
+    // T: toggle PC aim assist mid-run.
+    if (event.code === "KeyT" && !event.repeat && !isTouch && (game.state === "running" || game.state === "paused")) {
+      setGameplaySetting("aimAssist", !gameplayPrefs.aimAssist);
+      hud.showBanner(gameplayPrefs.aimAssist ? "AIM ASSIST ON" : "AIM ASSIST OFF", 1.1);
+      return;
+    }
     // N: skip to the next soundtrack track (menus and runs).
     if (event.code === "KeyN" && !event.repeat && music.getState().settings.source === "soundtrack") {
       music.next();
@@ -1405,6 +1421,13 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
     if (running && isTouch) {
       controls.autoAim(pickAutoAimTarget(), delta);
+    } else if (running && gameplayPrefs.aimAssist) {
+      // Mouse: soft magnetism toward a real target only, never re-centres.
+      controls.autoAim(pickAutoAimTarget(), delta, {
+        recenter: false,
+        speed: 1 + gameplayPrefs.aimAssistStrength * 5,
+        holdMs: 260,
+      });
     }
     specials.update(delta, player);
     weapon?.update(delta, { canFire: running });

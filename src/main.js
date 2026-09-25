@@ -54,6 +54,12 @@ import {
   setStoredVisualStyle,
 } from "./platform/userPreferences.js";
 import { createGraphicsSettings } from "./platform/graphicsSettings.js";
+import { createMoebiusSettings } from "./post/moebiusSettings.js";
+import {
+  getGameplaySettings,
+  resetGameplaySettings,
+  setGameplaySetting,
+} from "./platform/gameplaySettings.js";
 import {
   DEFAULT_LOOK_PRESET,
   LOOK_PRESETS,
@@ -154,6 +160,9 @@ async function init(loaderOverlay) {
     onChange: (listener) => visualStyleListeners.add(listener),
   };
   visualStyle.set(getStoredVisualStyle());
+  // Comic-style tuning / presets (live uniform edits, persisted).
+  const moebiusSettings = createMoebiusSettings({ moebius: pipeline.moebius });
+  moebiusSettings.applyStored();
 
   const adaptiveDpr = createAdaptiveDprController({
     renderer,
@@ -266,6 +275,14 @@ async function init(loaderOverlay) {
     syncLighting: lighting.syncLighting,
     graphics,
     visualStyle,
+    moebiusSettings,
+    gameplay: {
+      get: getGameplaySettings,
+      set: setGameplaySetting,
+      reset: resetGameplaySettings,
+      // Touch always auto-aims; the toggle is for mouse players.
+      showAimAssist: Boolean(runnerGame) && !runnerGame.controls.isTouch(),
+    },
   });
 
   walkModeBridge.onChange = appShell.onWalkModeChange;
