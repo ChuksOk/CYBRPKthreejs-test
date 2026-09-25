@@ -177,7 +177,7 @@ export function createDroneManager({
     drone.hp = type.hp;
     drone.time = 0;
     drone.phase = Math.random() * Math.PI * 2;
-    drone.fireTimer = rand(type.fireInterval[0], type.fireInterval[1]) + 0.8;
+    drone.fireTimer = rand(type.fireInterval[0], type.fireInterval[1]) * 0.5 + 0.3;
     drone.burstLeft = 0;
     drone.charge = 0;
     drone.flash = 0;
@@ -205,17 +205,23 @@ export function createDroneManager({
     drone.spin.set(rand(-6, 6), rand(-8, 8), rand(-6, 6));
     drone.uGlow.value = 0.6;
     fx.emitSparks(drone.position, 18, { hex: drone.type.glow, speed: 6, life: 0.6, size: 0.07 });
+    // The boom plays the instant it is destroyed (mid-air burst); the wreck
+    // hitting the street later only adds a smaller thud.
+    fx.explosion(drone.position, { radius: 0.8 + drone.type.scale * 0.35, velocity: _carrier.set(player.speed * 0.8, 0, 0) });
+    audio?.play("explosion", { volume: 1.15, detune: (Math.random() - 0.5) * 250 });
     if (byPlayer) {
       onKill?.(drone);
     }
   }
 
-  function explode(drone) {
+  function explode(drone, { wreck = false } = {}) {
     fx.explosion(drone.position, {
       radius: 1.3 + drone.type.scale * 0.5,
       velocity: _carrier.set(drone.velocity.x * 0.6, 0, 0),
     });
-    audio?.play("explosion", { volume: 0.55, detune: (Math.random() - 0.5) * 300 });
+    audio?.play("explosion", wreck
+      ? { volume: 0.4, detune: -700 + Math.random() * 200 }
+      : { volume: 1.15, detune: (Math.random() - 0.5) * 250 });
     recycle(drone);
   }
 
@@ -309,7 +315,7 @@ export function createDroneManager({
           fx.emitSparks(drone.position, 1, { hex: 0xffb347, speed: 1.5, life: 0.5, size: 0.09, gravity: -1 });
         }
         if (drone.position.y <= player.floorY + 0.3 || drone.time > 1.8) {
-          explode(drone);
+          explode(drone, { wreck: true });
         }
         continue;
       }

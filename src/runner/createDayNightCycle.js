@@ -3,7 +3,7 @@ import { performanceProfile } from "../platform/performanceProfile.js";
 
 /**
  * Day–night cycle for the runner. Advances while the player runs
- * (default: one full day every 4 minutes, starting at night) and drives:
+ * (default: one full day every 2 minutes, starting at night) and drives:
  *  - key light: moonlight (cool) → dawn/dusk (warm, low) → noon (bright)
  *  - fill light, environment-map intensity, scene background
  *  - cloud-sky gradient + cloud preset (via sky.updateFromSun)
@@ -46,7 +46,7 @@ export function createDayNightCycle({
   envMapBaseIntensity,
   syncEnvironmentIntensity,
   requestShadowMapUpdate,
-  cycleSeconds = 240,
+  cycleSeconds = 120,
   startPhase = 0,
 }) {
   const { scene, sunLight, fillLight } = sceneResult;

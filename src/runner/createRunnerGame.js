@@ -23,7 +23,7 @@ import { RUNNER } from "./runnerConfig.js";
 const STREET_CENTER_Z = RUNNER.laneZ[1];
 const OBSTACLE_LOOKAHEAD = 115;
 const FIRST_OBSTACLE_DISTANCE = 55;
-const FIRST_DRONE_TIME = 6;
+const FIRST_DRONE_TIME = 3;
 const SECTOR_LENGTH = 500;
 const COMBO_STEP = 0.2;
 const COMBO_MAX = 4;
@@ -442,7 +442,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function updateDroneSpawner(delta) {
     const d = difficulty();
     game.droneTimer -= delta;
-    const cap = Math.min(performanceProfile.runnerMaxDrones ?? 8, 2 + Math.floor(d * 6));
+    const cap = Math.min(performanceProfile.runnerMaxDrones ?? 8, 3 + Math.floor(d * 6));
     if (game.droneTimer > 0 || drones.countAlive() >= cap) {
       return;
     }
@@ -454,7 +454,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       }));
     const typeId = pickWeighted(options);
     drones.spawn(typeId, player);
-    game.droneTimer = THREE.MathUtils.lerp(5.5, 1.6, d) * rand(0.7, 1.3);
+    game.droneTimer = THREE.MathUtils.lerp(3.2, 1.0, d) * rand(0.7, 1.2);
   }
 
   function spawnSectorWave() {

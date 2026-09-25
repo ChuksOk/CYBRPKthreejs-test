@@ -24,7 +24,7 @@ const EXPLOSION_VARIANTS = 3;
  * clipper. Sounds far closer to a real detonation than a sample-based toy
  * "boom", and costs nothing at runtime (plain buffer playback).
  */
-async function renderExplosion(sampleRate, seed) {
+export async function renderExplosion(sampleRate, seed) {
   const duration = 2.6;
   const ctx = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate);
   let s = seed * 9973 + 17;
