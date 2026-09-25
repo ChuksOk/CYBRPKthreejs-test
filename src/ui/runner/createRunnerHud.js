@@ -133,6 +133,9 @@ export function createRunnerHud({ isTouch = false } = {}) {
   const banner = el("div", "rh-banner", root, '<span class="b-arrow">→</span><span class="b-text"></span><span class="b-code t-meta">N1</span>');
   const bannerText = banner.querySelector(".b-text");
   const damage = el("div", "rh-damage", root);
+  const markers = Array.from({ length: 10 }, () =>
+    el("div", "rh-target", root, '<i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span class="rh-target-label"></span><b class="rh-target-hp"><i></i></b>'),
+  );
   const arrows = Array.from({ length: ARROW_COUNT }, () => el("div", "rh-arrow", root, "<i></i><span>DRN</span>"));
 
   const touchHint = el("div", "rh-touch-hint t-meta", root,
@@ -395,6 +398,24 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
     crosshair.style.setProperty("--spread", `${(7 + s.spread * 520).toFixed(1)}px`);
     crosshair.classList.toggle("is-overclock", overclock);
+
+    const targets = s.targets ?? [];
+    for (let i = 0; i < markers.length; i++) {
+      const marker = markers[i];
+      const target = targets[i];
+      if (!target) {
+        if (marker.style.opacity !== "0") {
+          marker.style.opacity = "0";
+        }
+        continue;
+      }
+      marker.style.opacity = "1";
+      marker.style.width = marker.style.height = `${target.size.toFixed(0)}px`;
+      marker.style.transform = `translate(${(target.x - target.size / 2).toFixed(1)}px, ${(target.y - target.size / 2).toFixed(1)}px)`;
+      marker.classList.toggle("is-urgent", target.urgent);
+      marker.children[4].textContent = `${target.label} ${Math.round(target.distance)}M`;
+      marker.children[5].firstChild.style.transform = `scaleX(${target.hp.toFixed(3)})`;
+    }
 
     for (let i = 0; i < ARROW_COUNT; i++) {
       const threat = s.threats[i];

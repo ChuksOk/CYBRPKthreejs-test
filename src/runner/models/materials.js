@@ -6,7 +6,9 @@ import {
   fract,
   mix,
   mx_noise_float,
+  normalView,
   positionLocal,
+  positionViewDirection,
   step,
   time,
   uniform,
@@ -72,15 +74,30 @@ export function carbon({ scale = 90 } = {}) {
 }
 
 /** Painted panels with slight chipping toward bare metal. */
-export function paint({ tint = 0x9aa1ab, roughness = 0.42, flashKey = null, wear: wearAmount = 1 } = {}) {
+export function paint({ tint = 0x9aa1ab, roughness = 0.42, flashKey = null, wear: wearAmount = 1, rimKey = null, selfLit = 0 } = {}) {
   const material = new THREE.MeshStandardNodeMaterial({ color: tint });
   const chips = mx_noise_float(positionLocal.mul(38)).add(mx_noise_float(positionLocal.mul(160)).mul(0.4));
   const wear = chips.smoothstep(0.55, 0.75).mul(wearAmount);
   material.colorNode = mix(color(tint).mul(float(1).add(micro(5, 0.08))), color(0x4b4f55), wear);
   material.metalnessNode = mix(float(0.18), float(0.85), wear);
   material.roughnessNode = mix(float(roughness), float(0.3), wear).add(micro(260, 0.05));
+  let emissiveNode = null;
   if (flashKey) {
-    material.emissiveNode = vec3(1, 0.93, 0.85).mul(objectFx(flashKey)).mul(1.6);
+    emissiveNode = vec3(1, 0.93, 0.85).mul(objectFx(flashKey)).mul(1.6);
+  }
+  if (rimKey) {
+    // Fresnel rim in the drone's accent color so silhouettes read at night.
+    const rimColor = uniform(new THREE.Color(0xffffff)).onObjectUpdate(({ object }) => object.userData.fx?.[rimKey]);
+    const rim = float(1).sub(normalView.dot(positionViewDirection).abs()).pow(2.2);
+    const rimNode = rimColor.mul(rim).mul(objectFx("rim", 1.6));
+    emissiveNode = emissiveNode ? emissiveNode.add(rimNode) : rimNode;
+  }
+  if (selfLit > 0) {
+    const lit = color(tint).mul(selfLit);
+    emissiveNode = emissiveNode ? emissiveNode.add(lit) : lit;
+  }
+  if (emissiveNode) {
+    material.emissiveNode = emissiveNode;
   }
   return material;
 }

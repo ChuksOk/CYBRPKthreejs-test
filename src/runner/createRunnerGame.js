@@ -446,16 +446,37 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   const _ndc = new THREE.Vector3();
   const threats = [];
 
+  const targets = [];
+
   function collectThreats() {
     threats.length = 0;
+    targets.length = 0;
     let nearest = Infinity;
+    const halfW = window.innerWidth / 2;
+    const halfH = window.innerHeight / 2;
+    const focal = halfH / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     drones.forEachThreat((drone) => {
       const distance = drone.position.distanceTo(camera.position);
       nearest = Math.min(nearest, distance);
       _ndc.copy(drone.position).project(camera);
       const behind = _ndc.z > 1;
       const onScreen = !behind && Math.abs(_ndc.x) < 0.92 && Math.abs(_ndc.y) < 0.88;
-      if (onScreen || threats.length >= 8) {
+      const urgent = drone.state === "dive" || drone.charge > 0 || drone.burstLeft > 0;
+      if (onScreen) {
+        if (targets.length < 10) {
+          targets.push({
+            x: halfW + _ndc.x * halfW,
+            y: halfH - _ndc.y * halfH,
+            size: Math.max(26, Math.min(160, (drone.type.radius * 1.5 * focal) / Math.max(1, distance))),
+            urgent,
+            hp: Math.max(0, drone.hp / drone.type.hp),
+            label: drone.type.id === "gunship" ? "GNS" : drone.type.id === "kamikaze" ? "KMZ" : "SCT",
+            distance,
+          });
+        }
+        return;
+      }
+      if (threats.length >= 8) {
         return;
       }
       let x = _ndc.x;
@@ -464,10 +485,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         x = -x;
         y = -y;
       }
-      threats.push({
-        angle: Math.atan2(y, x),
-        urgent: drone.state === "dive" || drone.charge > 0 || drone.burstLeft > 0,
-      });
+      threats.push({ angle: Math.atan2(y, x), urgent });
     });
     audio.setHum(nearest < 60 ? 1 - nearest / 60 : 0);
     return threats;
@@ -491,6 +509,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       spread: weapon?.state.spread ?? 0,
       weaponIndex: weapon?.state.index ?? 0,
       threats: collectThreats(),
+      targets,
     };
   }
 

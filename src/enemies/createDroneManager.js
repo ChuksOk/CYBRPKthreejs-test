@@ -1,4 +1,5 @@
 import * as THREE from "three/webgpu";
+import { color, float, fract, step, time, uniform, uv } from "three/tsl";
 import { createDroneModel } from "../runner/models/createDroneModel.js";
 import { DRONE_TYPES } from "./droneTypes.js";
 
@@ -9,6 +10,8 @@ const _aim = new THREE.Vector3();
 const _carrier = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _look = new THREE.Vector3();
+const _muzzle = new THREE.Vector3();
+const _aimPoint = new THREE.Vector3();
 
 function rand(min, max) {
   return min + Math.random() * (max - min);
@@ -30,7 +33,7 @@ function buildDroneVisual(type, variantIndex = 0) {
   body.scale.setScalar(type.scale);
   root.add(body);
 
-  const fx = { flash: 0, glow: 2.4, color: new THREE.Color(type.glow) };
+  const fx = { flash: 0, glow: 2.4, color: new THREE.Color(type.glow), rim: 1.6, aim: 0 };
   body.traverse((child) => {
     if (child.isMesh) {
       child.userData.fx = fx;
@@ -58,6 +61,28 @@ function buildDroneVisual(type, variantIndex = 0) {
 }
 
 /**
+ * Warning laser drawn from a charging drone to where it will shoot: dashed
+ * scanline marching toward the player, brightening as the charge completes.
+ */
+function createAimMaterial() {
+  const material = new THREE.MeshBasicNodeMaterial({ color: 0x000000, side: THREE.DoubleSide });
+  const aimColor = uniform(new THREE.Color(0xff2d55)).onObjectUpdate(({ object }) => object.userData.fx?.color);
+  const aim = uniform(0).onObjectUpdate(({ object }) => object.userData.fx?.aim ?? 0);
+  const length = uniform(10).onObjectUpdate(({ object }) => object.scale.z);
+  const dash = step(0.45, fract(uv().y.mul(length).mul(1.6).sub(time.mul(7))));
+  const flicker = float(0.85).add(fract(time.mul(37)).mul(0.15));
+  material.emissiveNode = aimColor.mul(float(2).add(aim.mul(6))).add(color(0xffffff).mul(aim.pow(3).mul(2)));
+  // Fade out well before the camera so the beam never becomes a bar on screen.
+  const nearFade = float(1).sub(uv().y.smoothstep(0.5, 1));
+  material.opacityNode = aim.mul(float(0.35).add(dash.mul(0.65))).mul(flicker).mul(nearFade);
+  material.transparent = true;
+  material.depthWrite = false;
+  material.blending = THREE.AdditiveBlending;
+  material.toneMapped = false;
+  return material;
+}
+
+/**
  * Drone waves: spawn ahead, hold station relative to the runner while
  * strafing, fire bolts (scout / gunship) or dive (kamikaze). Hit tests are
  * analytic ray–sphere, never BVH.
@@ -77,12 +102,22 @@ export function createDroneManager({
 
   const drones = [];
   let lastPlayer = null;
+  const aimMaterial = createAimMaterial();
+  const aimGeometry = new THREE.CylinderGeometry(0.012, 0.045, 1, 6, 1, true);
+  aimGeometry.rotateX(Math.PI / 2);
+  aimGeometry.translate(0, 0, 0.5);
   for (const type of Object.values(DRONE_TYPES)) {
     const count = type.id === "gunship" ? Math.ceil(maxAlive / 3) : maxAlive;
     for (let i = 0; i < count; i++) {
       const visual = buildDroneVisual(type, i);
       visual.root.visible = false;
       group.add(visual.root);
+      const aimLine = new THREE.Mesh(aimGeometry, aimMaterial);
+      aimLine.userData.fx = visual.fx;
+      aimLine.visible = false;
+      aimLine.frustumCulled = false;
+      aimLine.renderOrder = 12;
+      group.add(aimLine);
       drones.push({
         type,
         ...visual,
@@ -103,6 +138,7 @@ export function createDroneManager({
         flash: 0,
         repositionTimer: 0,
         spin: new THREE.Vector3(),
+        aimLine,
       });
     }
   }
@@ -162,6 +198,7 @@ export function createDroneManager({
   function kill(drone, player, { byPlayer = true } = {}) {
     drone.state = "dying";
     drone.time = 0;
+    hideAim(drone);
     drone.velocity.set(player.speed * 0.85, rand(1, 3), rand(-2, 2));
     drone.spin.set(rand(-6, 6), rand(-8, 8), rand(-6, 6));
     drone.uGlow.value = 0.6;
@@ -184,6 +221,7 @@ export function createDroneManager({
     drone.alive = false;
     drone.state = "idle";
     drone.root.visible = false;
+    hideAim(drone);
   }
 
   function damage(drone, amount) {
@@ -200,12 +238,32 @@ export function createDroneManager({
     return false;
   }
 
+  /** Muzzle point (out) slightly in front of the drone toward the aim point. */
+  function computeMuzzle(drone, player, out, aim) {
+    aim.set(player.x, player.eyeY - 0.35, player.z);
+    _dir.copy(aim).sub(drone.position).normalize();
+    return out.copy(drone.position).addScaledVector(_dir, drone.type.radius * 0.7);
+  }
+
+  function hideAim(drone) {
+    drone.fx.aim = 0;
+    drone.aimLine.visible = false;
+  }
+
+  function updateAim(drone, player, strength) {
+    computeMuzzle(drone, player, _muzzle, _aimPoint);
+    drone.fx.aim = strength;
+    drone.aimLine.visible = strength > 0.01;
+    drone.aimLine.position.copy(_muzzle);
+    drone.aimLine.lookAt(_aimPoint);
+    drone.aimLine.scale.set(1, 1, Math.max(0.1, _muzzle.distanceTo(_aimPoint) * 0.8));
+  }
+
   function fireBolt(drone, player) {
-    _aim.set(player.x, player.eyeY - 0.35, player.z);
     _carrier.set(player.speed, 0, 0);
-    // Muzzle slightly in front of the drone, toward the player.
-    _dir.copy(_aim).sub(drone.position).normalize();
-    _target.copy(drone.position).addScaledVector(_dir, drone.type.radius * 0.8);
+    computeMuzzle(drone, player, _target, _aim);
+    fx.explosions.spawn(_target, { radius: 0.28 * drone.type.scale, life: 0.09 });
+    fx.emitSparks(_target, 8, { hex: drone.type.glow, speed: 4, life: 0.25, size: 0.05, gravity: 0 });
     projectiles.fire(_target, _aim, {
       speed: drone.type.boltSpeed,
       damage: drone.type.boltDamage,
@@ -319,10 +377,12 @@ export function createDroneManager({
       if (drone.state !== "attack" || !allowFire) {
         drone.charge = 0;
         drone.uGlow.value = 2.4;
+        hideAim(drone);
         continue;
       }
 
       if (drone.burstLeft > 0) {
+        updateAim(drone, player, 1);
         drone.burstTimer -= delta;
         if (drone.burstTimer <= 0) {
           fireBolt(drone, player);
@@ -338,9 +398,11 @@ export function createDroneManager({
         const t = 1 - Math.max(0, drone.fireTimer) / type.chargeTime;
         drone.charge = t;
         drone.uGlow.value = 2.4 + t * 7;
+        updateAim(drone, player, 0.15 + t * 0.85);
       } else {
         drone.charge = 0;
         drone.uGlow.value = 2.4;
+        hideAim(drone);
       }
       if (drone.fireTimer <= 0) {
         if (type.id === "kamikaze") {
@@ -435,7 +497,9 @@ export function createDroneManager({
       }
       seen.add(drone.type.id);
       drone.root.visible = visible;
+      drone.aimLine.visible = visible;
       if (visible && position) {
+        drone.aimLine.position.copy(position);
         drone.position.copy(position);
       }
     }

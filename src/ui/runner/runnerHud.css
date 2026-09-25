@@ -522,6 +522,79 @@
   transform: translate(-50%, 0);
 }
 
+/* ── Target brackets (on-screen drones) ─────────────────────────── */
+.rh-target {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  will-change: transform;
+}
+
+.rh-target > i {
+  position: absolute;
+  width: 26%;
+  height: 26%;
+  max-width: 14px;
+  max-height: 14px;
+  border: 0 solid var(--t-acid);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+.rh-target .tl { left: 0; top: 0; border-top-width: 2px; border-left-width: 2px; }
+.rh-target .tr { right: 0; top: 0; border-top-width: 2px; border-right-width: 2px; }
+.rh-target .bl { left: 0; bottom: 0; border-bottom-width: 2px; border-left-width: 2px; }
+.rh-target .br { right: 0; bottom: 0; border-bottom-width: 2px; border-right-width: 2px; }
+
+.rh-target-label {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  padding: 0 3px;
+  background: var(--t-ink);
+  color: var(--t-acid);
+  font-family: var(--t-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.rh-target-hp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 3px;
+  background: rgba(12, 14, 19, 0.7);
+}
+
+.rh-target-hp i {
+  display: block;
+  height: 100%;
+  background: var(--t-acid);
+  transform-origin: left center;
+}
+
+.rh-target.is-urgent > i {
+  border-color: var(--t-pink);
+  animation: rh-lock 0.25s steps(2) infinite;
+}
+
+.rh-target.is-urgent .rh-target-label {
+  background: var(--t-pink);
+  color: var(--t-ink);
+}
+
+.rh-target.is-urgent .rh-target-hp i {
+  background: var(--t-pink);
+}
+
+@keyframes rh-lock {
+  50% { opacity: 0.35; }
+}
+
 /* ── Damage + threats ────────────────────────────────────────────────── */
 .rh-damage {
   position: absolute;

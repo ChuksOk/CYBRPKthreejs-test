@@ -105,8 +105,8 @@ function getMaterials(variant) {
   const shell = SHELL[variant];
   const materials = {
     // Glossy candy shell, like the concept renders.
-    shell: paint({ tint: shell.tint, roughness: 0.2, flashKey: "flash", wear: 0.15 }),
-    rim: paint({ tint: 0x17191d, roughness: 0.28, flashKey: "flash", wear: 0.1 }),
+    shell: paint({ tint: shell.tint, roughness: 0.2, flashKey: "flash", wear: 0.15, rimKey: "color", selfLit: 0.14 }),
+    rim: paint({ tint: 0x17191d, roughness: 0.28, flashKey: "flash", wear: 0.1, rimKey: "color" }),
     chrome: chrome({ tint: 0xb8bec6 }),
     metal: gunmetal({ tint: 0x2c2f35, roughness: 0.3 }),
     brass: chrome({ tint: 0xc8a14a }),
