@@ -1559,10 +1559,6 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
 
     laneLights?.update(game.state === "running" ? delta : delta * 0.3, controls.state.x, controls.state.speed);
-    // Moebius / Sable style follows the day–night cycle.
-    if (dayNight && pipeline?.moebius) {
-      pipeline.moebius.setDaylight(dayNight.getDaylight());
-    }
     hud.update(rawDelta, game.state === "idle" || game.state === "menu" ? null : snapshot());
   }
 
