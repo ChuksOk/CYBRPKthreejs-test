@@ -293,7 +293,7 @@ function buildGun(specId) {
     kit.plane("code", 0.09, 0.045, { position: [-0.31, -0.03, -0.0273], rotation: [0, Math.PI, 0] });
     screw(-0.2, 0.02, -0.0272);
     screw(-0.38, 0.02, -0.0272);
-    // Lattice butt pad: frame + 4 × 8 grid.
+    // Lattice butt pad: frame + 9 × 5 bar grid.
     kit.box("dark", [0.016, 0.152, 0.054], { position: [-0.428, -0.028, 0], radius: 0.004 });
     for (let i = 0; i < 9; i++) {
       kit.box("rubber", [0.012, 0.0035, 0.054], { position: [-0.44, -0.1 + i * 0.018, 0], radius: 0.001, segments: 1 });
