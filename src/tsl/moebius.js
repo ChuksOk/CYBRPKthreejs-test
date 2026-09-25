@@ -27,16 +27,22 @@ import {
  * Moebius / ligne-claire graphic-novel look as one post node (no material
  * swaps, so every object in the scene — city, drones, viewmodel — gets it).
  *
- * 1. Ink outlines: log-depth discontinuities (silhouettes) + a luminance
- *    Sobel on the scene colour (creases, panel lines), faded with distance.
+ * 1. Ink outlines: outer log-depth silhouettes + a luminance Sobel on the
+ *    scene colour (creases, panel lines), faded with distance; never drawn
+ *    over glowing pixels. Glowing shapes (laser tracers, neon, LEDs) get
+ *    their own thin ink ring from the emissive buffer, drawn over the bloom
+ *    so the halo can't wash it out.
  * 2. Cel shading: luminance quantised in perceptual space into flat bands,
- *    hue kept, then pulled toward a pastel Moebius ramp (teal shadow →
- *    dusty rose → sand → cream).
+ *    split-toned (violet shadows / warm lights), saturated, then pulled
+ *    toward a Moebius ramp (ultramarine → violet → coral → saffron → mint
+ *    cream) — strongly for grey surfaces, lightly for coloured ones.
  * 3. Cross-hatching in the two darkest bands (screen-space diagonals).
- * 4. Pastel aerial haze with distance, warm paper tone + fibre grain.
+ * 4. Lavender aerial haze, turquoise → lavender → peach comic sky, warm
+ *    paper tone + fibre grain.
  *
- * Cost: 5 depth + (optionally) 8 colour fetches per pixel, full-res; the
- * colour-edge taps are skipped when `colorEdges` is false (mobile).
+ * Cost: 5 depth + 5–9 emissive + (optionally) 8 colour fetches per pixel,
+ * full-res; the colour-edge and diagonal glow taps are skipped when
+ * `colorEdges` is false (mobile).
  */
 
 function linearColor(hex) {
@@ -47,6 +53,7 @@ function linearColor(hex) {
 export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
   const depthTexture = scenePass.getTextureNode("depth");
   const colorTexture = scenePass.getTextureNode("output");
+  const emissiveTexture = scenePass.getTextureNode("emissive");
 
   const near = uniform(camera.near).onFrameUpdate(() => camera.near);
   const far = uniform(camera.far).onFrameUpdate(() => camera.far);
@@ -60,30 +67,44 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
     bands: uniform(4),
     exposure: uniform(1.28),
     lift: uniform(0.08),
-    paletteMix: uniform(0.34),
-    saturation: uniform(1.4),
+    // Palette pull: strong on grey / low-chroma surfaces, light on things
+    // that already have a colour, so the city goes Moebius-colourful while
+    // signage and cars keep their hue.
+    paletteMixGrey: uniform(0.62),
+    paletteMixColor: uniform(0.14),
+    saturation: uniform(1.7),
+    splitTone: uniform(0.35),
     hatchSpacing: uniform(6),
     hatchStrength: uniform(0.55),
     hazeStart: uniform(40),
     hazeEnd: uniform(170),
     hazeAmount: uniform(0.42),
-    paperAmount: uniform(0.35),
-    bloomAmount: uniform(0.85),
+    paperAmount: uniform(0.18),
+    bloomAmount: uniform(0.6),
+    glowOutlineWidth: uniform(1),
+    glowOutline: uniform(0.92),
     ink: uniform(linearColor(0x1a130e)),
-    shadow: uniform(linearColor(0x2e5470)),
-    mid: uniform(linearColor(0xd08a73)),
-    light: uniform(linearColor(0xeccf98)),
-    highlight: uniform(linearColor(0xfff1d6)),
-    haze: uniform(linearColor(0xf2c9a6)),
-    skyTop: uniform(linearColor(0x7fc4c8)),
-    skyHorizon: uniform(linearColor(0xf7d9a6)),
-    paper: uniform(linearColor(0xf6ead2)),
+    // Arzach / Airtight Garage ramp: ultramarine-violet shadows, coral
+    // mids, saffron lights, mint-cream highlights.
+    shadow: uniform(linearColor(0x3a3f9e)),
+    shadow2: uniform(linearColor(0x8a4fb8)),
+    mid: uniform(linearColor(0xf0654f)),
+    light: uniform(linearColor(0xf7c33e)),
+    highlight: uniform(linearColor(0xf2fbe2)),
+    shadowTint: uniform(new THREE.Vector3(0.78, 0.86, 1.28)),
+    lightTint: uniform(new THREE.Vector3(1.18, 1.04, 0.8)),
+    haze: uniform(linearColor(0xe6a9d0)),
+    skyTop: uniform(linearColor(0x21b8c8)),
+    skyMid: uniform(linearColor(0xb7a2ee)),
+    skyHorizon: uniform(linearColor(0xffb088)),
+    paper: uniform(linearColor(0xfbf1dc)),
   };
 
   const texel = vec2(1).div(screenSize).mul(uniforms.lineWidth);
 
   const viewDepthAt = (uv) => perspectiveDepthToViewZ(depthTexture.sample(uv).r, near, far).negate();
   const lumaAt = (uv) => luminance(colorTexture.sample(uv).rgb);
+  const glowMaskAt = (uv) => smoothstep(0.12, 0.35, luminance(emissiveTexture.sample(uv).rgb));
 
   /** 0..1 ink coverage at this pixel. */
   const inkLines = Fn(() => {
@@ -91,10 +112,12 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
     const center = viewDepthAt(uv);
     const logC = log(max(center, 0.01));
     const offsets = [vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1)];
+    // Outer silhouettes only: ink the far pixel next to a nearer one, so
+    // lines sit around objects rather than eating into thin ones.
     let depthDelta = float(0);
     for (const offset of offsets) {
       const d = log(max(viewDepthAt(uv.add(offset.mul(texel))), 0.01));
-      depthDelta = max(depthDelta, abs(d.sub(logC)));
+      depthDelta = max(depthDelta, logC.sub(d));
     }
     let line = smoothstep(uniforms.depthEdge, uniforms.depthEdge.mul(2.2), depthDelta);
 
@@ -116,12 +139,29 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
     }
 
     const fade = float(1).sub(smoothstep(uniforms.lineFadeStart, uniforms.lineFadeEnd, center));
-    return line.mul(fade.mul(0.75).add(0.25));
+    // Glowing pixels (neon, laser cores) are never inked.
+    return line.mul(fade.mul(0.75).add(0.25)).mul(glowMaskAt(uv).oneMinus());
   });
 
-  /** Pastel ramp by perceptual lightness. */
+  /** Thin ink ring just outside glowing shapes (laser beams, neon). */
+  const glowOutline = Fn(() => {
+    const uv = screenUV;
+    const pixel = vec2(1).div(screenSize).mul(uniforms.glowOutlineWidth);
+    const taps = [vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1)];
+    if (colorEdges) {
+      taps.push(vec2(0.7, 0.7), vec2(-0.7, 0.7), vec2(0.7, -0.7), vec2(-0.7, -0.7));
+    }
+    let around = float(0);
+    for (const tap of taps) {
+      around = max(around, glowMaskAt(uv.add(tap.mul(pixel))));
+    }
+    return clamp(around.sub(glowMaskAt(uv)), 0, 1);
+  });
+
+  /** Moebius colour ramp by perceptual lightness. */
   const paletteRamp = Fn(([l]) => {
-    const a = mix(uniforms.shadow, uniforms.mid, smoothstep(0.08, 0.42, l));
+    const s = mix(uniforms.shadow, uniforms.shadow2, smoothstep(0.05, 0.25, l));
+    const a = mix(s, uniforms.mid, smoothstep(0.2, 0.46, l));
     const b = mix(a, uniforms.light, smoothstep(0.4, 0.72, l));
     return mix(b, uniforms.highlight, smoothstep(0.72, 0.95, l));
   });
@@ -145,18 +185,28 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
       const q = clamp(band.add(soft).div(uniforms.bands), 0, 1);
       const qLinear = pow(q, 2.2);
 
-      // Keep hue, flatten value; then pull toward the pastel ramp.
+      // Keep hue, flatten value; then pull toward the Moebius ramp.
       const cel = clamp(chroma.mul(qLinear), 0, 1);
-      const celSat = mix(vec3(luminance(cel)), cel, uniforms.saturation);
-      let color = mix(celSat, paletteRamp(q), uniforms.paletteMix);
+      // Split-tone: cool violet shadows, warm lights.
+      const toned = cel.mul(mix(uniforms.shadowTint, uniforms.lightTint, q).mix(vec3(1), uniforms.splitTone.oneMinus()));
+      const celSat = clamp(mix(vec3(luminance(toned)), toned, uniforms.saturation), 0, 1);
+      // How colourful the source already is (0 = grey).
+      const srcSat = clamp(chroma.sub(vec3(1)).abs().dot(vec3(0.5)), 0, 1);
+      const paletteMix = mix(uniforms.paletteMixGrey, uniforms.paletteMixColor, smoothstep(0.08, 0.45, srcSat));
+      let color = mix(celSat, paletteRamp(q), paletteMix);
 
-      // Aerial perspective toward a warm pastel sky.
+      // Aerial perspective toward a lavender haze.
       const viewDepth = viewDepthAt(screenUV);
       const haze = smoothstep(uniforms.hazeStart, uniforms.hazeEnd, viewDepth).mul(uniforms.hazeAmount);
       color = mix(color, uniforms.haze, haze);
       // Sky: a flat two-tone gradient (teal → sand), as in the comics.
       const sky = step(far.mul(0.985), viewDepth);
-      const skyColor = mix(uniforms.skyHorizon, uniforms.skyTop, smoothstep(0.45, 1, screenUV.y.oneMinus()));
+      const skyT = screenUV.y.oneMinus();
+      const skyColor = mix(
+        mix(uniforms.skyHorizon, uniforms.skyMid, smoothstep(0.4, 0.62, skyT)),
+        uniforms.skyTop,
+        smoothstep(0.62, 0.95, skyT),
+      );
       color = mix(color, mix(skyColor, celSat, 0.18), sky);
 
       // Cross-hatching (pixel space) in the dark bands, fading into haze.
@@ -178,11 +228,13 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
       const grain = mx_noise_float(vec3(px.mul(1.7), 3)).mul(0.035);
       color = mix(color, color.mul(uniforms.paper), uniforms.paperAmount).mul(float(0.97).add(fibre.mul(0.05))).add(grain);
 
-      // Ink on top, then neon glow over the ink so signage stays vivid.
+      // Ink on top, then neon glow over the ink so signage stays vivid,
+      // then the glow outline over the halo (comic laser: core, ink, halo).
       color = mix(color, uniforms.ink, inkLines());
       if (bloom) {
         color = color.add(bloom.rgb.mul(uniforms.bloomAmount));
       }
+      color = mix(color, uniforms.ink, glowOutline().mul(uniforms.glowOutline));
       return vec4(color, beauty.a);
     })();
   }
