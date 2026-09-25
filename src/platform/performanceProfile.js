@@ -61,6 +61,8 @@ export const performanceProfile = {
   runnerTracerCount: 24,
   /** Muzzle / explosion point lights (one extra light for every lit material). */
   runnerWeaponLight: true,
+  /** Seconds between shadow-map refreshes as the day-night sun moves (0 = never). */
+  runnerSunShadowInterval: 3,
 };
 
 /**
@@ -87,6 +89,7 @@ export function applyDevicePerformanceDefaults() {
   performanceProfile.runnerSparkCount = 128;
   performanceProfile.runnerTracerCount = 12;
   performanceProfile.runnerWeaponLight = false;
+  performanceProfile.runnerSunShadowInterval = 0;
 
   if (isAppleMobile() || isSafari()) {
     performanceProfile.maxPixelRatio = 1.25;

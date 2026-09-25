@@ -72,7 +72,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
   // ── Score ticket (top-left) ──────────────────────────────────────────────
   const ticket = el("div", "rh-card rh-ticket", root);
   ticket.innerHTML = `
-    <div class="t-strip"><span>RUN PASS</span><span class="rh-sector">SECTOR 01</span><span>↗</span></div>
+    <div class="t-strip"><span>RUN PASS</span><span class="rh-sector">SECTOR 01</span><span class="rh-clock">00:00</span></div>
     <div class="t-body">
       <span class="t-meta">SCORE:</span>
       <span class="t-big rh-score-value">000000</span>
@@ -90,6 +90,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
   const comboCell = ticket.querySelector(".t-combo");
   const codeValue = ticket.querySelector(".rh-code");
   const sectorValue = ticket.querySelector(".rh-sector");
+  const clockValue = ticket.querySelector(".rh-clock");
 
   // ── Vitals label (bottom-left) ─────────────────────────────────────────
   const vitals = el("div", "rh-card rh-vitals", root);
@@ -404,6 +405,11 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
     if (!s) {
       return;
+    }
+
+    if (s.clock && s.clock !== last.clock) {
+      clockValue.textContent = s.clock;
+      last.clock = s.clock;
     }
 
     if (s.score !== last.score) {

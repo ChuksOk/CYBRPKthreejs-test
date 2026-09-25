@@ -1472,3 +1472,11 @@ html.runner-playing.runner-touch body .audio-btn-root {
     font-size: 48px;
   }
 }
+
+.t-strip {
+  gap: 8px;
+}
+
+.t-strip > span {
+  white-space: nowrap;
+}

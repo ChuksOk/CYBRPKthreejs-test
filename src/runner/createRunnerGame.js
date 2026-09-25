@@ -495,6 +495,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   const threats = [];
 
   const targets = [];
+  let dayNight = null;
 
   function collectThreats() {
     threats.length = 0;
@@ -557,6 +558,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       spread: weapon?.state.spread ?? 0,
       weaponIndex: weapon?.state.index ?? 0,
       threats: collectThreats(),
+      clock: dayNight ? `${dayNight.getClock()} ${dayNight.getLabel()}` : "",
       special: {
         type: specials.state.type,
         charge: specials.state.charge,
@@ -687,6 +689,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         applyWrap();
         track?.followGround(controls.state.x);
         game.distance += controls.state.speed * delta;
+        dayNight?.update(delta);
 
         game.sinceDamage += delta;
         if (game.sinceDamage > RUNNER.shieldRechargeDelay) {
@@ -785,6 +788,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     warm,
     collisionHideObjects,
     update,
+    setDayNight: (cycle) => {
+      dayNight = cycle;
+    },
+    getDayNight: () => dayNight,
     enterMenu,
     placeAtStart,
     getState: () => game.state,

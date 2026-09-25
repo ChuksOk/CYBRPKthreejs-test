@@ -1,6 +1,5 @@
 import "./aboutPanel.css";
 import { isMobileLayout, onMobileLayoutChange } from "../../platform/deviceLayout.js";
-import { SOURCE_CODE_URL } from "../core/externalLinks.js";
 import {
   AUTHOR_NAME,
   AUTHOR_URL,
@@ -66,9 +65,6 @@ export function createAboutPanel({ state } = {}) {
           <button type="button" class="refresh-button-panel about-link-author">
             ${AUTHOR_NAME}
           </button>
-          <button type="button" class="refresh-button-panel about-link-source">
-            Source code
-          </button>
         </div>
         <p class="about-model-credits">
           © ${new Date().getFullYear()} ${AUTHOR_NAME}
@@ -92,7 +88,6 @@ export function createAboutPanel({ state } = {}) {
 
   const closeButton = root.querySelector(".close-button-panel");
   const authorButton = root.querySelector(".about-link-author");
-  const sourceButton = root.querySelector(".about-link-source");
   const desktopRecommended = root.querySelector(".about-recommended--desktop");
   const mobileRecommended = root.querySelector(".about-recommended--mobile");
 
@@ -120,10 +115,6 @@ export function createAboutPanel({ state } = {}) {
 
   authorButton.addEventListener("click", () => {
     window.open(AUTHOR_URL, "_blank", "noopener,noreferrer");
-  });
-
-  sourceButton.addEventListener("click", () => {
-    window.open(SOURCE_CODE_URL, "_blank", "noopener,noreferrer");
   });
 
   function onKeyDown(event) {
