@@ -1087,3 +1087,388 @@
     clip-path: none;
   }
 }
+
+/* ── Special meter (desktop, in the ammo card) ──────────────────────── */
+.a-special {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 9px;
+}
+
+.a-special-bar {
+  height: 5px;
+  background: rgba(12, 14, 19, 0.12);
+}
+
+.a-special-bar i {
+  display: block;
+  height: 100%;
+  background: var(--t-cobalt);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.a-special-key {
+  padding: 0 4px;
+  background: var(--t-ink);
+  color: var(--t-paper);
+  font-family: var(--t-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.a-special.is-ready .a-special-bar i {
+  background: #5dff3a;
+}
+
+.a-special.is-ready .a-special-key {
+  background: #5dff3a;
+  color: var(--t-ink);
+  animation: rh-lock 0.5s steps(2) infinite;
+}
+
+/* ── Special picker on the start ticket ─────────────────────────────── */
+.tk-special {
+  margin: 0 0 12px;
+}
+
+.tk-special-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.tk-special-opt {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 0;
+  border-left: 4px solid transparent;
+  background: rgba(12, 14, 19, 0.82);
+  color: var(--t-paper);
+  text-align: left;
+  cursor: pointer;
+  clip-path: var(--t-notch-sm);
+}
+
+.tk-special-opt b {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+.tk-special-opt span {
+  font-family: var(--t-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.tk-special-opt.is-selected {
+  background: var(--t-acid);
+  color: var(--t-ink);
+  border-left-color: var(--t-pink);
+}
+
+/* ── Touch controls: FIRE + SPECIAL (bottom-right) ─────────────────── */
+.rh-touch-controls {
+  display: none;
+}
+
+.runner-hud.is-touch .rh-touch-controls {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.rh-fire-btn,
+.rh-special-btn {
+  appearance: none;
+  border: 0;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.rh-fire-btn {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background: rgba(12, 14, 19, 0.55);
+  color: var(--t-acid);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 2px rgba(217, 255, 59, 0.55);
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+
+.rh-fire-btn svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.rh-fire-btn .ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 5;
+}
+
+.rh-fire-btn .ring {
+  fill: none;
+  stroke: var(--t-cobalt-2);
+  stroke-width: 5;
+  transition: stroke-dashoffset 0.15s linear;
+}
+
+.rh-fire-btn.is-charged .ring {
+  stroke: #5dff3a;
+}
+
+.rh-fire-btn b {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 32px;
+  line-height: 0.9;
+}
+
+.rh-fire-btn.is-down {
+  transform: scale(0.93);
+  background: rgba(217, 255, 59, 0.28);
+}
+
+.rh-fire-btn.is-reloading {
+  color: var(--t-pink);
+}
+
+.rh-special-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 74px;
+  margin-bottom: 8px;
+  background: #5dff3a;
+  color: var(--t-ink);
+  clip-path: var(--t-notch-sm);
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.rh-special-btn b {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.rh-special-btn.is-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  animation: rh-special-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rh-special-pulse {
+  50% { filter: brightness(1.35); }
+}
+
+/* ── Touch: reduced clutter ─────────────────────────────────────────── */
+.runner-hud.is-touch .rh-ammo,
+.runner-hud.is-touch .t-strip,
+.runner-hud.is-touch .t-grid,
+.runner-hud.is-touch .t-stub,
+.runner-hud.is-touch .v-head,
+.runner-hud.is-touch .v-label,
+.runner-hud.is-touch .v-num,
+.runner-hud.is-touch .rh-target-label,
+.runner-hud.is-touch .b-code,
+.runner-hud.is-touch .b-arrow {
+  display: none;
+}
+
+.runner-hud.is-touch .rh-ticket {
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  width: auto;
+  box-shadow: none;
+}
+
+.runner-hud.is-touch .t-body {
+  padding: 4px 10px 5px;
+}
+
+.runner-hud.is-touch .t-body > .t-meta {
+  display: none;
+}
+
+.runner-hud.is-touch .t-big {
+  margin: 0;
+  font-size: 26px;
+}
+
+.runner-hud.is-touch .rh-vitals {
+  top: calc(max(10px, env(safe-area-inset-top)) + 42px);
+  bottom: auto;
+  left: max(10px, env(safe-area-inset-left));
+  width: 132px;
+  padding: 5px 7px;
+  border-left-width: 3px;
+  background: rgba(12, 14, 19, 0.55);
+  box-shadow: none;
+}
+
+.runner-hud.is-touch .v-row {
+  grid-template-columns: 1fr;
+  margin-top: 0;
+}
+
+.runner-hud.is-touch .v-row + .v-row {
+  margin-top: 3px;
+}
+
+.runner-hud.is-touch .v-bar {
+  height: 6px;
+}
+
+.runner-hud.is-touch .rh-weapons {
+  right: max(16px, env(safe-area-inset-right));
+  top: auto;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 112px);
+}
+
+.runner-hud.is-touch .rh-chip:not(.is-active) {
+  display: none;
+}
+
+.runner-hud.is-touch .rh-chip em {
+  display: block;
+}
+
+.runner-hud.is-touch .rh-banner {
+  top: 14%;
+}
+
+.runner-hud.is-touch .b-text {
+  font-size: 22px;
+  padding: 4px 10px;
+}
+
+.runner-hud.is-touch .rh-arrow span {
+  display: none;
+}
+
+.runner-hud.is-touch .rh-touch-hint {
+  bottom: auto;
+  top: 30%;
+}
+
+/* Hide app chrome while playing on touch devices. */
+html.runner-playing.runner-touch body .app-header,
+html.runner-playing.runner-touch body .audio-btn-root {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Short / landscape phones: keep the whole ticket (and its button) on screen. */
+.runner-screen {
+  overflow-y: auto;
+}
+
+@media (max-height: 560px) {
+  .runner-screen {
+    align-items: flex-start;
+    padding: 8px;
+  }
+
+  .ticket {
+    flex-direction: row;
+    width: min(820px, 100%);
+    margin: auto;
+  }
+
+  .tk-main {
+    padding: 10px 14px 8px;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  }
+
+  .tk-hero {
+    flex-direction: row;
+    margin: 8px 0;
+  }
+
+  .tk-title {
+    font-size: 52px;
+  }
+
+  .tk-ghost,
+  .tk-keys,
+  .tk-foot,
+  .tk-top .tk-arrow {
+    display: none;
+  }
+
+  .tk-stats b {
+    font-size: 22px;
+  }
+
+  .tk-special {
+    margin-bottom: 4px;
+  }
+
+  .tk-special-opt b {
+    font-size: 16px;
+  }
+
+  .tk-stub {
+    flex: 0 0 190px;
+    gap: 8px;
+    padding: 10px 12px;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+  }
+
+  .tk-stub::before {
+    left: 0;
+    right: auto;
+    top: 8px;
+    bottom: 8px;
+    border-top: 0;
+    border-left: 2px dashed var(--t-ink);
+  }
+
+  .tk-best b {
+    font-size: 30px;
+  }
+
+  .tk-button {
+    font-size: 20px;
+    padding: 10px 12px;
+  }
+
+  .tk-stub .t-barcode {
+    height: 26px;
+  }
+
+  .lb-title {
+    font-size: 48px;
+  }
+}

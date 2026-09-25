@@ -46,14 +46,17 @@ With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first
 | Switch lane | A / D, ← / → | Swipe left half ← → |
 | Jump | Space, W | Swipe left half ↑ |
 | Slide | S, C, Ctrl | Swipe left half ↓ |
-| Aim | Mouse (pointer lock) | Drag right half |
-| Fire | Hold left click | Auto-fire when on target |
+| Aim | Mouse (pointer lock) | Automatic (drag right half to nudge) |
+| Fire | Hold left click | Hold the FIRE button (bottom-right) |
+| Special attack | E / F when charged | SPECIAL button (appears beside FIRE when charged) |
 | Reload | R | Automatic |
 | Switch weapon | 1–4, Q, mouse wheel | Tap a weapon chip |
 | Pause | Esc | — |
 
 - **Drones:** GIGI-style drones: teal disc and white robotic-arm scouts that strafe and fire, red spider-quad gunships that charge a 3-bolt burst, and gold or blue hex bi-copter kamikazes that dive at you. Bolts can be dodged or shot down.
 - **Weapons:** four VX-series guns in off-white with neon green accents: VX-06 carbine, VX-09 SMG, VX-12 rail and VX-14 heavy. Each has its own fire rate, magazine, damage, spread and recoil (`src/weapon/weaponTypes.js`), and ammo is kept per gun.
+- **Special attacks:** landing shots charges a special, and you pick one per run on the start ticket. **Ally drone** deploys a small sphere drone that fights for you until it's destroyed; **Seeker** fires a heat-seeking grenade that homes in on the nearest drone and detonates (`src/weapon/createSpecials.js`).
+- **Mobile HUD:** shows only score, two slim bars, target brackets, the current weapon chip, and the FIRE / SPECIAL buttons. The header and audio button hide while you play.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
 - **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).

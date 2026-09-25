@@ -94,6 +94,8 @@ export function createDroneManager({
   audio,
   maxAlive = 8,
   onKill,
+  /** Optional decoy (player's ally drone) that enemies sometimes shoot at. */
+  getDecoy = null,
   onKamikazeHit,
 }) {
   const group = new THREE.Group();
@@ -240,7 +242,12 @@ export function createDroneManager({
 
   /** Muzzle point (out) slightly in front of the drone toward the aim point. */
   function computeMuzzle(drone, player, out, aim) {
-    aim.set(player.x, player.eyeY - 0.35, player.z);
+    const decoy = drone.decoyShot ? getDecoy?.() : null;
+    if (decoy) {
+      aim.copy(decoy.position);
+    } else {
+      aim.set(player.x, player.eyeY - 0.35, player.z);
+    }
     _dir.copy(aim).sub(drone.position).normalize();
     return out.copy(drone.position).addScaledVector(_dir, drone.type.radius * 0.7);
   }
@@ -413,6 +420,8 @@ export function createDroneManager({
           drone.burstLeft = type.burst;
           drone.burstTimer = 0;
         }
+        // Next volley may go at the player's ally drone instead.
+        drone.decoyShot = Boolean(getDecoy?.()) && Math.random() < 0.4;
         drone.fireTimer = rand(type.fireInterval[0], type.fireInterval[1]);
       }
     }

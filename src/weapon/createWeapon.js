@@ -5,7 +5,7 @@ const SPREAD_RECOVERY = 0.09;
 const SWITCH_TIME = 0.35;
 const RANGE = 220;
 /** Touch aim assist: auto-fire + magnetism inside this cone. */
-const ASSIST_ANGLE = THREE.MathUtils.degToRad(4.5);
+const ASSIST_ANGLE = THREE.MathUtils.degToRad(7);
 
 const _origin = new THREE.Vector3();
 const _direction = new THREE.Vector3();
@@ -206,12 +206,13 @@ export function createWeapon({
       return;
     }
 
+    // Touch: firing is the on-screen button; aim is automatic, and shots
+    // get a little magnetism toward a drone near the crosshair.
     let assistTarget = null;
-    let wantsFire = controls.isTriggerHeld();
-    if (controls.isTouch()) {
+    const wantsFire = controls.isTriggerHeld();
+    if (wantsFire && controls.isTouch()) {
       aimDirection(_direction);
       assistTarget = drones.findInCone(camera.position, _direction, ASSIST_ANGLE, RANGE);
-      wantsFire = wantsFire || Boolean(assistTarget);
     }
 
     if (!wantsFire || state.reloading || state.switchTimer > 0) {

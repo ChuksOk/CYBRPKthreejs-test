@@ -11,7 +11,13 @@ import { createPickups } from "./createPickups.js";
 import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
-import { getStoredRunnerBest, setStoredRunnerBest } from "../platform/userPreferences.js";
+import {
+  getStoredRunnerBest,
+  getStoredRunnerSpecial,
+  setStoredRunnerBest,
+  setStoredRunnerSpecial,
+} from "../platform/userPreferences.js";
+import { createSpecials } from "../weapon/createSpecials.js";
 import { RUNNER } from "./runnerConfig.js";
 
 const STREET_CENTER_Z = RUNNER.laneZ[1];
@@ -107,6 +113,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       game.combo = Math.min(COMBO_MAX, game.combo + COMBO_STEP);
       game.comboTimer = COMBO_DECAY_DELAY;
       game.bonus += Math.round(drone.type.score * game.combo);
+      specials?.addCharge(0, true);
       hud.hitMarker(true);
       controls.shake(0.02, 0.15);
     },
@@ -114,7 +121,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       damagePlayer(damage, "KAMIKAZE IMPACT");
       controls.shake(0.12, 0.45);
     },
+    getDecoy: () => specials?.getAllyTarget() ?? null,
   });
+
+  // Special attack (charged by hits; one type chosen per run).
+  const specials = createSpecials({ scene, fx, drones, audio });
+  specials.setType(getStoredRunnerSpecial());
 
   const obstacles = createObstacles({
     scene,
@@ -136,6 +148,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         getWorldColliders: () => track?.colliders ?? [],
         onHit: (kind) => {
           if (kind === "drone") {
+            specials.addCharge(weapon?.state.weapon.damage ?? 1);
             hud.hitMarker(false);
           } else if (kind === "bolt") {
             game.bonus += 10;
@@ -144,6 +157,28 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         },
       })
     : null;
+
+  const _specialOrigin = new THREE.Vector3();
+  const _specialDir = new THREE.Vector3();
+  function useSpecial() {
+    if (game.state !== "running" || !specials.state.ready) {
+      return;
+    }
+    viewmodel.getMuzzleWorldPosition(_specialOrigin);
+    camera.getWorldDirection(_specialDir);
+    if (specials.activate(_specialOrigin, _specialDir, player)) {
+      hud.showBanner(specials.state.type === "ally" ? "ALLY DEPLOYED" : "SEEKER AWAY", 1.2);
+      viewmodel.kick(1.5);
+    }
+  }
+  controls.on("special", useSpecial);
+  hud.onSpecial(useSpecial);
+  hud.onFire((held) => controls.setTrigger(held && game.state === "running"));
+  hud.onSpecialSelect((id) => {
+    specials.setType(id);
+    setStoredRunnerSpecial(id);
+    hud.showScreen("start", { best: game.best, special: specials.state.type });
+  });
 
   controls.on("jump", () => audio.play("jump", { volume: 0.35 }));
   controls.on("land", () => audio.play("land", { volume: 0.35 }));
@@ -160,11 +195,20 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function setState(next) {
     game.state = next;
     game.stateTime = 0;
+    // Lets CSS hide chrome (header / audio button) during play on touch.
+    document.documentElement.classList.toggle(
+      "runner-playing",
+      next === "running" || next === "countdown" || next === "dying",
+    );
+    if (next !== "running") {
+      controls.setTrigger(false);
+    }
   }
 
   function resetRun() {
     controls.reset();
     weapon?.reset();
+    specials.reset();
     drones.clear();
     projectiles.clear();
     obstacles.clear();
@@ -190,11 +234,14 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     controls.setActive(true);
     controls.setInputEnabled(false);
     hud.setVisible(false);
-    hud.showScreen("start", { best: game.best });
+    specials.lock(false);
+    hud.showScreen("start", { best: game.best, special: specials.state.type });
     setState("menu");
   }
 
   function startCountdown() {
+    // The special chosen on the ticket is locked for the whole run.
+    specials.lock(true);
     audio.ensureContext();
     controls.requestPointerLock();
     hud.hideScreen();
@@ -440,6 +487,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     obstacles.shiftX(shift);
     pickups.shiftX(shift);
     fx.shiftX(shift);
+    specials.shiftX(shift);
     game.nextObstacleX += shift;
   }
 
@@ -509,8 +557,39 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       spread: weapon?.state.spread ?? 0,
       weaponIndex: weapon?.state.index ?? 0,
       threats: collectThreats(),
+      special: {
+        type: specials.state.type,
+        charge: specials.state.charge,
+        ready: specials.state.ready,
+        allyHp: specials.getAllyHp(),
+      },
       targets,
     };
+  }
+
+  /**
+   * Touch auto-aim priority: a drone that is charging / diving, else the
+   * nearest drone ahead of the runner within range.
+   */
+  function pickAutoAimTarget() {
+    let best = null;
+    let bestScore = Infinity;
+    drones.forEachThreat((drone) => {
+      if (drone.state === "enter" || drone.position.x < player.x + 2) {
+        return;
+      }
+      const distance = drone.position.distanceTo(camera.position);
+      if (distance > 70) {
+        return;
+      }
+      const urgent = drone.state === "dive" || drone.charge > 0 || drone.burstLeft > 0;
+      const score = distance - (urgent ? 40 : 0);
+      if (score < bestScore) {
+        bestScore = score;
+        best = drone;
+      }
+    });
+    return best ? best.position : null;
   }
 
   function simulateWorld(delta, { running }) {
@@ -531,6 +610,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       floorY: RUNNER.floorY,
       playerX: player.x,
       onHitPlayer: (damage) => damagePlayer(damage, "SHOT DOWN"),
+      ally: specials.getAllyTarget(),
+      onHitAlly: (damage) => specials.damageAlly(damage),
     });
 
     if (running) {
@@ -555,6 +636,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       });
     }
 
+    if (running && controls.isTouch()) {
+      controls.autoAim(pickAutoAimTarget(), delta);
+    }
+    specials.update(delta, player);
     weapon?.update(delta, { canFire: running });
     if (weapon) {
       viewmodel?.setAmmoDisplay(
@@ -659,6 +744,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       camera.getWorldDirection(_warmPos).multiplyScalar(8).add(camera.position);
       fx.setWarmupVisible(true, _warmPos);
       drones.setWarmupVisible(true, _warmPos);
+      specials.setWarmupVisible(true, _warmPos);
       projectiles.setWarmupVisible(true, _warmPos);
       obstacles.setWarmupVisible(true, _warmPos);
       pickups.setWarmupVisible(true, _warmPos);
@@ -667,6 +753,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     end() {
       fx.setWarmupVisible(false);
       drones.setWarmupVisible(false);
+      specials.setWarmupVisible(false);
       projectiles.setWarmupVisible(false);
       obstacles.setWarmupVisible(false);
       pickups.setWarmupVisible(false);
@@ -676,6 +763,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   /** Dynamic runner objects never belong in the rain collision height map. */
   const collisionHideObjects = [
+    specials.group,
     drones.group,
     projectiles.group,
     pickups.group,
@@ -687,6 +775,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     controls,
     hud,
     weapon,
+    specials,
     drones,
     obstacles,
     pickups,

@@ -155,7 +155,7 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
    * @param {number} delta
    * @param {{ playerBox: THREE.Box3, floorY: number, onHitPlayer: Function }} ctx
    */
-  function update(delta, { playerBox, floorY, playerX, onHitPlayer }) {
+  function update(delta, { playerBox, floorY, playerX, onHitPlayer, ally = null, onHitAlly }) {
     _box.copy(playerBox).expandByScalar(0.18);
     for (const bolt of pool) {
       if (!bolt.alive) {
@@ -172,6 +172,11 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
       _look.copy(bolt.position).add(bolt.velocity).sub(bolt.carrier);
       bolt.mesh.lookAt(_look);
 
+      if (ally && bolt.position.distanceTo(ally.position) < ally.radius + 0.15) {
+        destroy(bolt);
+        onHitAlly?.(bolt.damage);
+        continue;
+      }
       if (_box.containsPoint(bolt.position) || _box.distanceToPoint(bolt.position) < 0.12) {
         destroy(bolt);
         onHitPlayer?.(bolt.damage, bolt.position);

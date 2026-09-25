@@ -4,6 +4,7 @@ import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
+import { SPECIALS } from "../../weapon/createSpecials.js";
 import { GAME_TITLE } from "../../app/credits.js";
 
 const ARROW_COUNT = 8;
@@ -51,7 +52,17 @@ const pad = (value, length) => String(Math.max(0, Math.floor(value))).padStart(l
 export function createRunnerHud({ isTouch = false } = {}) {
   document.documentElement.classList.add("runner-mode");
   const root = el("div", "runner-hud", document.body);
-  const handlers = { start: null, restart: null, resume: null, weapon: null };
+  const handlers = {
+    start: null,
+    restart: null,
+    resume: null,
+    weapon: null,
+    special: null,
+    fire: null,
+    specialSelect: null,
+  };
+  root.classList.toggle("is-touch", isTouch);
+  document.documentElement.classList.toggle("runner-touch", isTouch);
 
   // ── Crosshair ──────────────────────────────────────────────────────────
   const crosshair = el("div", "rh-crosshair", root,
@@ -108,8 +119,53 @@ export function createRunnerHud({ isTouch = false } = {}) {
       <div class="a-status t-meta rh-ammo-status">READY</div>
     </div>
     <div class="a-mag">${'<i></i>'.repeat(MAG_TICKS)}</div>
-    <div class="a-reload"><i></i></div>`;
+    <div class="a-reload"><i></i></div>
+    <div class="a-special"><span class="a-special-name t-meta">ALLY DRONE</span><div class="a-special-bar"><i></i></div><kbd class="a-special-key">E</kbd></div>`;
   const ammoNum = ammo.querySelector(".rh-ammo-num");
+  const specialRow = ammo.querySelector(".a-special");
+  const specialName = ammo.querySelector(".a-special-name");
+  const specialBar = ammo.querySelector(".a-special-bar i");
+
+  // Touch: hold-to-fire button (bottom-right) + special button that only
+  // appears when the special is charged. A ring around FIRE shows charge.
+  const touchControls = el("div", "rh-touch-controls", root);
+  const specialButton = el("button", "rh-special-btn", touchControls, '<span class="t-meta">SPECIAL</span><b>ALLY</b>');
+  specialButton.type = "button";
+  const fireButton = el("button", "rh-fire-btn", touchControls, '<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="ring-bg" cx="50" cy="50" r="46"/><circle class="ring" cx="50" cy="50" r="46"/></svg><b class="rh-fire-ammo">32</b><span class="t-meta">FIRE</span>');
+  fireButton.type = "button";
+  const fireRing = fireButton.querySelector(".ring");
+  const fireAmmo = fireButton.querySelector(".rh-fire-ammo");
+  const specialLabel = specialButton.querySelector("b");
+  const RING_LENGTH = 2 * Math.PI * 46;
+  fireRing.style.strokeDasharray = `${RING_LENGTH}`;
+  const firePointers = new Set();
+  const releaseFire = (event) => {
+    firePointers.delete(event.pointerId);
+    if (firePointers.size === 0) {
+      fireButton.classList.remove("is-down");
+      handlers.fire?.(false);
+    }
+  };
+  fireButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    firePointers.add(event.pointerId);
+    try {
+      fireButton.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Capture is best-effort (fails for synthetic / already-released pointers).
+    }
+    fireButton.classList.add("is-down");
+    handlers.fire?.(true);
+  });
+  fireButton.addEventListener("pointerup", releaseFire);
+  fireButton.addEventListener("pointercancel", releaseFire);
+  fireButton.addEventListener("lostpointercapture", releaseFire);
+  specialButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handlers.special?.();
+  });
   const magLabel = ammo.querySelector(".rh-mag");
   const weaponName = ammo.querySelector(".rh-weapon-name");
   const weaponCode = ammo.querySelector(".rh-weapon-code");
@@ -121,7 +177,9 @@ export function createRunnerHud({ isTouch = false } = {}) {
     chip.type = "button";
     chip.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
-      handlers.weapon?.(index);
+      // Touch shows only the active chip: tapping it cycles weapons.
+      const isActive = chip.classList.contains("is-active");
+      handlers.weapon?.(isTouch && isActive ? (index + 1) % WEAPONS.length : index);
     });
     return chip;
   });
@@ -139,7 +197,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
   const arrows = Array.from({ length: ARROW_COUNT }, () => el("div", "rh-arrow", root, "<i></i><span>DRN</span>"));
 
   const touchHint = el("div", "rh-touch-hint t-meta", root,
-    "L: SWIPE LANE / JUMP / SLIDE — R: DRAG AIM — AUTO-FIRE ON LOCK");
+    "SWIPE LEFT SIDE TO MOVE — HOLD FIRE — AIM IS AUTOMATIC");
   if (isTouch) {
     touchHint.style.display = "block";
   }
@@ -152,8 +210,10 @@ export function createRunnerHud({ isTouch = false } = {}) {
         ["SWIPE ← →", "SWITCH LANE"],
         ["SWIPE ↑", "JUMP"],
         ["SWIPE ↓", "SLIDE"],
-        ["DRAG (RIGHT)", "AIM / AUTO-FIRE"],
+        ["DRAG (RIGHT)", "NUDGE AIM"],
+        ["FIRE BTN", "SHOOT (AIM IS AUTO)"],
         ["TAP CHIP", "SWITCH WEAPON"],
+        ["SPECIAL", "WHEN CHARGED"],
       ]
     : [
         ["A / D", "SWITCH LANE"],
@@ -163,13 +223,31 @@ export function createRunnerHud({ isTouch = false } = {}) {
         ["L-CLICK", "FIRE"],
         ["R", "RELOAD"],
         ["1–4 / Q", "WEAPON"],
+        ["E", "SPECIAL"],
         ["ESC", "PAUSE"],
       ];
   const controlsHtml = controls
     .map(([key, label]) => `<div class="k-row"><kbd>${key}</kbd><span>${label}</span></div>`)
     .join("");
 
-  function renderStart(best) {
+  function renderSpecialPicker(selected) {
+    return `
+      <div class="tk-special">
+        <span class="t-meta">SPECIAL // ONE PER RUN</span>
+        <div class="tk-special-options">
+          ${Object.values(SPECIALS)
+            .map(
+              (special) => `<button class="tk-special-opt${special.id === selected ? " is-selected" : ""}" data-special="${special.id}">
+                <b>${special.name}</b>
+                <span>${special.id === "ally" ? "DEPLOYS A DRONE THAT FIGHTS FOR YOU" : "HOMES IN ON THE NEAREST DRONE"}</span>
+              </button>`,
+            )
+            .join("")}
+        </div>
+      </div>`;
+  }
+
+  function renderStart(best, special = "ally") {
     screen.innerHTML = `
       <div class="ticket ticket--start">
         <div class="tk-main">
@@ -186,6 +264,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
               <div class="tk-keys">${controlsHtml}</div>
             </div>
           </div>
+          ${renderSpecialPicker(special)}
           <div class="tk-foot">
             <span class="t-meta">JUMP BARRIERS</span><span class="t-meta">SLIDE BEAMS</span><span class="t-meta">DODGE CARS</span><span class="t-meta">DROP DRONES</span>
           </div>
@@ -240,6 +319,12 @@ export function createRunnerHud({ isTouch = false } = {}) {
   }
 
   screen.addEventListener("click", (event) => {
+    const specialOption = event.target?.closest?.("[data-special]")?.dataset.special;
+    if (specialOption) {
+      event.stopPropagation();
+      handlers.specialSelect?.(specialOption);
+      return;
+    }
     const action = event.target?.closest?.("[data-action]")?.dataset.action;
     if (action && handlers[action]) {
       event.stopPropagation();
@@ -253,7 +338,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     screen.dataset.mode = mode;
     screen.classList.remove("is-countdown");
     if (mode === "start") {
-      renderStart(data.best ?? 0);
+      renderStart(data.best ?? 0, data.special);
     } else if (mode === "pause") {
       renderPause();
     } else if (mode === "gameover") {
@@ -277,6 +362,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   // ── Transient FX ────────────────────────────────────────────────────────
   let hitTimer = 0;
+  let hintTime = 0;
   let bannerTimer = 0;
   let damageLevel = 0;
 
@@ -396,6 +482,28 @@ export function createRunnerHud({ isTouch = false } = {}) {
       last.status = status;
     }
 
+    // Special attack state.
+    const special = s.special;
+    if (special) {
+      const meta = SPECIALS[special.type];
+      specialName.textContent = special.ready ? `${meta.name} READY` : meta.name;
+      specialBar.style.transform = `scaleX(${special.charge.toFixed(3)})`;
+      specialRow.classList.toggle("is-ready", special.ready);
+      specialLabel.textContent = meta.short;
+      specialButton.classList.toggle("is-visible", special.ready);
+      fireRing.style.strokeDashoffset = `${(RING_LENGTH * (1 - special.charge)).toFixed(1)}`;
+      fireButton.classList.toggle("is-charged", special.ready);
+    }
+    fireAmmo.textContent = overclock ? "∞" : s.reloading ? "··" : String(s.ammo);
+    fireButton.classList.toggle("is-reloading", s.reloading);
+
+    if (isTouch && touchHint.style.display !== "none") {
+      hintTime += delta;
+      if (hintTime > 5) {
+        touchHint.style.display = "none";
+      }
+    }
+
     crosshair.style.setProperty("--spread", `${(7 + s.spread * 520).toFixed(1)}px`);
     crosshair.classList.toggle("is-overclock", overclock);
 
@@ -452,6 +560,9 @@ export function createRunnerHud({ isTouch = false } = {}) {
     onRestart: (fn) => { handlers.restart = fn; },
     onResume: (fn) => { handlers.resume = fn; },
     onWeapon: (fn) => { handlers.weapon = fn; },
+    onSpecial: (fn) => { handlers.special = fn; },
+    onFire: (fn) => { handlers.fire = fn; },
+    onSpecialSelect: (fn) => { handlers.specialSelect = fn; },
     getScreenMode: () => screen.dataset.mode || "",
   };
 }
