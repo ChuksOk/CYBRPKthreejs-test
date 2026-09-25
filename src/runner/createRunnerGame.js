@@ -10,7 +10,8 @@ import { createObstacles } from "./createObstacles.js";
 import { createPickups } from "./createPickups.js";
 import { createLaneLights } from "./createLaneLights.js";
 import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
-import { shareRun } from "../ui/runner/shareCard.js";
+import { savePhoto, sharePhoto, shareRun } from "../ui/runner/shareCard.js";
+import { createRunSnapshots } from "./createRunSnapshots.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import {
@@ -92,6 +93,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   const hud = createRunnerHud({ isTouch });
 
   const viewmodel = createViewmodel({ scene, camera });
+  // Random in-run photos; the render loop does the capture.
+  const snapshots = createRunSnapshots();
 
   const projectiles = createEnemyProjectiles({ scene, fx });
 
@@ -417,6 +420,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.taken = {};
     game.build = [];
     controls.reset();
+    viewmodel?.setDeathProgress(-1);
+    snapshots.reset();
     weapon?.reset();
     weapon?.refreshMods?.();
     specials.reset(0.15 * (meta.tiers.charge ?? 0));
@@ -568,7 +573,44 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     if (isTouch) {
       vibrate([80, 50, 160]);
     }
+    // Short run with no photo yet: keep the fatal frame.
+    if (!snapshots.count() && !snapshots.wantsCapture()) {
+      snapshots.request({ ...photoMoment(), label: "FINAL MOMENT" });
+    }
+    // Hands let go of the gun; animated over DEATH_DURATION (real time).
+    viewmodel?.setDeathProgress(0);
     setState("dying");
+  }
+
+  const MOMENT_LABELS = ["MID-RUN", "FULL SEND", "NEON RUSH", "STREET LEVEL", "NO BRAKES"];
+
+  /** Caption data for a snapshot, read at capture time. */
+  function photoMoment() {
+    let label = MOMENT_LABELS[Math.floor(Math.random() * MOMENT_LABELS.length)];
+    if (drones.getBoss()) {
+      label = "BOSS FIGHT";
+    } else if (game.slowmo > 0) {
+      label = "LAST CHANCE";
+    } else if (game.combo >= 2.5) {
+      label = "ON A STREAK";
+    }
+    return {
+      label,
+      distance: game.distance,
+      sector: game.sector,
+      combo: game.combo,
+      kills: game.kills,
+      speed: controls.state.speed * 3.6,
+      weather: weather?.getLabel?.() ?? null,
+    };
+  }
+
+  function finalStats() {
+    return { score: game.score, distance: game.distance, kills: game.kills, daily: game.daily };
+  }
+
+  function photoView(shot) {
+    return shot ? { url: shot.canvas.toDataURL("image/jpeg", 0.82), label: shot.moment?.label ?? "MID-RUN", distance: shot.moment?.distance ?? 0, count: snapshots.count() } : null;
   }
 
   function showGameOver() {
@@ -603,6 +645,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       meta,
       daily: game.daily,
       build: game.build,
+      photo: photoView(snapshots.pickRandom()),
     });
     setState("dead");
   }
@@ -681,6 +724,19 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         break;
       case "upgrade":
         hud.pickCard(data.id, () => pickUpgrade(data.id));
+        break;
+      case "photo-share":
+        if (snapshots.getChosen()) {
+          sharePhoto(snapshots.getChosen(), finalStats());
+        }
+        break;
+      case "photo-save":
+        if (snapshots.getChosen()) {
+          savePhoto(snapshots.getChosen(), finalStats());
+        }
+        break;
+      case "photo-next":
+        hud.setPhoto(photoView(snapshots.pickRandom()));
         break;
       default:
         break;
@@ -1362,6 +1418,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
     simulateWorld(delta, { running: true });
     game.score = Math.floor(game.distance) + game.bonus;
+    snapshots.update(delta, photoMoment);
     if (game.state !== "running") {
       return;
     }
@@ -1432,6 +1489,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       }
       case "dying": {
         const slow = delta * DEATH_SLOWMO;
+        viewmodel?.setDeathProgress(game.stateTime / DEATH_DURATION);
         controls.update(slow, { simulateMovement: false });
         simulateWorld(slow, { running: false });
         if (game.stateTime >= DEATH_DURATION) {
@@ -1507,6 +1565,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     pickups,
     fx,
     audio,
+    snapshots,
     game,
     progression,
     runStats,

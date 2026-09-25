@@ -2432,3 +2432,83 @@ html.runner-playing.runner-touch body .audio-btn-root {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Game over: random in-run snapshot ─────────────────────────────── */
+.go-photo:empty {
+  display: none;
+}
+
+.go-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.go-photo-frame {
+  position: relative;
+  margin: 0;
+  padding: 4px;
+  background: var(--t-ink);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  animation: go-photo-in 0.5s cubic-bezier(0.2, 0.9, 0.2, 1) 0.15s both;
+}
+
+@keyframes go-photo-in {
+  from { transform: rotate(-3deg) scale(0.92); opacity: 0; }
+}
+
+.go-photo-frame img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.go-photo-frame figcaption {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 14px 6px 4px;
+  background: linear-gradient(180deg, rgba(12, 14, 19, 0), rgba(12, 14, 19, 0.85));
+  color: var(--t-paper);
+  font-family: var(--t-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.go-photo-frame figcaption b {
+  flex: 1;
+  color: var(--t-acid);
+  font-family: var(--t-display);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.go-photo-rec {
+  color: var(--t-pink, #ff4f74);
+}
+
+.go-photo-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.go-photo-actions .tk-button:first-child {
+  flex: 1;
+}
+
+.go-photo-icon {
+  flex: 0 0 38px;
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.go-photo-actions .tk-button {
+  font-size: 14px;
+  white-space: nowrap;
+}

@@ -167,13 +167,12 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
 
-export async function shareRun(stats) {
-  const blob = await drawShareCard(stats);
+/** Web Share API with the image attached; falls back to a download. */
+export async function shareImage(blob, filename, text) {
   if (!blob) {
     return false;
   }
-  const file = new File([blob], `low-gamma-redux-${stats.score}.png`, { type: "image/png" });
-  const text = `I scored ${stats.score} (${Math.floor(stats.distance)} m, ${stats.kills} drones) in ${GAME_TITLE}${stats.daily ? " — Daily Run" : ""}.`;
+  const file = new File([blob], filename, { type: blob.type || "image/png" });
   try {
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], text, title: GAME_TITLE });
@@ -184,11 +183,138 @@ export async function shareRun(stats) {
       return true;
     }
   }
+  downloadBlob(blob, filename);
+  return true;
+}
+
+export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = file.name;
+  link.download = filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  return true;
+}
+
+export async function shareRun(stats) {
+  const blob = await drawShareCard(stats);
+  const text = `I scored ${stats.score} (${Math.floor(stats.distance)} m, ${stats.kills} drones) in ${GAME_TITLE}${stats.daily ? " — Daily Run" : ""}.`;
+  return shareImage(blob, `low-gamma-redux-${stats.score}.png`, text);
+}
+
+/** Draws `source` into the box, cropped to cover it (like CSS object-fit). */
+function drawCover(ctx, source, x, y, w, h) {
+  const scale = Math.max(w / source.width, h / source.height);
+  const sw = w / scale;
+  const sh = h / scale;
+  ctx.drawImage(source, (source.width - sw) / 2, (source.height - sh) / 2, sw, sh, x, y, w, h);
+}
+
+/**
+ * Photo card: a random in-run snapshot (createRunSnapshots) framed as a
+ * 1080×1350 portrait post with the moment and the final result.
+ * @param {{ canvas: HTMLCanvasElement, moment: object }} shot
+ * @param {object} stats  final run stats (score, distance, kills, daily)
+ */
+export async function drawPhotoCard(shot, { score, distance, kills, daily = false }) {
+  await document.fonts?.ready;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const display = (size) => `800 ${size}px "Barlow Condensed", sans-serif`;
+  const mono = (size) => `700 ${size}px "JetBrains Mono", monospace`;
+  const moment = shot.moment ?? {};
+
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(0, 0, W, H);
+
+  // Photo with a notched acid frame.
+  const px = 40;
+  const py = 40;
+  const pw = W - 80;
+  const ph = 1030;
+  notch(ctx, px - 8, py - 8, pw + 16, ph + 16, 36);
+  ctx.fillStyle = C.acid;
+  ctx.fill();
+  ctx.save();
+  notch(ctx, px, py, pw, ph, 30);
+  ctx.clip();
+  drawCover(ctx, shot.canvas, px, py, pw, ph);
+  // Scanline + vignette pass so it reads as a captured frame.
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  for (let sy = py; sy < py + ph; sy += 4) {
+    ctx.fillRect(px, sy, pw, 1);
+  }
+  const vignette = ctx.createLinearGradient(0, py + ph - 260, 0, py + ph);
+  vignette.addColorStop(0, "rgba(12,14,19,0)");
+  vignette.addColorStop(1, "rgba(12,14,19,0.85)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(px, py + ph - 260, pw, 260);
+  ctx.restore();
+
+  // Top-left REC tag + timestamp.
+  ctx.fillStyle = C.pink;
+  ctx.beginPath();
+  ctx.arc(px + 44, py + 50, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = C.paper;
+  ctx.font = mono(24);
+  ctx.fillText("REC", px + 66, py + 59);
+  ctx.textAlign = "right";
+  ctx.fillText(`${Math.floor(moment.distance ?? 0)} M · SECTOR ${moment.sector ?? 1}`, px + pw - 30, py + 59);
+  ctx.textAlign = "left";
+
+  // Moment caption over the vignette.
+  ctx.fillStyle = C.acid;
+  ctx.font = display(76);
+  ctx.fillText(moment.label ?? "MID-RUN", px + 34, py + ph - 88);
+  ctx.fillStyle = C.paper;
+  ctx.font = mono(22);
+  const detail = [
+    moment.combo > 1 ? `x${moment.combo.toFixed(1)} COMBO` : null,
+    `${moment.kills ?? 0} DRONES`,
+    moment.weather ?? null,
+    `${Math.round(moment.speed ?? 0)} KM/H`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  ctx.fillText(detail, px + 38, py + ph - 42);
+
+  // Result strip.
+  const sy = py + ph + 40;
+  ctx.fillStyle = C.paper;
+  ctx.font = mono(22);
+  ctx.fillText(daily ? "DAILY RUN · FINAL" : "FINAL", 60, sy + 26);
+  ctx.font = display(120);
+  ctx.fillStyle = C.acid;
+  ctx.fillText(String(score).padStart(6, "0"), 54, sy + 142);
+  ctx.textAlign = "right";
+  ctx.fillStyle = C.paper;
+  ctx.font = display(52);
+  ctx.fillText(`${Math.floor(distance)} M · ${kills} DRONES`, W - 60, sy + 70);
+  ctx.font = display(40);
+  ctx.fillStyle = C.cobalt2;
+  ctx.fillText(GAME_TITLE.toUpperCase(), W - 60, sy + 130);
+  ctx.font = mono(18);
+  ctx.fillStyle = "rgba(233,235,238,0.55)";
+  ctx.fillText(AUTHOR_URL.replace(/^https?:\/\//, "").replace(/\/$/, "").toUpperCase(), W - 60, sy + 170);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(233,235,238,0.55)";
+  ctx.fillText(new Date().toISOString().slice(0, 10), 60, sy + 170);
+
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+export async function sharePhoto(shot, stats) {
+  const blob = await drawPhotoCard(shot, stats);
+  const text = `Caught mid-run in ${GAME_TITLE}: ${stats.score} pts, ${Math.floor(stats.distance)} m.`;
+  return shareImage(blob, `low-gamma-redux-photo-${stats.score}.png`, text);
+}
+
+export async function savePhoto(shot, stats) {
+  const blob = await drawPhotoCard(shot, stats);
+  if (blob) {
+    downloadBlob(blob, `low-gamma-redux-photo-${stats.score}.png`);
+  }
 }

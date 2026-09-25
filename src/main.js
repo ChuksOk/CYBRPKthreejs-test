@@ -48,6 +48,7 @@ import {
   shouldCompileBeforeRenderLoop,
 } from "./platform/performanceProfile.js";
 import { getStoredLookPreset, isDevelopmentModeEnabled } from "./platform/userPreferences.js";
+import { createGraphicsSettings } from "./platform/graphicsSettings.js";
 import {
   DEFAULT_LOOK_PRESET,
   LOOK_PRESETS,
@@ -203,6 +204,16 @@ async function init(loaderOverlay) {
     camera.updateProjectionMatrix();
   }
 
+  // Player graphics settings (Settings → Graphics), applied over device defaults.
+  const graphics = createGraphicsSettings({
+    pipeline,
+    ground: world.ground,
+    adaptiveDpr,
+    rain: world.rain,
+    getWeather: () => world.weather ?? null,
+  });
+  graphics.applyStored();
+
   const cameraLayout = createCameraLayoutSync({
     camera,
     getWalkControls: () => cameraDirector.walkControls,
@@ -232,6 +243,7 @@ async function init(loaderOverlay) {
     pipeline,
     inspectorSession,
     syncLighting: lighting.syncLighting,
+    graphics,
   });
 
   walkModeBridge.onChange = appShell.onWalkModeChange;
@@ -246,6 +258,9 @@ async function init(loaderOverlay) {
     devApp.runner = runnerGame;
   }
   attachDevPerf(devApp, performanceTools.perfApi);
+  if (devApp) {
+    devApp.graphics = graphics;
+  }
 
   const { carEngineAudio, planeEngineAudio, wetFootstepAudio } =
     await appShell.initAudio();

@@ -75,6 +75,7 @@ export function createAppShell({
   pipeline,
   inspectorSession,
   syncLighting,
+  graphics = null,
 }) {
   const uiState = createAppUiState();
   let finishedIntro = false;
@@ -139,8 +140,11 @@ export function createAppShell({
           pipeline.applyLookPreset(presetId);
           setStoredLookPreset(presetId);
         },
+        graphics,
         onRestart: () => {
           clearAllStoredPreferences();
+          graphics?.reset();
+          settingsPanelRef?.syncGraphics();
           inspectorSession.applyDevelopmentMode(false, settingsPanelRef);
           pipeline.applyLookPreset(DEFAULT_LOOK_PRESET);
           settingsPanelRef?.syncLookPreset(DEFAULT_LOOK_PRESET);

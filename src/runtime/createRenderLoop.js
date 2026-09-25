@@ -66,6 +66,8 @@ export function createRenderLoop({
     pipeline.dof.updateFocusPoint(cameraDirector.focusPoint, camera);
     getRainGlassIntro?.()?.update();
     post.render();
+    // Same task as the render: the WebGPU canvas is still readable.
+    runnerGame?.snapshots?.captureIfPending(renderer.domElement);
     performanceTools?.sampleFps();
   }
 

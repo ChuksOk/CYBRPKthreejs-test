@@ -22,6 +22,65 @@ function renderLookButtons(lookOptions) {
     .join("");
 }
 
+function renderGraphicsSection(graphics) {
+  if (!graphics) {
+    return "";
+  }
+  const presets = graphics.presets
+    .map(
+      (preset) => `
+      <button type="button" class="settings-preset-btn" data-graphics-preset="${preset.id}" aria-pressed="false">
+        ${preset.label}
+      </button>`,
+    )
+    .join("");
+  const rows = graphics.options
+    .map((option) => {
+      const locked = graphics.isLocked(option.key);
+      if (option.type === "toggle") {
+        return `
+        <label class="settings-gfx-row${locked ? " is-locked" : ""}">
+          <span class="settings-gfx-text">
+            <span class="settings-gfx-title">${option.label}</span>
+            ${option.hint ? `<span class="settings-gfx-hint">${option.hint}</span>` : ""}
+            ${locked ? '<span class="settings-gfx-hint">Unavailable on this browser</span>' : ""}
+          </span>
+          <input type="checkbox" class="settings-toggle-input" data-graphics-key="${option.key}" aria-label="${option.label}" ${locked ? "disabled" : ""} />
+          <span class="settings-toggle" aria-hidden="true"></span>
+        </label>`;
+      }
+      const max = graphics.getRange(option.key)?.max ?? option.max;
+      return `
+        <label class="settings-gfx-row settings-gfx-row--range">
+          <span class="settings-gfx-text">
+            <span class="settings-gfx-title">${option.label}</span>
+            <span class="settings-gfx-value" data-graphics-value="${option.key}"></span>
+          </span>
+          <input type="range" class="settings-gfx-range" data-graphics-key="${option.key}"
+            min="${option.min}" max="${max}" step="${option.step}" aria-label="${option.label}" />
+        </label>`;
+    })
+    .join("");
+  return `
+        <div class="settings-divider" role="separator"></div>
+
+        <div class="settings-section">
+          <p class="settings-section-title">Graphics</p>
+          <div class="settings-preset-row" role="group" aria-label="Graphics quality">
+            ${presets}
+          </div>
+          <details class="settings-gfx-advanced">
+            <summary>
+              <span>Advanced</span>
+              <span class="settings-gfx-preset-label" data-graphics-preset-label></span>
+            </summary>
+            <div class="settings-gfx-list">
+              ${rows}
+            </div>
+          </details>
+        </div>`;
+}
+
 export function createSettingsPanel({
   state,
   lookOptions = [],
@@ -31,6 +90,7 @@ export function createSettingsPanel({
   getCurrentLookPreset = () => defaultLookPreset,
   onLookPresetChange,
   onRestart,
+  graphics = null,
 } = {}) {
   const root = document.createElement("div");
   root.className = "settings-overlay";
@@ -49,6 +109,8 @@ export function createSettingsPanel({
             ${renderLookButtons(lookOptions)}
           </div>
         </div>
+
+        ${renderGraphicsSection(graphics)}
 
         <div class="settings-divider" role="separator"></div>
 
@@ -72,7 +134,7 @@ export function createSettingsPanel({
           <span>Reset configs</span>
         </button>
         <p class="settings-restart-hint">
-          Resets look preference and turns off development mode
+          Resets look and graphics preferences and turns off development mode
         </p>
       </div>
     </div>
@@ -84,6 +146,41 @@ export function createSettingsPanel({
   const restartButton = root.querySelector("[data-restart]");
   const lookButtons = [...root.querySelectorAll("[data-look-preset]")];
   const lookOptionIds = new Set(lookOptions.map((option) => option.id));
+  const presetButtons = [...root.querySelectorAll("[data-graphics-preset]")];
+  const graphicsInputs = [...root.querySelectorAll("[data-graphics-key]")];
+  const presetLabel = root.querySelector("[data-graphics-preset-label]");
+
+  function syncGraphics() {
+    if (!graphics) {
+      return;
+    }
+    const values = graphics.getValues();
+    const presetId = graphics.getPreset();
+    for (const button of presetButtons) {
+      const selected = button.dataset.graphicsPreset === presetId;
+      button.classList.toggle("settings-preset-btn--active", selected);
+      button.setAttribute("aria-pressed", selected ? "true" : "false");
+    }
+    if (presetLabel) {
+      presetLabel.textContent =
+        presetId === "custom"
+          ? "Custom"
+          : graphics.presets.find((preset) => preset.id === presetId)?.label ?? "";
+    }
+    for (const input of graphicsInputs) {
+      const key = input.dataset.graphicsKey;
+      const option = graphics.options.find((entry) => entry.key === key);
+      if (input.type === "checkbox") {
+        input.checked = Boolean(values[key]);
+      } else {
+        input.value = String(values[key]);
+        const label = root.querySelector(`[data-graphics-value="${key}"]`);
+        if (label) {
+          label.textContent = option?.format ? option.format(Number(values[key])) : String(values[key]);
+        }
+      }
+    }
+  }
 
   function syncDevelopmentMode(enabled) {
     devToggle.checked = Boolean(enabled);
@@ -105,6 +202,8 @@ export function createSettingsPanel({
     root.classList.remove("settings-overlay--force-hidden");
     syncDevelopmentMode(getDevelopmentMode());
     syncLookPreset();
+    graphics?.syncFromProfile?.();
+    syncGraphics();
     root.hidden = false;
   }
 
@@ -145,13 +244,43 @@ export function createSettingsPanel({
     });
   }
 
+  for (const button of presetButtons) {
+    button.addEventListener("click", () => {
+      graphics?.setPreset(button.dataset.graphicsPreset);
+      syncGraphics();
+    });
+  }
+
+  for (const input of graphicsInputs) {
+    const key = input.dataset.graphicsKey;
+    if (input.type === "checkbox") {
+      input.addEventListener("change", () => {
+        graphics?.set(key, input.checked);
+        syncGraphics();
+      });
+    } else {
+      // Live value label while dragging; apply on release (pipeline rebuilds).
+      input.addEventListener("input", () => {
+        const option = graphics?.options.find((entry) => entry.key === key);
+        const label = root.querySelector(`[data-graphics-value="${key}"]`);
+        if (label) {
+          label.textContent = option?.format ? option.format(Number(input.value)) : input.value;
+        }
+      });
+      input.addEventListener("change", () => {
+        graphics?.set(key, Number(input.value));
+        syncGraphics();
+      });
+    }
+  }
+
   devToggle.addEventListener("change", () => {
     onDevelopmentModeChange?.(devToggle.checked);
   });
 
   restartButton.addEventListener("click", () => {
     const confirmed = window.confirm(
-      "Reset configs? Look preference will return to default and development mode will turn off.",
+      "Reset configs? Look and graphics preferences will return to default and development mode will turn off.",
     );
     if (!confirmed) {
       return;
@@ -186,6 +315,7 @@ export function createSettingsPanel({
     setForceHidden,
     syncDevelopmentMode,
     syncLookPreset,
+    syncGraphics,
     destroy() {
       document.removeEventListener("keydown", onKeyDown);
       root.remove();

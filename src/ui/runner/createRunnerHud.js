@@ -373,7 +373,31 @@ export function createRunnerHud({ isTouch = false } = {}) {
       </div>`;
   }
 
-  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [] }) {
+  /** Random in-run snapshot (createRunSnapshots) + share / save actions. */
+  function renderPhoto(photo) {
+    if (!photo) {
+      return "";
+    }
+    return `
+      <figure class="go-photo-frame">
+        <img src="${photo.url}" alt="Snapshot from this run" />
+        <figcaption><span class="go-photo-rec">● REC</span><b>${photo.label}</b><span>${pad(photo.distance, 4)}M</span></figcaption>
+      </figure>
+      <div class="go-photo-actions">
+        <button class="tk-button tk-button--ghost" data-action="photo-share"><span>SHARE PIC</span><span>⇪</span></button>
+        <button class="tk-button tk-button--ghost go-photo-icon" data-action="photo-save" aria-label="Save photo" title="Save photo"><span>↓</span></button>
+        ${photo.count > 1 ? '<button class="tk-button tk-button--ghost go-photo-icon" data-action="photo-next" aria-label="Another snapshot" title="Another snapshot"><span>⟳</span></button>' : ""}
+      </div>`;
+  }
+
+  function setPhoto(photo) {
+    const slot = screen.querySelector("[data-photo]");
+    if (slot) {
+      slot.innerHTML = renderPhoto(photo);
+    }
+  }
+
+  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null }) {
     screen.innerHTML = `
       <div class="ticket ticket--over">
         <div class="tk-main">
@@ -398,6 +422,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         <div class="tk-stub">
           <div class="tk-stub-head"><span class="t-meta">RE-ENTRY</span><span class="t-meta">${newBest ? "★" : "N1"}</span></div>
           <button class="tk-button" data-action="restart"><span>RUN AGAIN</span><span>↻</span></button>
+          <div class="go-photo" data-photo>${renderPhoto(photo)}</div>
           <div class="tk-row2">
             <button class="tk-button tk-button--ghost" data-action="share"><span>SHARE</span><span>⇪</span></button>
             <button class="tk-button tk-button--ghost" data-action="menu"><span>MENU</span><span>≡</span></button>
@@ -786,6 +811,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     popup,
     toast,
     setBoss,
+    setPhoto,
     setPrompt,
     setSlowmo,
     setWeaponLocks,

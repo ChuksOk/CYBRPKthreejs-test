@@ -147,6 +147,11 @@ export function createWeatherSystem({ world, dayNight = null, audio = null, init
     set,
     randomize,
     getLabel: () => WEATHER_STATES[state.id].label,
+    /** Graphics setting: drop count at full storm (weather scales below it). */
+    setMaxDropCount(count) {
+      base.count = count;
+      applyAll();
+    },
     /** Ground ripple amount the render loop should use (0 when dry). */
     getRippleAmount: () => state.rippleAmount,
   };
