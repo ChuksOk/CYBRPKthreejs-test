@@ -305,3 +305,40 @@ html body .about-overlay .ab-footer .ab-credit {
 @media (max-width: 420px) {
   .ab-keys { grid-template-columns: 1fr; }
 }
+
+/* Staggered entrance: hero, then columns, then footer. */
+.ab-hero,
+.ab-main > *,
+.ab-side > *,
+.ab-footer {
+  animation: ab-rise 0.5s cubic-bezier(0.2, 0.9, 0.2, 1) backwards;
+}
+
+.ab-hero { animation-delay: 0.05s; }
+.ab-main > :nth-child(1) { animation-delay: 0.12s; }
+.ab-main > :nth-child(2) { animation-delay: 0.17s; }
+.ab-main > :nth-child(3) { animation-delay: 0.22s; }
+.ab-main > :nth-child(4) { animation-delay: 0.27s; }
+.ab-side > :nth-child(1) { animation-delay: 0.18s; }
+.ab-side > :nth-child(2) { animation-delay: 0.24s; }
+.ab-side > :nth-child(3) { animation-delay: 0.3s; }
+.ab-footer { animation-delay: 0.34s; }
+
+.ab-stats > div {
+  transition: background 0.2s ease;
+}
+
+.ab-stats > div:hover {
+  background: rgba(217, 255, 59, 0.06);
+}
+
+html body .about-overlay .ab-cta:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-overlay,
+  .about-overlay * {
+    animation: none !important;
+  }
+}

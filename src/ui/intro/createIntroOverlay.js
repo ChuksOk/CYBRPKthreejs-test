@@ -1,4 +1,4 @@
-import { AUTHOR_NAME, AUTHOR_URL, GAME_TAGLINE, GAME_TITLE } from "../../app/credits.js";
+import { AUTHOR_NAME, AUTHOR_URL, GAME_TAGLINE, GAME_TITLE, GAME_TITLE_LINES } from "../../app/credits.js";
 import "./introOverlay.css";
 import gsap from "gsap";
 
@@ -18,8 +18,7 @@ function splitIntoLetters(element, className = "intro-letter") {
 }
 
 export function createIntroOverlay({ onStart } = {}) {
-  const [titleTop, ...rest] = GAME_TITLE.split(" ");
-  const titleBottom = rest.join(" ") || titleTop;
+  const [titleTop, titleBottom] = GAME_TITLE_LINES;
   const root = document.createElement("div");
   root.className = "intro-container";
   root.setAttribute("aria-hidden", "false");

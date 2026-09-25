@@ -2,7 +2,9 @@
  * Project identity. Change these to rename the game / author everywhere
  * (intro, About panel, start ticket, page title set in index.html).
  */
-export const GAME_TITLE = "NEON RUN";
+export const GAME_TITLE = "Low Gamma: Redux";
+/** Display lockup for big title spots (intro, start ticket, share card). */
+export const GAME_TITLE_LINES = ["LOW GAMMA", "REDUX"];
 export const GAME_TAGLINE = "Outrun the drone curfew.";
 export const AUTHOR_NAME = "Adair Interactive";
 export const AUTHOR_URL = "https://adair.lovable.app/";

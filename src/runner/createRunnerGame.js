@@ -300,19 +300,42 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const _specialOrigin = new THREE.Vector3();
   const _specialDir = new THREE.Vector3();
+  function onSpecialLaunched() {
+    runStats.specialsUsed += 1;
+    hud.showBanner(specials.state.type === "ally" ? "ALLY DEPLOYED" : "SEEKER AWAY", 1.2);
+    if (game.tutorial >= 0 && TUTORIAL_STEPS[game.tutorial]?.id === "special") {
+      advanceTutorial();
+    }
+  }
+
   function useSpecial() {
     if (game.state !== "running" || !specials.state.ready) {
       return;
     }
-    viewmodel.getMuzzleWorldPosition(_specialOrigin);
+    // Thrown by the left hand: the special launches from the palm at the
+    // release frame of the throw animation.
+    if (viewmodel?.throwSpecial) {
+      if (viewmodel.isThrowing()) {
+        return;
+      }
+      viewmodel.throwSpecial(specials.state.type, (releasePosition) => {
+        if (game.state !== "running" && game.state !== "dying") {
+          return;
+        }
+        camera.getWorldDirection(_specialDir);
+        // Launch a metre ahead of the palm so it never fills the lens.
+        _specialOrigin.copy(releasePosition).addScaledVector(_specialDir, 1);
+        if (specials.activate(_specialOrigin, _specialDir, player)) {
+          onSpecialLaunched();
+        }
+      });
+      audio.play("slide", { volume: 0.25, detune: 600 });
+      return;
+    }
+    viewmodel?.getMuzzleWorldPosition(_specialOrigin);
     camera.getWorldDirection(_specialDir);
     if (specials.activate(_specialOrigin, _specialDir, player)) {
-      runStats.specialsUsed += 1;
-      hud.showBanner(specials.state.type === "ally" ? "ALLY DEPLOYED" : "SEEKER AWAY", 1.2);
-      viewmodel.kick(1.5);
-      if (game.tutorial >= 0 && TUTORIAL_STEPS[game.tutorial]?.id === "special") {
-        advanceTutorial();
-      }
+      onSpecialLaunched();
     }
   }
   controls.on("special", useSpecial);
@@ -657,7 +680,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         });
         break;
       case "upgrade":
-        pickUpgrade(data.id);
+        hud.pickCard(data.id, () => pickUpgrade(data.id));
         break;
       default:
         break;
@@ -668,7 +691,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     if (game.state === "upgrade") {
       const index = ["Digit1", "Digit2", "Digit3", "Numpad1", "Numpad2", "Numpad3"].indexOf(event.code) % 3;
       if (index >= 0 && game.upgradeChoices[index]) {
-        pickUpgrade(game.upgradeChoices[index].id);
+        const id = game.upgradeChoices[index].id;
+        hud.pickCard(id, () => pickUpgrade(id));
       }
       return;
     }

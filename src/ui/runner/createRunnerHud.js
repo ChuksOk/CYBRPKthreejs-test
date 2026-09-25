@@ -5,7 +5,7 @@ import "@fontsource/jetbrains-mono/latin-700.css";
 import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
 import { SPECIALS } from "../../weapon/createSpecials.js";
-import { GAME_TITLE } from "../../app/credits.js";
+import { GAME_TITLE_LINES } from "../../app/credits.js";
 import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
 
@@ -44,6 +44,58 @@ function barcode(seed = 7, bars = 46, { height = 34 } = {}) {
 }
 
 const pad = (value, length) => String(Math.max(0, Math.floor(value))).padStart(length, "0");
+
+/** Restart a one-shot CSS animation class (bumps, pops). */
+function bump(node, className = "is-bump") {
+  if (!node) {
+    return;
+  }
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
+}
+
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+/**
+ * Count the first number inside each element up from 0 (keeps zero padding,
+ * prefix and suffix text, and child elements like <em>).
+ */
+function countUp(nodes, duration = 900, delay = 150) {
+  const items = [];
+  for (const node of nodes) {
+    const text = [...node.childNodes].find((child) => child.nodeType === 3 && /\d/.test(child.textContent));
+    const match = text?.textContent.match(/^(\D*)(\d+)(.*)$/s);
+    if (!match) {
+      continue;
+    }
+    const [, prefix, digits, suffix] = match;
+    items.push({ text, prefix, suffix, target: Number(digits), width: digits.length });
+    text.textContent = `${prefix}${"0".padStart(digits.length, "0")}${suffix}`;
+  }
+  if (!items.length) {
+    return;
+  }
+  const start = performance.now() + delay;
+  const tick = (now) => {
+    const t = Math.min(1, Math.max(0, (now - start) / duration));
+    const k = easeOutCubic(t);
+    for (const item of items) {
+      item.text.textContent = `${item.prefix}${pad(item.target * k, item.width)}${item.suffix}`;
+    }
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
+/** Give staggered children an index (CSS uses --i for animation-delay). */
+function stagger(root, selector) {
+  root.querySelectorAll(selector).forEach((node, index) => {
+    node.style.setProperty("--i", String(Math.min(index, 14)));
+  });
+}
 
 /**
  * DOM HUD + start / pause / game-over screens. Visual language: transit
@@ -101,17 +153,21 @@ export function createRunnerHud({ isTouch = false } = {}) {
     <div class="v-head"><span class="t-meta">UNIT // VX-TR9</span><span class="t-meta">SET 2</span></div>
     <div class="v-row">
       <span class="v-label">SHIELD</span>
-      <div class="v-bar shield"><i></i></div>
+      <div class="v-bar shield"><b class="v-trail"></b><i></i></div>
       <b class="v-num rh-shield-num">060</b>
     </div>
     <div class="v-row">
       <span class="v-label">INTEGRITY</span>
-      <div class="v-bar health"><i></i></div>
+      <div class="v-bar health"><b class="v-trail"></b><i></i></div>
       <b class="v-num rh-health-num">100</b>
     </div>`;
   const shieldBar = vitals.querySelector(".v-bar.shield i");
   const healthBar = vitals.querySelector(".v-bar.health i");
   const shieldNum = vitals.querySelector(".rh-shield-num");
+  const shieldTrail = vitals.querySelector(".v-bar.shield .v-trail");
+  const healthTrail = vitals.querySelector(".v-bar.health .v-trail");
+  const trail = { shield: 1, health: 1 };
+  let scoreShown = 0;
   const healthNum = vitals.querySelector(".rh-health-num");
 
   // ── Ammo label (bottom-right) ──────────────────────────────────────────
@@ -279,7 +335,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
             <span class="tk-arrow">↗</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag"><span class="t-meta">SECTOR:</span><span class="tk-title">${GAME_TITLE.split(" ").join("<br>")}</span></div>
+            <div class="tk-tag"><span class="t-meta">SECTOR:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
             <div class="tk-side">
               <span class="tk-ghost">2077</span>
               <div class="tk-keys">${controlsHtml}</div>
@@ -374,7 +430,11 @@ export function createRunnerHud({ isTouch = false } = {}) {
     }
   });
 
+  let hideTimer = 0;
   function showScreen(mode, data = {}) {
+    clearTimeout(hideTimer);
+    screen.classList.remove("is-leaving");
+    const changed = screen.dataset.mode !== mode;
     screen.dataset.mode = mode;
     screen.classList.remove("is-countdown");
     screen.classList.toggle("is-meta", ["armory", "missions", "records", "upgrade"].includes(mode));
@@ -401,12 +461,47 @@ export function createRunnerHud({ isTouch = false } = {}) {
           <span class="t-meta">//VX-TR9 — HOLD LANE</span>
         </div>`;
     }
+    // Entrance choreography: staggered rise for list-like children.
+    stagger(screen, ".tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *");
+    screen.classList.toggle("is-fresh", changed);
+    if (mode === "gameover") {
+      countUp(screen.querySelectorAll(".tk-stats b, .go-rewards b"));
+    }
     screen.classList.add("is-visible");
   }
 
+  /** Fade + drop the current screen, then clear it. */
   function hideScreen() {
-    screen.dataset.mode = "";
-    screen.classList.remove("is-visible");
+    if (!screen.classList.contains("is-visible") || screen.dataset.mode === "countdown") {
+      screen.dataset.mode = "";
+      screen.classList.remove("is-visible", "is-leaving");
+      return;
+    }
+    screen.classList.add("is-leaving");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      screen.dataset.mode = "";
+      screen.classList.remove("is-visible", "is-leaving");
+    }, 200);
+  }
+
+  /** Upgrade pick: chosen card flies up, the rest drop away, then `done`. */
+  let picking = false;
+  function pickCard(id, done) {
+    if (picking) {
+      return;
+    }
+    const cards = [...screen.querySelectorAll(".up-card")];
+    if (!cards.length) {
+      done();
+      return;
+    }
+    picking = true;
+    cards.forEach((card) => card.classList.add(card.dataset.id === id ? "is-picked" : "is-dismissed"));
+    setTimeout(() => {
+      picking = false;
+      done();
+    }, 320);
   }
 
   // ── Transient FX ────────────────────────────────────────────────────────
@@ -502,9 +597,19 @@ export function createRunnerHud({ isTouch = false } = {}) {
       last.clock = s.clock;
     }
 
-    if (s.score !== last.score) {
-      scoreValue.textContent = pad(s.score, 6);
-      last.score = s.score;
+    // Score rolls toward the real value; big jumps (kills) punch the ticket.
+    if (s.score < scoreShown) {
+      scoreShown = s.score;
+    }
+    const gap = s.score - scoreShown;
+    if (gap >= 80) {
+      bump(scoreValue);
+    }
+    scoreShown += gap <= 1 ? gap : Math.max(1, gap * Math.min(1, delta * 10));
+    const shownInt = Math.floor(scoreShown);
+    if (shownInt !== last.score) {
+      scoreValue.textContent = pad(shownInt, 6);
+      last.score = shownInt;
     }
     const dist = Math.floor(s.distance);
     if (dist !== last.dist) {
@@ -524,6 +629,9 @@ export function createRunnerHud({ isTouch = false } = {}) {
     }
     const combo = `×${s.combo.toFixed(1)}`;
     if (combo !== last.combo) {
+      if (last.combo && s.combo > parseFloat(last.combo.slice(1))) {
+        bump(comboValue);
+      }
       comboValue.textContent = combo;
       comboCell.classList.toggle("is-hot", s.combo > 1.05);
       // Heat 0..3 drives the meter colour / glow.
@@ -535,6 +643,11 @@ export function createRunnerHud({ isTouch = false } = {}) {
     const healthT = Math.max(0, s.health / s.maxHealth);
     shieldBar.style.transform = `scaleX(${shieldT.toFixed(3)})`;
     healthBar.style.transform = `scaleX(${healthT.toFixed(3)})`;
+    // Damage trail: a pale bar that holds, then drains down to the value.
+    for (const [key, value, node] of [["shield", shieldT, shieldTrail], ["health", healthT, healthTrail]]) {
+      trail[key] = value > trail[key] ? value : trail[key] - Math.min(trail[key] - value, delta * 0.45);
+      node.style.transform = `scaleX(${trail[key].toFixed(3)})`;
+    }
     const shieldInt = Math.round(s.shield);
     if (shieldInt !== last.shield) {
       shieldNum.textContent = pad(shieldInt, 3);
@@ -556,12 +669,15 @@ export function createRunnerHud({ isTouch = false } = {}) {
       weaponCode.textContent = weapon.code;
       magLabel.textContent = `/ ${s.magSize || weapon.magSize}`;
       chipEls.forEach((chip, index) => chip.classList.toggle("is-active", index === s.weaponIndex));
+      bump(chipEls[s.weaponIndex]);
+      bump(ammo, "is-swap");
     }
 
     const overclock = s.overclock > 0;
     const ammoKey = overclock ? -2 : s.ammo;
     if (ammoKey !== last.ammo) {
       ammoNum.textContent = overclock ? "∞" : pad(s.ammo, 2);
+      bump(ammoNum, "is-tick");
       const filled = overclock ? MAG_TICKS : Math.round((s.ammo / s.magSize) * MAG_TICKS);
       magTicks.forEach((tick, index) => tick.classList.toggle("on", index < filled));
       last.ammo = ammoKey;
@@ -652,6 +768,10 @@ export function createRunnerHud({ isTouch = false } = {}) {
   }
 
   function setVisible(visible) {
+    // Cards slide in from their edges each time the HUD comes up.
+    if (visible && !root.classList.contains("is-visible")) {
+      bump(root, "is-entering");
+    }
     root.classList.toggle("is-visible", visible);
   }
 
@@ -669,6 +789,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     setPrompt,
     setSlowmo,
     setWeaponLocks,
+    pickCard,
     onAction: (fn) => { handlers.action = fn; },
     flashDamage,
     setVisible,

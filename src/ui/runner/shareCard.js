@@ -1,4 +1,4 @@
-import { GAME_TITLE, AUTHOR_NAME, AUTHOR_URL } from "../../app/credits.js";
+import { GAME_TITLE, GAME_TITLE_LINES, AUTHOR_NAME, AUTHOR_URL } from "../../app/credits.js";
 
 /**
  * Draws the game-over ticket as a 1080×1350 PNG (score, distance, build,
@@ -135,8 +135,15 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   }
 
   ctx.fillStyle = C.ink;
-  ctx.font = display(150);
-  ctx.fillText(GAME_TITLE.toUpperCase(), 100, 900);
+  // Two-line lockup, shrunk to fit the ticket width.
+  let titleSize = 120;
+  ctx.font = display(titleSize);
+  const widest = Math.max(...GAME_TITLE_LINES.map((line) => ctx.measureText(line).width));
+  titleSize = Math.min(titleSize, Math.floor((titleSize * (W - 220)) / widest));
+  ctx.font = display(titleSize);
+  ctx.fillText(GAME_TITLE_LINES[0], 100, 900 - titleSize * 0.86);
+  ctx.fillStyle = C.acid;
+  ctx.fillText(GAME_TITLE_LINES[1], 100, 900);
 
   // Stub.
   notch(ctx, 60, 990, W - 120, 300, 30);
@@ -165,7 +172,7 @@ export async function shareRun(stats) {
   if (!blob) {
     return false;
   }
-  const file = new File([blob], `neon-run-${stats.score}.png`, { type: "image/png" });
+  const file = new File([blob], `low-gamma-redux-${stats.score}.png`, { type: "image/png" });
   const text = `I scored ${stats.score} (${Math.floor(stats.distance)} m, ${stats.kills} drones) in ${GAME_TITLE}${stats.daily ? " — Daily Run" : ""}.`;
   try {
     if (navigator.canShare?.({ files: [file] })) {

@@ -37,9 +37,9 @@ npm run deploy   # Vercel production
 
 After the loader finishes, click **ENTER** on the intro overlay (or skip if `FEATURES.intro` is false), then **START RUN**. Settings expose look presets, audio, and (in Development Mode) the Three.js inspector.
 
-### Neon Run: endless runner + drone shooter
+### Low Gamma: Redux — endless runner + drone shooter
 
-With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first-person endless runner by Adair Interactive (https://adair.lovable.app/; name and links live in `src/app/credits.js`). You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
+With `FEATURES.runner` on (the default), the alley becomes **LOW GAMMA: REDUX**, a first-person endless runner by Adair Interactive (https://adair.lovable.app/; name and links live in `src/app/credits.js`). You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
 
 | Action | Desktop | Touch |
 |--------|---------|-------|
@@ -68,6 +68,16 @@ With `FEATURES.runner` on (the default), the alley becomes **NEON RUN**, a first
   - Each hand has articulated fingers and a thumb, mounted on per-gun grip anchors.
   - The trigger finger squeezes on every shot, and the left hand reaches for the magazine on reload.
   - The fingers idle slightly, and the forearms angle toward elbow points out of frame.
+- **Special throw:** the left hand throws the special. It leaves the gun holding a grenade (Seeker) or drone orb (Ally), winds back, snaps forward and releases. The special launches from the palm at that moment.
+- **UI motion:** the interface animates throughout.
+  - The score rolls up and punches on big gains; the combo and weapon chips bump.
+  - Shield and health bars leave a draining damage trail.
+  - HUD cards slide in from their edges at run start.
+  - Screens stagger their contents in and fade out on exit.
+  - Upgrade cards fly up (the pick) or fall away (the rest).
+  - Game-over numbers count up.
+  - Banners clip-reveal, and toasts and countdown digits spring in.
+  - All of it respects `prefers-reduced-motion`.
 - **Visuals:** neon lane markers with a pulse that runs toward you (one instanced draw, `src/runner/createLaneLights.js`); explosions with a billowing fireball, a shockwave ring and rising smoke, tinted by your Armory explosion colour; speed lines near top speed and during overclock.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
 - **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier that heats up (colour and glow) as it climbs.

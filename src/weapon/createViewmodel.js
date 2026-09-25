@@ -148,10 +148,10 @@ export function createViewmodel({ scene, camera }) {
       THREE.MathUtils.clamp(-motion.laneVelocity * 0.02, -0.25, 0.25) + reloadRoll * 0.6,
     );
 
-    hands.update(delta, reloadT);
-
     rig.position.copy(camera.position);
     rig.quaternion.copy(camera.quaternion);
+    // After the rig pose: throws release at a world position.
+    hands.update(delta, reloadT);
     hands.aimForearms();
     rig.updateMatrixWorld(true);
   }
@@ -168,6 +168,9 @@ export function createViewmodel({ scene, camera }) {
     kick,
     update,
     setReloadProgress,
+    /** Left hand throws the special; onRelease(worldPos) at the snap. */
+    throwSpecial: (type, onRelease) => hands.throwItem(type, onRelease),
+    isThrowing: () => hands.isThrowing(),
     setVisible,
     setOverclock: () => {},
     /** Live ammo counter on the receiver screen. */
