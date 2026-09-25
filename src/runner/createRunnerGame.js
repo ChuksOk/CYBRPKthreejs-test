@@ -663,6 +663,13 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   hud.onStart(startCountdown);
   hud.onRestart(restart);
   hud.onResume(resume);
+  hud.onPause(pause);
+  // Backgrounding the tab / app mid-run pauses instead of running blind.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      pause();
+    }
+  });
   hud.onWeapon((index) => {
     if (game.state === "running") {
       weapon?.selectWeapon(index);

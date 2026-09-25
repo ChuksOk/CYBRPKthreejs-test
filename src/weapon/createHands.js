@@ -9,7 +9,7 @@ import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
  * Anatomy: tapered palm with thenar / hypothenar pads, four fingers of three
  * lathed segments (tapered, knuckle bulge, rounded tips), a two-segment thumb
  * on a metacarpal. Tactical glove with fabric sheen and weave, cut-off index
- * and thumb tips (skin + nails), off-white knuckle armour with neon trim, a
+ * and thumb tips (skin + nails), graphite knuckle armour with neon trim, a
  * wrist strap, a strip of skin and a techwear sleeve aimed at the elbow.
  *
  * Hands mount on anchors inside each gun (createGunModels `anchors`) so they

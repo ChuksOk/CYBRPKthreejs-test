@@ -110,6 +110,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     start: null,
     restart: null,
     resume: null,
+    pause: null,
     weapon: null,
     special: null,
     fire: null,
@@ -225,6 +226,16 @@ export function createRunnerHud({ isTouch = false } = {}) {
     event.preventDefault();
     event.stopPropagation();
     handlers.special?.();
+  });
+  // Touch: pause button (top-right). Desktop pauses by releasing the mouse.
+  const pauseButton = el("button", "rh-pause-btn", root, '<i></i><i></i><span class="t-meta">PAUSE</span>');
+  pauseButton.type = "button";
+  pauseButton.setAttribute("aria-label", "Pause");
+  pauseButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handlers.fire?.(false);
+    handlers.pause?.();
   });
   const magLabel = ammo.querySelector(".rh-mag");
   const weaponName = ammo.querySelector(".rh-weapon-name");
@@ -369,7 +380,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         <div class="lb-title">PAUSED</div>
         <div class="lb-rule"><i></i><i></i><i></i></div>
         <button class="tk-button" data-action="resume"><span>RESUME</span><span>→</span></button>
-        <div class="t-meta lb-note">CLICK TO RE-LOCK THE MOUSE</div>
+        <div class="t-meta lb-note">${isTouch ? "TAP RESUME TO CONTINUE" : "CLICK TO RE-LOCK THE MOUSE"}</div>
       </div>`;
   }
 
@@ -822,6 +833,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     onStart: (fn) => { handlers.start = fn; },
     onRestart: (fn) => { handlers.restart = fn; },
     onResume: (fn) => { handlers.resume = fn; },
+    onPause: (fn) => { handlers.pause = fn; },
     onWeapon: (fn) => { handlers.weapon = fn; },
     onSpecial: (fn) => { handlers.special = fn; },
     onFire: (fn) => { handlers.fire = fn; },

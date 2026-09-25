@@ -2512,3 +2512,64 @@ html.runner-playing.runner-touch body .audio-btn-root {
   font-size: 14px;
   white-space: nowrap;
 }
+
+/* ── Touch: pause button (top-right) ───────────────────────────────── */
+.rh-pause-btn {
+  display: none;
+}
+
+.runner-hud.is-touch .rh-pause-btn {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  background: rgba(12, 14, 19, 0.6);
+  box-shadow: inset 0 0 0 2px rgba(217, 255, 59, 0.5);
+  clip-path: var(--t-notch-sm);
+  color: var(--t-acid);
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+
+.runner-hud.is-touch .rh-pause-btn i {
+  display: block;
+  width: 6px;
+  height: 20px;
+  background: currentColor;
+}
+
+.runner-hud.is-touch .rh-pause-btn span {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  font-size: 7px;
+  text-align: center;
+  letter-spacing: 0.12em;
+}
+
+.runner-hud.is-touch .rh-pause-btn i:first-of-type {
+  margin-top: -8px;
+}
+
+.runner-hud.is-touch .rh-pause-btn i:nth-of-type(2) {
+  margin-top: -8px;
+}
+
+.runner-hud.is-touch .rh-pause-btn:active {
+  transform: scale(0.92);
+  background: rgba(217, 255, 59, 0.25);
+}
+
+.runner-hud.is-entering .rh-pause-btn { animation: ui-from-right 0.5s var(--ui-spring) 0.2s backwards; }
