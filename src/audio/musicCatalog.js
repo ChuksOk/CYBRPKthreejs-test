@@ -17,21 +17,25 @@ const cover = (id) => ({
 const ARTIST = "Amárá-Æon";
 const ALBUM = "Imela";
 
+// Album order (Imela tracklist as supplied). `no` is the album track
+// number; track 1 ("Intro") has no file in public/game music, so the
+// library starts at 2. "Gozie Anyi (RDX)" is in the folder but not on the
+// tracklist: kept as an unnumbered bonus at the end.
 const TRACKS = [
-  { title: "Agbani's Interlude", file: "Amárá-Æon - Agbani's Interlude .mp3", cover: "a", genre: "Jazz", duration: 228.1 },
-  { title: "Check The Promise", feat: "Acal", file: "Amárá-Æon - Check The Promise ft Acal.mp3", cover: "c", genre: null, duration: 222.9 },
-  { title: "Closing Prayer", file: "Amárá-Æon - Closing Prayer.mp3", cover: "b", genre: null, duration: 70.5 },
-  { title: "Gaba n'iru", file: "Amárá-Æon - Gaba n'iru.mp3", cover: "a", genre: "Jazz", duration: 125.8 },
-  { title: "Gozie Anyi", version: "RDX", file: "Amárá-Æon - Gozie Anyi RDX.mp3", cover: "a", genre: "Jazz", duration: 212.9 },
-  { title: "Gozie Anyi", version: "aca", file: "Amárá-Æon - Gozie Anyi aca.mp3", cover: "a", genre: "Jazz", duration: 195.4 },
-  { title: "I Chetara Nna", version: "RDX", file: "Amárá-Æon - I Chetara Nna RDX.mp3", cover: "a", genre: "Jazz", duration: 139.1 },
-  { title: "Jigide M", file: "Amárá-Æon - Jigide M.mp3", cover: "b", genre: "Jazz", duration: 300.9 },
-  { title: "Midway", file: "Amárá-Æon - Midway.mp3", cover: "b", genre: null, duration: 100 },
-  { title: "N'Ebe Nzuzo Gị", file: "Amárá-Æon - N'Ebe Nzuzo Gị.mp3", cover: "c", genre: "Jazz", duration: 222.5 },
-  { title: "Ndewo Maaria", file: "Amárá-Æon - Ndewo Maaria.mp3", cover: "a", genre: "Jazz", duration: 217.3 },
-  { title: "Ntukwasi Obi", file: "Amárá-Æon - Ntukwasi Obi.mp3", cover: "b", genre: "Jazz", duration: 250.9 },
-  { title: "Onye Nwetara Amara Ya", file: "Amárá-Æon - Onye Nwetara Amara Ya.mp3", cover: "a", genre: "Jazz", duration: 171.2 },
-  { title: "Zọrọ m", file: "Amárá-Æon - Zọrọ m.mp3", cover: "a", genre: "Jazz", duration: 277.7 },
+  { no: 2, title: "N'Ebe Nzuzo Gị", file: "Amárá-Æon - N'Ebe Nzuzo Gị.mp3", cover: "c", genre: "Jazz", duration: 222.5 },
+  { no: 3, title: "Zọrọ m", file: "Amárá-Æon - Zọrọ m.mp3", cover: "a", genre: "Jazz", duration: 277.7 },
+  { no: 4, title: "Onye Nwetara Amara Ya", file: "Amárá-Æon - Onye Nwetara Amara Ya.mp3", cover: "a", genre: "Jazz", duration: 171.2 },
+  { no: 5, title: "Ntukwasį obi", file: "Amárá-Æon - Ntukwasi Obi.mp3", cover: "b", genre: "Jazz", duration: 250.9 },
+  { no: 6, title: "Ibiagbanidokibubo", file: "Amárá-Æon - Agbani's Interlude .mp3", cover: "a", genre: "Jazz", duration: 228.1 },
+  { no: 7, title: "Midway", file: "Amárá-Æon - Midway.mp3", cover: "b", genre: null, duration: 100 },
+  { no: 8, title: "Jigide M", file: "Amárá-Æon - Jigide M.mp3", cover: "b", genre: "Jazz", duration: 300.9 },
+  { no: 9, title: "Gozie Anyi", version: "Cappella Version", file: "Amárá-Æon - Gozie Anyi aca.mp3", cover: "a", genre: "Jazz", duration: 195.4 },
+  { no: 10, title: "I Chetara Nna", version: "Redux", file: "Amárá-Æon - I Chetara Nna RDX.mp3", cover: "a", genre: "Jazz", duration: 139.1 },
+  { no: 11, title: "Gaba n'iru", version: "Reprise", file: "Amárá-Æon - Gaba n'iru.mp3", cover: "a", genre: "Jazz", duration: 125.8 },
+  { no: 12, title: "Check The Promise", feat: "Acal", file: "Amárá-Æon - Check The Promise ft Acal.mp3", cover: "c", genre: null, duration: 222.9 },
+  { no: 13, title: "Ndewo Maaria", file: "Amárá-Æon - Ndewo Maaria.mp3", cover: "a", genre: "Jazz", duration: 217.3 },
+  { no: 14, title: "Closing Prayer", file: "Amárá-Æon - Closing Prayer.mp3", cover: "b", genre: null, duration: 70.5 },
+  { no: null, title: "Gozie Anyi", version: "RDX", file: "Amárá-Æon - Gozie Anyi RDX.mp3", cover: "a", genre: "Jazz", duration: 212.9 },
 ];
 
 function slug(value) {
@@ -45,6 +49,7 @@ function slug(value) {
 
 export const MUSIC_CATALOG = TRACKS.map((track) => ({
   id: slug(`${track.title} ${track.version ?? ""}`),
+  no: track.no,
   title: track.title,
   version: track.version ?? null,
   artist: track.feat ? `${ARTIST} ft. ${track.feat}` : ARTIST,

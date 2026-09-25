@@ -27,7 +27,8 @@ export const MUSIC_SOURCES = [
 const DEFAULT_SETTINGS = {
   source: "soundtrack",
   volume: 0.7,
-  shuffle: true,
+  // Album order by default (the tracklist is sequenced).
+  shuffle: false,
   inMenus: true,
   inRuns: true,
   notify: true,

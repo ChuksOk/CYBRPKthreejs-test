@@ -174,5 +174,11 @@ export function createDayNightCycle({
     apply();
   }
 
-  return { state, update, setPhase, getClock, getLabel, apply, restoreBase, setWeather };
+  /** 0 = night … 1 = full day (same curve as the key light). */
+  function getDaylight() {
+    const height = -Math.cos(state.phase * Math.PI * 2);
+    return THREE.MathUtils.smoothstep(height, -0.15, 0.45) * (1 - weather.dim * 0.35);
+  }
+
+  return { state, update, setPhase, getClock, getLabel, getDaylight, apply, restoreBase, setWeather };
 }

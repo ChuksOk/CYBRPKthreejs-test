@@ -42,10 +42,10 @@ export function renderMusicScreen(player, { back = "menu" } = {}) {
   const catalog = player.catalog;
   const inRotation = catalog.filter((t) => player.isEnabled(t.id)).length;
   const rows = catalog
-    .map((t, i) => {
+    .map((t) => {
       const on = player.isEnabled(t.id);
       return `<div class="mu-row${t === track ? " is-current" : ""}${on ? "" : " is-off"}" data-music="track:${t.id}" role="button" tabindex="0">
-        <span class="mu-idx"><b>${pad2(i + 1)}</b>${eqBars(3)}</span>
+        <span class="mu-idx"><b>${t.no ? pad2(t.no) : "B"}</b>${eqBars(3)}</span>
         <img class="mu-thumb" src="${t.cover.small}" alt="" loading="lazy" />
         <span class="mu-row-text"><b>${esc(t.title)}${t.version ? ` <em>${esc(t.version)}</em>` : ""}</b><span>${esc(t.artist)}</span></span>
         <span class="mu-genre t-meta">${esc(t.genre ?? t.album)}</span>
