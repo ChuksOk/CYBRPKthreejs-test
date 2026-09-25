@@ -1484,7 +1484,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
 /* ── Meta: start nav, daily toggle ─────────────────────────────────── */
 .tk-nav {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin: 0 0 12px;
 }
@@ -2212,6 +2212,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
 }
 
 @media (max-width: 700px) {
+  .tk-nav { grid-template-columns: repeat(3, 1fr); }
   .tk-nav button b { font-size: 16px; }
   .mt-grid, .mt-grid--4 { grid-template-columns: repeat(2, 1fr); }
   .mt-grid--2 { grid-template-columns: 1fr; }
@@ -2583,4 +2584,13 @@ html.runner-playing.runner-touch body .audio-btn-root {
 
 .tk-nav button.tk-style.is-on .t-meta {
   color: #b8583c;
+}
+
+/* ── Soundtrack chip (start ticket) ───────────────────────────────── */
+.tk-nav button.tk-music {
+  background: linear-gradient(135deg, var(--t-ink) 60%, #2a1640);
+}
+
+.tk-nav button.tk-music .t-meta {
+  color: var(--t-pink);
 }

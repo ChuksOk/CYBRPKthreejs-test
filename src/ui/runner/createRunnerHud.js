@@ -8,6 +8,7 @@ import { SPECIALS } from "../../weapon/createSpecials.js";
 import { GAME_TITLE_LINES } from "../../app/credits.js";
 import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
+import { bindMusicControls, createNowPlayingToast, renderMiniPlayer, renderMusicScreen } from "./musicPlayerUi.js";
 
 const ARROW_COUNT = 8;
 const MAG_TICKS = 32;
@@ -103,7 +104,7 @@ function stagger(root, selector) {
  * condensed display numerals, mono metadata, barcodes and dot grids.
  * Pure view: the game calls update() with plain numbers each frame.
  */
-export function createRunnerHud({ isTouch = false } = {}) {
+export function createRunnerHud({ isTouch = false, music = null } = {}) {
   document.documentElement.classList.add("runner-mode");
   const root = el("div", "runner-hud", document.body);
   const handlers = {
@@ -291,6 +292,10 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   // ── Screens ─────────────────────────────────────────────────────────────
   const screen = el("div", "runner-screen", document.body);
+  // EA FC-style "now playing" card on every new soundtrack track.
+  const nowPlaying = music
+    ? createNowPlayingToast(music, { isSuppressed: () => screen.dataset.mode === "music" })
+    : null;
 
   const controls = isTouch
     ? [
@@ -357,6 +362,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
             <button data-action="armory"><b>ARMORY</b><span class="t-meta">${meta.shards} ◆</span></button>
             <button data-action="missions"><b>MISSIONS</b><span class="t-meta">RANK ${meta.rank}${meta.missionsReady ? " · !" : ""}</span></button>
             <button data-action="records"><b>RECORDS</b><span class="t-meta">TOP 10</span></button>
+            <button data-action="music" class="tk-music"><b>MUSIC</b><span class="t-meta">${music ? `♪ ${music.catalog.length} TRACKS` : "OFF"}</span></button>
             <button data-action="style" class="tk-style${style === "moebius" ? " is-on" : ""}" aria-pressed="${style === "moebius"}"><b>STYLE</b><span class="t-meta">${style === "moebius" ? "MOEBIUS ✎" : "NEON ◐"}</span></button>
           </div>` : ""}
           <div class="tk-foot">
@@ -382,6 +388,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         <div class="lb-rule"><i></i><i></i><i></i></div>
         <button class="tk-button" data-action="resume"><span>RESUME</span><span>→</span></button>
         <div class="t-meta lb-note">${isTouch ? "TAP RESUME TO CONTINUE" : "CLICK TO RE-LOCK THE MOUSE"}</div>
+        ${music ? renderMiniPlayer(music) : ""}
       </div>`;
   }
 
@@ -446,6 +453,10 @@ export function createRunnerHud({ isTouch = false } = {}) {
   }
 
   screen.addEventListener("click", (event) => {
+    // Soundtrack controls are handled by bindMusicControls.
+    if (event.target?.closest?.("[data-music]")) {
+      return;
+    }
     const specialOption = event.target?.closest?.("[data-special]")?.dataset.special;
     if (specialOption) {
       event.stopPropagation();
@@ -468,13 +479,17 @@ export function createRunnerHud({ isTouch = false } = {}) {
   });
 
   let hideTimer = 0;
+  let unbindMusic = null;
   function showScreen(mode, data = {}) {
     clearTimeout(hideTimer);
+    unbindMusic?.();
+    unbindMusic = null;
     screen.classList.remove("is-leaving");
     const changed = screen.dataset.mode !== mode;
     screen.dataset.mode = mode;
     screen.classList.remove("is-countdown");
     screen.classList.toggle("is-meta", ["armory", "missions", "records", "upgrade"].includes(mode));
+    screen.classList.toggle("is-music", mode === "music");
     if (mode === "start") {
       renderStart(data.best ?? 0, data.special, data.meta ?? null, data.style ?? "neon");
     } else if (mode === "armory") {
@@ -485,8 +500,22 @@ export function createRunnerHud({ isTouch = false } = {}) {
       screen.innerHTML = renderRecords(data.meta, data.dailyBest ?? 0);
     } else if (mode === "upgrade") {
       screen.innerHTML = renderUpgradePicker(data);
+    } else if (mode === "music" && music) {
+      // The full player shows the same info; no card on top of it.
+      nowPlaying?.hide();
+      const renderMusic = () => {
+        unbindMusic?.();
+        screen.innerHTML = renderMusicScreen(music, { back: data.back ?? "menu" });
+        unbindMusic = bindMusicControls(screen, music, { onRerender: renderMusic });
+      };
+      renderMusic();
     } else if (mode === "pause") {
       renderPause();
+      if (music) {
+        unbindMusic = bindMusicControls(screen, music, {
+          onRerender: () => showScreen("pause"),
+        });
+      }
     } else if (mode === "gameover") {
       renderGameOver(data);
     } else if (mode === "countdown") {
@@ -499,7 +528,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         </div>`;
     }
     // Entrance choreography: staggered rise for list-like children.
-    stagger(screen, ".tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *");
+    stagger(screen, ".tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *, .mu-rows > *");
     screen.classList.toggle("is-fresh", changed);
     if (mode === "gameover") {
       countUp(screen.querySelectorAll(".tk-stats b, .go-rewards b"));
@@ -509,6 +538,8 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   /** Fade + drop the current screen, then clear it. */
   function hideScreen() {
+    unbindMusic?.();
+    unbindMusic = null;
     if (!screen.classList.contains("is-visible") || screen.dataset.mode === "countdown") {
       screen.dataset.mode = "";
       screen.classList.remove("is-visible", "is-leaving");

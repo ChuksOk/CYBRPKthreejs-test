@@ -13,6 +13,7 @@ import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
 import { savePhoto, sharePhoto, shareRun } from "../ui/runner/shareCard.js";
 import { createRunSnapshots } from "./createRunSnapshots.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
+import { createMusicPlayer } from "../audio/createMusicPlayer.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import {
   getStoredRunnerBest,
@@ -90,7 +91,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const fx = createWeaponFx({ scene, camera });
   const audio = createRunnerAudio();
-  const hud = createRunnerHud({ isTouch });
+  // Soundtrack catalog (menus + runs); the synth score is the alternative.
+  const music = createMusicPlayer();
+  const hud = createRunnerHud({ isTouch, music });
 
   const viewmodel = createViewmodel({ scene, camera });
   // Random in-run photos; the render loop does the capture.
@@ -479,9 +482,21 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     });
   }
 
+  /** Procedural score runs only when the soundtrack hands runs to it. */
+  function syncSynthScore() {
+    const inRun = game.state === "running" || game.state === "paused" || game.state === "upgrade";
+    if (inRun && music.wantsSynthInRuns()) {
+      audio.startMusic();
+    } else {
+      audio.stopMusic();
+    }
+  }
+  music.on("state", () => syncSynthScore());
+
   function enterMenu() {
     restoreTheme();
     audio.stopMusic();
+    music.setContext("menu");
     resetRun();
     controls.setActive(true);
     controls.setInputEnabled(false);
@@ -519,9 +534,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.hideScreen();
     hud.showBanner(label, 1.1);
     audio.play("go");
-    audio.startMusic();
     controls.setInputEnabled(true);
     setState("running");
+    music.setContext("run");
+    syncSynthScore();
     if (game.tutorial >= 0) {
       startTutorialStep();
     }
@@ -534,6 +550,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     controls.setInputEnabled(false);
     hud.showScreen("pause");
     setState("paused");
+    music.setContext("paused");
   }
 
   function resume() {
@@ -547,6 +564,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.hideScreen();
     controls.setInputEnabled(true);
     setState("running");
+    music.setContext("run");
   }
 
   /** Second wind (upgrade): survive one fatal hit. */
@@ -586,6 +604,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     // Hands let go of the gun; animated over DEATH_DURATION (real time).
     viewmodel?.setDeathProgress(0);
     setState("dying");
+    music.setContext("dead");
   }
 
   const MOMENT_LABELS = ["MID-RUN", "FULL SEND", "NEON RUSH", "STREET LEVEL", "NO BRAKES"];
@@ -698,6 +717,16 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         game.daily = !game.daily;
         showStart();
         break;
+      case "music":
+        hud.showScreen("music", { back: game.state === "paused" ? "music-back" : "menu" });
+        break;
+      case "music-back":
+        if (game.state === "paused") {
+          hud.showScreen("pause");
+        } else {
+          showStart();
+        }
+        break;
       case "menu":
         if (game.state === "dead") {
           enterMenu();
@@ -762,6 +791,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
 
   document.addEventListener("keydown", (event) => {
+    // N: skip to the next soundtrack track (menus and runs).
+    if (event.code === "KeyN" && !event.repeat && music.getState().settings.source === "soundtrack") {
+      music.next();
+      return;
+    }
     if (game.state === "upgrade") {
       const index = ["Digit1", "Digit2", "Digit3", "Numpad1", "Numpad2", "Numpad3"].indexOf(event.code) % 3;
       if (index >= 0 && game.upgradeChoices[index]) {
@@ -1583,6 +1617,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     pickups,
     fx,
     audio,
+    music,
     snapshots,
     game,
     progression,
