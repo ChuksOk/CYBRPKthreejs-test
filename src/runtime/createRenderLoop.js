@@ -26,10 +26,13 @@ export function createRenderLoop({
     cameraDirector.update(delta);
     onFrame?.(delta);
 
-    world.collisionHeight?.update({
-      camera,
-      hideObjects: collectCollisionHideObjects(world),
-    });
+    // Dry weather disables the rain: skip its height pass too.
+    if (world.rain?.params?.enabled !== false) {
+      world.collisionHeight?.update({
+        camera,
+        hideObjects: collectCollisionHideObjects(world),
+      });
+    }
     world.rain?.update(delta, camera);
 
     const introActive = getIntroActive?.() ?? false;
@@ -41,7 +44,7 @@ export function createRenderLoop({
     world.sky?.update(camera, timer.getElapsed());
     world.ground?.update?.(delta);
     const rainEnabled = world.rain?.params?.enabled ?? false;
-    world.ground?.setRippleAmount?.(rainEnabled ? 1 : 0);
+    world.ground?.setRippleAmount?.(world.weather?.getRippleAmount() ?? (rainEnabled ? 1 : 0));
 
     if (!introActive) {
       world.billboards?.userData?.billboardMaterials?.billboard?.update?.(camera);
@@ -63,6 +66,8 @@ export function createRenderLoop({
     pipeline.dof.updateFocusPoint(cameraDirector.focusPoint, camera);
     getRainGlassIntro?.()?.update();
     post.render();
+    // Same task as the render: the WebGPU canvas is still readable.
+    runnerGame?.snapshots?.captureIfPending(renderer.domElement);
     performanceTools?.sampleFps();
   }
 

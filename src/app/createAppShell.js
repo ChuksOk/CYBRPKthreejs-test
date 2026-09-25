@@ -75,6 +75,8 @@ export function createAppShell({
   pipeline,
   inspectorSession,
   syncLighting,
+  graphics = null,
+  visualStyle = null,
 }) {
   const uiState = createAppUiState();
   let finishedIntro = false;
@@ -139,8 +141,14 @@ export function createAppShell({
           pipeline.applyLookPreset(presetId);
           setStoredLookPreset(presetId);
         },
+        graphics,
+        getVisualStyle: () => pipeline.getVisualStyle?.() ?? "neon",
+        onVisualStyleChange: (id) => visualStyle?.set(id),
         onRestart: () => {
+          visualStyle?.set("neon");
           clearAllStoredPreferences();
+          graphics?.reset();
+          settingsPanelRef?.syncGraphics();
           inspectorSession.applyDevelopmentMode(false, settingsPanelRef);
           pipeline.applyLookPreset(DEFAULT_LOOK_PRESET);
           settingsPanelRef?.syncLookPreset(DEFAULT_LOOK_PRESET);

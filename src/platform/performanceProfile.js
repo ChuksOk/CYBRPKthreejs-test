@@ -40,6 +40,9 @@ export const performanceProfile = {
 
   lensflareBlurRadius: 4,
 
+  /** Moebius style: 8-tap luminance Sobel for interior ink lines (off on mobile). */
+  moebiusColorEdges: true,
+
   smokeEnabled: true,
   exhaustCount: 50,
   ambientCount: 40,
@@ -61,6 +64,10 @@ export const performanceProfile = {
   runnerTracerCount: 24,
   /** Muzzle / explosion point lights (one extra light for every lit material). */
   runnerWeaponLight: true,
+  /** Emissive lane markers (one instanced draw). */
+  runnerLaneLights: true,
+  /** Seconds between shadow-map refreshes as the day-night sun moves (0 = never). */
+  runnerSunShadowInterval: 3,
 };
 
 /**
@@ -87,6 +94,8 @@ export function applyDevicePerformanceDefaults() {
   performanceProfile.runnerSparkCount = 128;
   performanceProfile.runnerTracerCount = 12;
   performanceProfile.runnerWeaponLight = false;
+  performanceProfile.runnerSunShadowInterval = 0;
+  performanceProfile.moebiusColorEdges = false;
 
   if (isAppleMobile() || isSafari()) {
     performanceProfile.maxPixelRatio = 1.25;

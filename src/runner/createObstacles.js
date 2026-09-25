@@ -139,6 +139,7 @@ export function createObstacles({ scene, carModel, poolSize = 6 }) {
     }
     obstacle.active = true;
     obstacle.passed = false;
+    obstacle.arrived = false;
     obstacle.lane = lane;
     obstacle.visual.visible = true;
     obstacle.visual.position.set(x, RUNNER.floorY, RUNNER.laneZ[lane]);

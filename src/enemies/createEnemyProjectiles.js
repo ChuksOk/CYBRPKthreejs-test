@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { color, uniform } from "three/tsl";
+import { float, mix, normalView, positionViewDirection, uniform, uv, vec3 } from "three/tsl";
 
 const MAX_LIFE = 4;
 const HIT_RADIUS = 0.42;
@@ -13,37 +13,99 @@ const _oc = new THREE.Vector3();
  * player's frame each bolt travels in a straight line toward where the player
  * was when it fired — dodgeable by switching lane, jumping or sliding.
  */
+const BOLT_LENGTH = 2.2;
+
+/** Per-bolt color without per-bolt materials (read from mesh.userData.bolt). */
+function boltColor() {
+  return uniform(new THREE.Color(0xff2d55)).onObjectUpdate(({ object }) => object.userData.bolt?.color);
+}
+
+function additive(material) {
+  material.transparent = true;
+  material.depthWrite = false;
+  material.blending = THREE.AdditiveBlending;
+  material.toneMapped = false;
+  return material;
+}
+
+/**
+ * Laser bolt = white-hot core + colored glow sleeve, both tapering into a
+ * tail behind the head (uv.y = 1 at the head), plus a bright head flare.
+ */
+function createBoltMaterials() {
+  const fade = uv().y;
+  const core = additive(new THREE.MeshBasicNodeMaterial({ color: 0x000000, side: THREE.DoubleSide }));
+  core.emissiveNode = mix(boltColor().mul(5), vec3(1, 1, 1).mul(7), fade.pow(2));
+  core.opacityNode = fade.pow(1.5);
+
+  const facing = normalView.dot(positionViewDirection).abs();
+  const glow = additive(new THREE.MeshBasicNodeMaterial({ color: 0x000000, side: THREE.DoubleSide }));
+  glow.emissiveNode = boltColor().mul(3.2);
+  glow.opacityNode = fade.pow(1.2).mul(facing.pow(2)).mul(0.75);
+
+  const head = additive(new THREE.MeshBasicNodeMaterial({ color: 0x000000 }));
+  head.emissiveNode = mix(boltColor().mul(4), vec3(1, 1, 1).mul(8), float(0.6));
+  head.opacityNode = normalView.dot(positionViewDirection).abs().pow(1.5);
+  return { core, glow, head };
+}
+
+function tailGeometry(radius, radial) {
+  const geometry = new THREE.CylinderGeometry(radius, radius * 0.35, 1, radial, 1, true);
+  geometry.rotateX(Math.PI / 2);
+  geometry.translate(0, 0, -0.5);
+  return geometry;
+}
+
+/**
+ * Enemy laser bolts. Velocity = player run velocity + aim vector, so in the
+ * player's frame each bolt travels in a straight line toward where the player
+ * was when it fired — dodgeable by switching lane, jumping or sliding.
+ */
 export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
   const group = new THREE.Group();
   group.name = "runner-enemy-bolts";
   scene.add(group);
 
-  const geometry = new THREE.SphereGeometry(0.15, 10, 8);
-  geometry.scale(1, 1, 3.2);
+  const materials = createBoltMaterials();
+  const coreGeometry = tailGeometry(0.035, 8);
+  const glowGeometry = tailGeometry(0.16, 12);
+  const headGeometry = new THREE.SphereGeometry(0.11, 12, 8);
   const pool = [];
 
   for (let i = 0; i < capacity; i++) {
-    const uColor = uniform(new THREE.Color(0xff2d55));
-    const material = new THREE.MeshBasicNodeMaterial({ color: 0x000000 });
-    material.emissiveNode = uColor.mul(7).add(color(0xffffff).mul(0.6));
-    material.toneMapped = false;
-    const mesh = new THREE.Mesh(geometry, material);
+    const data = { color: new THREE.Color(0xff2d55) };
+    const mesh = new THREE.Group();
+    const glowMesh = new THREE.Mesh(glowGeometry, materials.glow);
+    const coreMesh = new THREE.Mesh(coreGeometry, materials.core);
+    const headMesh = new THREE.Mesh(headGeometry, materials.head);
+    for (const part of [glowMesh, coreMesh, headMesh]) {
+      part.userData.bolt = data;
+      part.frustumCulled = false;
+      part.castShadow = false;
+      mesh.add(part);
+    }
+    glowMesh.renderOrder = 13;
+    coreMesh.renderOrder = 14;
+    headMesh.renderOrder = 15;
     mesh.visible = false;
-    mesh.castShadow = false;
     group.add(mesh);
     pool.push({
       mesh,
-      uColor,
+      tails: [glowMesh, coreMesh],
+      data,
+      uColor: { value: data.color },
       alive: false,
       life: 0,
+      age: 0,
       damage: 0,
       position: mesh.position,
       velocity: new THREE.Vector3(),
+      carrier: new THREE.Vector3(),
     });
   }
   let cursor = 0;
 
-  function fire(from, target, { speed, damage, hex, carrierVelocity }) {
+  function fire(from, target, { speed, damage, hex, carrierVelocity, source = "DRONE BOLT" }) {
     let bolt = null;
     for (let i = 0; i < capacity; i++) {
       const candidate = pool[(cursor + i) % capacity];
@@ -59,12 +121,21 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
     bolt.alive = true;
     bolt.life = MAX_LIFE;
     bolt.damage = damage;
+    bolt.source = source;
+    bolt.minDist = Infinity;
+    bolt.nearDone = false;
     bolt.position.copy(from);
     bolt.velocity.copy(target).sub(from).normalize().multiplyScalar(speed);
+    bolt.carrier.set(0, 0, 0);
     if (carrierVelocity) {
       bolt.velocity.add(carrierVelocity);
+      bolt.carrier.copy(carrierVelocity);
     }
-    bolt.uColor.value.set(hex);
+    bolt.data.color.set(hex);
+    bolt.age = 0;
+    for (const tail of bolt.tails) {
+      tail.scale.z = 0.01;
+    }
     bolt.mesh.visible = true;
     return bolt;
   }
@@ -76,7 +147,7 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
     bolt.alive = false;
     bolt.mesh.visible = false;
     fx.emitSparks(bolt.position, byPlayer ? 14 : 6, {
-      hex: bolt.uColor.value.getHex(),
+      hex: bolt.data.color.getHex(),
       speed: byPlayer ? 7 : 4,
       life: 0.4,
       size: 0.06,
@@ -87,7 +158,7 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
    * @param {number} delta
    * @param {{ playerBox: THREE.Box3, floorY: number, onHitPlayer: Function }} ctx
    */
-  function update(delta, { playerBox, floorY, playerX, onHitPlayer }) {
+  function update(delta, { playerBox, floorY, playerX, onHitPlayer, ally = null, onHitAlly, onNearMiss }) {
     _box.copy(playerBox).expandByScalar(0.18);
     for (const bolt of pool) {
       if (!bolt.alive) {
@@ -95,13 +166,32 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
       }
       bolt.life -= delta;
       bolt.position.addScaledVector(bolt.velocity, delta);
-      _look.copy(bolt.position).add(bolt.velocity);
+      // Tail grows out of the muzzle, then stretches with speed relative to the player.
+      bolt.age += delta;
+      const tailLength = Math.min(BOLT_LENGTH, bolt.age * 14);
+      for (const tail of bolt.tails) {
+        tail.scale.z = tailLength;
+      }
+      _look.copy(bolt.position).add(bolt.velocity).sub(bolt.carrier);
       bolt.mesh.lookAt(_look);
 
+      if (ally && bolt.position.distanceTo(ally.position) < ally.radius + 0.15) {
+        destroy(bolt);
+        onHitAlly?.(bolt.damage);
+        continue;
+      }
       if (_box.containsPoint(bolt.position) || _box.distanceToPoint(bolt.position) < 0.12) {
         destroy(bolt);
-        onHitPlayer?.(bolt.damage, bolt.position);
+        onHitPlayer?.(bolt.damage, bolt.position, bolt.source);
         continue;
+      }
+      // Near miss: bolt came within 0.5 m and is now behind the player.
+      bolt.minDist = Math.min(bolt.minDist, _box.distanceToPoint(bolt.position));
+      if (bolt.position.x < playerX - 1 && !bolt.nearDone) {
+        bolt.nearDone = true;
+        if (bolt.minDist < 0.5) {
+          onNearMiss?.(bolt);
+        }
       }
       if (bolt.life <= 0 || bolt.position.y < floorY + 0.05 || bolt.position.x < playerX - 30) {
         destroy(bolt);
@@ -151,5 +241,13 @@ export function createEnemyProjectiles({ scene, fx, capacity = 40 }) {
     }
   }
 
-  return { group, fire, destroy, update, raycast, shiftX, clear, setWarmupVisible };
+  function forEachAlive(fn) {
+    for (const bolt of pool) {
+      if (bolt.alive) {
+        fn(bolt);
+      }
+    }
+  }
+
+  return { group, fire, destroy, update, raycast, shiftX, clear, setWarmupVisible, forEachAlive };
 }

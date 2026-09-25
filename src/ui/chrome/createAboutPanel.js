@@ -1,6 +1,12 @@
 import "./aboutPanel.css";
 import { isMobileLayout, onMobileLayoutChange } from "../../platform/deviceLayout.js";
-import { SOURCE_CODE_URL } from "../core/externalLinks.js";
+import {
+  AUTHOR_NAME,
+  AUTHOR_URL,
+  BASE_PROJECT_CREDIT,
+  GAME_TAGLINE,
+  GAME_TITLE,
+} from "../../app/credits.js";
 
 const CLOSE_ICON = `
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -18,80 +24,111 @@ export function createAboutPanel({ state } = {}) {
   const root = document.createElement("div");
   root.className = "about-overlay";
   root.hidden = true;
+  const year = new Date().getFullYear();
+  const studioHost = AUTHOR_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const controls = [
+    ["A / D", "Switch lane"],
+    ["Space", "Jump"],
+    ["S", "Slide"],
+    ["Mouse", "Aim"],
+    ["Click", "Fire"],
+    ["R", "Reload"],
+    ["1–4 / Q", "Weapons"],
+    ["E", "Special"],
+  ];
+  const touchControls = [
+    ["Swipe ← →", "Switch lane"],
+    ["Swipe ↑", "Jump"],
+    ["Swipe ↓", "Slide"],
+    ["Auto", "Aim"],
+    ["FIRE", "Hold to shoot"],
+    ["SPECIAL", "When charged"],
+  ];
+  const controlRows = (rows) =>
+    rows.map(([key, label]) => `<li><kbd>${key}</kbd><span>${label}</span></li>`).join("");
+
   root.innerHTML = `
-    <button type="button" class="close-button-panel" aria-label="Close">
-      ${CLOSE_ICON}
-    </button>
+    <div class="ab-card" role="dialog" aria-modal="true" aria-labelledby="ab-title">
+      <button type="button" class="close-button-panel ab-close" aria-label="Close">
+        ${CLOSE_ICON}
+      </button>
 
-    <div class="about-content">
-      <div class="about-body">
-        <div class="about-brand">
-          <p class="about-brand-title">THREEJS-PUNK</p>
-          <small class="about-brand-subtitle">BY ANDERSON MANCINI &amp; SUNAG</small>
-        </div>
-        <div class="about-copy">
-          <div class="about-copy-col">
-            <p class="about-lead">
-              Threejs-Punk drops you into a rain-soaked alley somewhere between a Blade
-              Runner backlot and a boot sequence — neon signs, wet asphalt, and a city
-              that never quite turns off its lights.
+      <header class="ab-hero">
+        <span class="ab-kicker">About the game</span>
+        <h2 class="ab-title" id="ab-title">${GAME_TITLE}</h2>
+        <p class="ab-tagline">${GAME_TAGLINE}</p>
+      </header>
+
+      <div class="ab-grid">
+        <section class="ab-main">
+          <p class="ab-lead">
+            ${GAME_TITLE} is a first-person endless runner and shooter set in a
+            neon cyberpunk city under drone curfew. Sprint the street, switch lanes,
+            vault barriers, slide under beams and shoot the drone fleet out of the sky.
+          </p>
+          <p class="ab-text">
+            Every run builds on the last: pick upgrades at each sector gate, take down
+            carrier bosses, complete missions, climb 50 ranks and spend shards in the
+            Armory. The weather and the time of day change as you run.
+          </p>
+
+          <dl class="ab-stats">
+            <div><dt>Weapons</dt><dd>4</dd></div>
+            <div><dt>Drone classes</dt><dd>4</dd></div>
+            <div><dt>Upgrades</dt><dd>13</dd></div>
+            <div><dt>Ranks</dt><dd>50</dd></div>
+          </dl>
+
+          <div class="ab-section">
+            <h3 class="ab-h">Controls</h3>
+            <ul class="ab-keys ab-keys--desktop">${controlRows(controls)}</ul>
+            <ul class="ab-keys ab-keys--mobile">${controlRows(touchControls)}</ul>
+          </div>
+        </section>
+
+        <aside class="ab-side">
+          <div class="ab-studio">
+            <span class="ab-kicker">Developed by</span>
+            <p class="ab-studio-name">${AUTHOR_NAME}</p>
+            <p class="ab-text">Game design, combat systems, drones, weapons and interface.</p>
+            <a class="ab-cta about-link-author" href="${AUTHOR_URL}" target="_blank" rel="noopener noreferrer">
+              <span>Visit ${studioHost}</span><span aria-hidden="true">↗</span>
+            </a>
+          </div>
+
+          <div class="ab-section">
+            <h3 class="ab-h">Built with</h3>
+            <ul class="ab-chips">
+              <li>Three.js WebGPU</li><li>TSL shaders</li><li>Web Audio</li><li>Vite</li>
+            </ul>
+          </div>
+
+          <div class="ab-section">
+            <h3 class="ab-h">Recommended</h3>
+            <p class="ab-small about-recommended about-recommended--desktop">
+              Chrome or Edge (latest) with WebGPU · discrete GPU or Apple M2+ · 16 GB RAM · headphones.
             </p>
-            <p class="about-lead">
-              Every reflection, droplet and glow you see is rendered live with Three.js
-              WebGPU and TSL — no pre-baked tricks, just shaders doing the heavy lifting
-              in real time.
+            <p class="ab-small about-recommended about-recommended--mobile">
+              iPhone 15+ or a 2023 Android flagship · Chrome (latest) with WebGPU · landscape · headphones.
             </p>
           </div>
-          <div class="about-copy-col">
-            <p class="about-lead">
-              That flickering readout in the corner is set dressing: a fake vitals HUD
-              borrowed from the same retro-future aesthetic, just to make the night feel
-              a little more alive.
-            </p>
-            <p class="about-lead">
-              Originally built for the Three.js Conference — a small invitation to
-              wander, look up, and let the rain do the storytelling.
-            </p>
-          </div>
-        </div>
+        </aside>
       </div>
 
-      <div class="about-footer">
-        <div class="about-buttons">
-          <button type="button" class="refresh-button-panel about-link-anderson">
-            Anderson Mancini
-          </button>
-          <button type="button" class="refresh-button-panel about-link-sunag">
-            Sunag
-          </button>
-          <button type="button" class="refresh-button-panel about-link-source">
-            Source code
-          </button>
-        </div>
-        <p class="about-model-credits">
-          By Anderson Mancini &amp; Sunag
-        </p>
-        <p class="about-recommended about-recommended--desktop">
-          <span class="about-recommended-title">Recommended setup</span>
-          GPU power and 16 GB RAM are what matter most. Mac: M2 or newer.
-          PC: discrete GPU, 16 GB RAM.
-          Chrome or Edge (latest) · WebGPU required · 1080p fullscreen (4K scales down automatically).
-          WASD + Shift sprint · click to look · Settings for Look · headphones recommended.
-        </p>
-        <p class="about-recommended about-recommended--mobile">
-          <span class="about-recommended-title">Recommended setup</span>
-          iPhone 15 or newer · Android: 2023 flagship or newer (Snapdragon 8 Gen 2 / equivalent, 8 GB RAM).
-          Chrome (latest) · WebGPU required · landscape orientation.
-          On-screen joystick · Settings for Look · headphones recommended.
-        </p>
-      </div>
+      <footer class="ab-footer">
+        <p>© ${year} ${AUTHOR_NAME}. All rights reserved.</p>
+        <p class="ab-credit">${BASE_PROJECT_CREDIT} Sound: Kenney (CC0). Fonts: Barlow Condensed &amp; JetBrains Mono (OFL).</p>
+      </footer>
     </div>
   `;
 
+  root.addEventListener("click", (event) => {
+    if (event.target === root) {
+      close();
+    }
+  });
+
   const closeButton = root.querySelector(".close-button-panel");
-  const andersonButton = root.querySelector(".about-link-anderson");
-  const sunagButton = root.querySelector(".about-link-sunag");
-  const sourceButton = root.querySelector(".about-link-source");
   const desktopRecommended = root.querySelector(".about-recommended--desktop");
   const mobileRecommended = root.querySelector(".about-recommended--mobile");
 
@@ -99,6 +136,7 @@ export function createAboutPanel({ state } = {}) {
     const mobile = isMobileLayout();
     desktopRecommended.hidden = mobile;
     mobileRecommended.hidden = !mobile;
+    root.classList.toggle("ab-is-mobile", mobile);
   }
 
   syncRecommendedVisibility();
@@ -117,17 +155,6 @@ export function createAboutPanel({ state } = {}) {
 
   closeButton.addEventListener("click", close);
 
-  andersonButton.addEventListener("click", () => {
-    window.open("https://andersonmancini.dev", "_blank", "noopener,noreferrer");
-  });
-
-  sunagButton.addEventListener("click", () => {
-    window.open("https://x.com/sea3dformat", "_blank", "noopener,noreferrer");
-  });
-
-  sourceButton.addEventListener("click", () => {
-    window.open(SOURCE_CODE_URL, "_blank", "noopener,noreferrer");
-  });
 
   function onKeyDown(event) {
     if (event.key === "Escape" && !root.hidden) {

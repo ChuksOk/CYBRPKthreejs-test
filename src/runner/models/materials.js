@@ -6,7 +6,9 @@ import {
   fract,
   mix,
   mx_noise_float,
+  normalView,
   positionLocal,
+  positionViewDirection,
   step,
   time,
   uniform,
@@ -31,6 +33,42 @@ export function gunmetal({ tint = 0x2b2e34, roughness = 0.3 } = {}) {
   const material = new THREE.MeshStandardNodeMaterial({ color: tint, metalness: 0.9 });
   material.roughnessNode = float(roughness).add(micro(220, 0.05)).add(micro(14, 0.08)).clamp(0.08, 1);
   material.colorNode = color(tint).mul(float(1).add(micro(9, 0.12)));
+  return material;
+}
+
+/**
+ * AAA gun finish: tonal mottling, fine grain, handling wear that chips to
+ * bare metal and hairline scratches along the gun's long (local X) axis.
+ * Everything from positionLocal noise, so merged part-kit meshes keep it.
+ */
+export function gunFinish({ tint = 0x6a6e73, roughness = 0.55, metalness = 0.45, wear = 1, bare = 0x9a9ea3 } = {}) {
+  const material = new THREE.MeshStandardNodeMaterial({ color: tint });
+  const mottle = mx_noise_float(positionLocal.mul(6)).mul(0.07);
+  const grain = mx_noise_float(positionLocal.mul(900)).mul(0.035);
+  const chips = mx_noise_float(positionLocal.mul(48)).add(mx_noise_float(positionLocal.mul(230)).mul(0.35));
+  const worn = chips.smoothstep(0.6, 0.78).mul(wear);
+  // Hairlines: zero-crossings of noise stretched along X, sparsely masked.
+  const line = float(1).sub(abs(mx_noise_float(positionLocal.mul(vec3(30, 1600, 1600)))).smoothstep(0, 0.04));
+  const mask = mx_noise_float(positionLocal.mul(11)).smoothstep(0.15, 0.45);
+  const scratch = line.mul(mask).mul(wear);
+  const base = color(tint).mul(float(1).add(mottle).add(grain));
+  material.colorNode = mix(mix(base, color(bare), worn), color(bare), scratch.mul(0.35));
+  material.metalnessNode = mix(float(metalness), float(0.95), worn.max(scratch.mul(0.6)));
+  material.roughnessNode = mix(float(roughness).add(grain.mul(2)), float(0.22), worn)
+    .sub(scratch.mul(0.18))
+    .clamp(0.12, 1);
+  return material;
+}
+
+/** Painted stencil / decal: canvas alpha over a flat paint colour. */
+export function decal(map, { tint = 0xd8d9d6, roughness = 0.7 } = {}) {
+  const material = new THREE.MeshStandardNodeMaterial({ color: tint, metalness: 0.1, roughness });
+  material.map = map;
+  material.transparent = true;
+  material.alphaTest = 0.4;
+  material.depthWrite = false;
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -2;
   return material;
 }
 
@@ -72,15 +110,30 @@ export function carbon({ scale = 90 } = {}) {
 }
 
 /** Painted panels with slight chipping toward bare metal. */
-export function paint({ tint = 0x9aa1ab, roughness = 0.42, flashKey = null } = {}) {
+export function paint({ tint = 0x9aa1ab, roughness = 0.42, flashKey = null, wear: wearAmount = 1, rimKey = null, selfLit = 0 } = {}) {
   const material = new THREE.MeshStandardNodeMaterial({ color: tint });
   const chips = mx_noise_float(positionLocal.mul(38)).add(mx_noise_float(positionLocal.mul(160)).mul(0.4));
-  const wear = chips.smoothstep(0.55, 0.75);
+  const wear = chips.smoothstep(0.55, 0.75).mul(wearAmount);
   material.colorNode = mix(color(tint).mul(float(1).add(micro(5, 0.08))), color(0x4b4f55), wear);
   material.metalnessNode = mix(float(0.18), float(0.85), wear);
   material.roughnessNode = mix(float(roughness), float(0.3), wear).add(micro(260, 0.05));
+  let emissiveNode = null;
   if (flashKey) {
-    material.emissiveNode = vec3(1, 0.93, 0.85).mul(objectFx(flashKey)).mul(1.6);
+    emissiveNode = vec3(1, 0.93, 0.85).mul(objectFx(flashKey)).mul(1.6);
+  }
+  if (rimKey) {
+    // Fresnel rim in the drone's accent color so silhouettes read at night.
+    const rimColor = uniform(new THREE.Color(0xffffff)).onObjectUpdate(({ object }) => object.userData.fx?.[rimKey]);
+    const rim = float(1).sub(normalView.dot(positionViewDirection).abs()).pow(2.2);
+    const rimNode = rimColor.mul(rim).mul(objectFx("rim", 1.6));
+    emissiveNode = emissiveNode ? emissiveNode.add(rimNode) : rimNode;
+  }
+  if (selfLit > 0) {
+    const lit = color(tint).mul(selfLit);
+    emissiveNode = emissiveNode ? emissiveNode.add(lit) : lit;
+  }
+  if (emissiveNode) {
+    material.emissiveNode = emissiveNode;
   }
   return material;
 }

@@ -37,23 +37,61 @@ npm run deploy   # Vercel production
 
 After the loader finishes, click **ENTER** on the intro overlay (or skip if `FEATURES.intro` is false), then **START RUN**. Settings expose look presets, audio, and (in Development Mode) the Three.js inspector.
 
-### Neon Run: endless runner + drone shooter
+### Low Gamma: Redux — endless runner + drone shooter
 
-With `FEATURES.runner` on (the default), the alley becomes a first-person endless runner. You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
+With `FEATURES.runner` on (the default), the alley becomes **LOW GAMMA: REDUX**, a first-person endless runner by Adair Interactive (https://adair.lovable.app/; name and links live in `src/app/credits.js`). You auto-run down the street, switch between three lanes, jump barriers, slide under beams and dodge parked cars, while shooting down drones with a rifle.
 
 | Action | Desktop | Touch |
 |--------|---------|-------|
 | Switch lane | A / D, ← / → | Swipe left half ← → |
 | Jump | Space, W | Swipe left half ↑ |
 | Slide | S, C, Ctrl | Swipe left half ↓ |
-| Aim | Mouse (pointer lock) | Drag right half |
-| Fire | Hold left click | Auto-fire when on target |
+| Aim | Mouse (pointer lock) | Automatic (drag right half to nudge) |
+| Fire | Hold left click | Hold the FIRE button (bottom-right) |
+| Special attack | E / F when charged | SPECIAL button (appears beside FIRE when charged) |
 | Reload | R | Automatic |
+| Switch weapon | 1–4, Q, mouse wheel | Tap a weapon chip |
 | Pause | Esc | — |
 
-- **Drones:** scouts strafe and fire single bolts; gunships charge a 3-bolt burst; kamikazes dive at you. Bolts can be dodged or shot down.
+- **Drones:** GIGI-style drones: teal disc and white robotic-arm scouts that strafe and fire, red spider-quad gunships that charge a 3-bolt burst, and gold or blue hex bi-copter kamikazes that dive at you. Bolts can be dodged or shot down.
+- **Weapons:** four VX-series guns in off-white with neon green accents: VX-06 carbine, VX-09 SMG, VX-12 rail and VX-14 heavy. Each has its own fire rate, magazine, damage, spread and recoil (`src/weapon/weaponTypes.js`), and ammo is kept per gun.
+- **Special attacks:** landing shots charges a special, and you pick one per run on the start ticket. **Ally drone** deploys a small sphere drone that fights for you until it's destroyed; **Seeker** fires a heat-seeking grenade that homes in on the nearest drone and detonates (`src/weapon/createSpecials.js`).
+- **Mobile HUD:** shows only score, two slim bars, target brackets, the current weapon chip, and the FIRE / SPECIAL buttons. The header and audio button hide while you play.
+- **Day-night cycle:** a full day every 2 minutes of running (night → dawn → day → dusk). It drives the sun/moon light, environment light, sky gradient and clouds, and a clock on the score ticket (`src/runner/createDayNightCycle.js`; `cycleSeconds` to tune).
+- **Weather:** the sky changes as you run. It moves between CLEAR, CLOUDY, DRIZZLE, RAIN and STORM, holding each for 35–70 s and blending over about 10 s (`src/runner/createWeatherSystem.js`).
+  - Rain density and splashes follow the current state.
+  - Roads stay wet after the rain stops and dry slowly.
+  - Clouds thicken and the light dims as it gets overcast; storms add lightning and distant thunder.
+  - Each run starts in a random non-storm state, and the current weather shows on the score ticket clock.
+  - When it's dry, the rain particles and their collision-height pass are skipped entirely, so clear weather renders faster.
+- **Hands:** procedural gloved hands with off-white knuckle armour, neon trim and techwear sleeves (`src/weapon/createHands.js`).
+  - Each hand has articulated fingers and a thumb, mounted on per-gun grip anchors.
+  - The trigger finger squeezes on every shot, and the left hand reaches for the magazine on reload.
+  - The fingers idle slightly, and the forearms angle toward elbow points out of frame.
+- **Special throw:** the left hand throws the special. It leaves the gun holding a grenade (Seeker) or drone orb (Ally), winds back, snaps forward and releases. The special launches from the palm at that moment.
+- **UI motion:** the interface animates throughout.
+  - The score rolls up and punches on big gains; the combo and weapon chips bump.
+  - Shield and health bars leave a draining damage trail.
+  - HUD cards slide in from their edges at run start.
+  - Screens stagger their contents in and fade out on exit.
+  - Upgrade cards fly up (the pick) or fall away (the rest).
+  - Game-over numbers count up.
+  - Banners clip-reveal, and toasts and countdown digits spring in.
+  - All of it respects `prefers-reduced-motion`.
+- **Visuals:** neon lane markers with a pulse that runs toward you (one instanced draw, `src/runner/createLaneLights.js`); explosions with a billowing fireball, a shockwave ring and rising smoke, tinted by your Armory explosion colour; speed lines near top speed and during overclock.
 - **Pickups:** shards (score), shield, health, overclock (fast fire, no reloads).
-- **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier.
+- **Scoring:** difficulty and speed ramp with distance, and kills build a combo multiplier that heats up (colour and glow) as it climbs.
+- **Fair deaths:** when a lethal hit is 0.3 s away, time drops to 35% for a moment (8 s cooldown). The game-over ticket names exactly what killed you, e.g. `GUNSHIP BURST · 12 DMG` or `BARRIER · LANE 2 · 64 KM/H`. **RUN AGAIN** (or Enter) restarts instantly, with no countdown.
+- **Close calls:** a bolt passing within 0.5 m, or a last-moment jump, slide or lane change, gives score, combo and special charge, plus a `CLOSE CALL` pop-up.
+- **Juice:** hit-stop on kills (about 45 ms for scouts, 90 ms for gunships, 260 ms for the carrier); screen shake that pushes away from the event; debris along the shot line; floating `+300 ×1.8` pop-ups; phone vibration; and a procedural soundtrack whose layers (bass, hats, lead) enter as the combo rises (`src/audio/createAdaptiveMusic.js`).
+- **Sector gates (every 500 m):** the run pauses and you pick 1 of 3 mods: rapid cycle, extended mags, hollow points, piercing rounds, rail detonator, quick hands, capacitor (2× shield regen), second wind, shard magnet, special battery, double charge, twin guns (ally), cluster seeker (`src/runner/upgrades.js`). Each sector also gets its own colour grade.
+- **Carrier boss (every 1,500 m):** a heavily armoured carrier that launches scouts. It only takes full damage while its weak point is open (while it charges or fires); the boss bar says `WEAK POINT OPEN — FIRE`.
+- **Set pieces:** barrier/beam rhythm gauntlets, zig-zag car pile-ups, and drone ambushes from behind.
+- **Armory (meta progression):** shards bank after every run (× daily streak bonus) and buy the VX-09/12/14 (the VX-06 carbine is the starter), permanent tiers (armour, damage, magnet, pre-charge), and tracer and explosion colours. Everything is saved in `localStorage` (`src/runner/progression.js`).
+- **Missions and rank:** three missions at a time feed an XP rank from 1 to 50, and completing a mission during a run shows a toast. There is also a local top-10 **Records** board.
+- **Daily Run:** a toggle on the start ticket. It uses a date-seeded layout and drone-wave stream that is the same for every player that day, with its own best score (`src/runner/rng.js`).
+- **First-run tutorial:** guided prompts for lane, jump, slide, shoot and special, with non-lethal obstacles.
+- **Share:** the game-over ticket's **SHARE** button draws a 1080×1350 ticket image (score, distance, build, date). It uses the system share sheet, or downloads a PNG where sharing isn't available (`src/ui/runner/shareCard.js`).
 - **How it works:** see **[docs/techniques/endless-runner.md](docs/techniques/endless-runner.md)** (CPU-sliced city tiles, floating origin, viewmodel layer).
 - **Assets:** the rifle, drones, barrier, beam and pickups are procedural PBR models built in code (`src/runner/models/`). Sounds are CC0 from Kenney's Starter Kit FPS (`public/audio/runner/CREDITS.md`).
 - **UI:** the HUD and screens use a transit-ticket / utility-label style: acid lime, cobalt, paper, ink and signal pink, with Barlow Condensed and JetBrains Mono (OFL, via `@fontsource`). It lives in `src/ui/runner/runnerHud.css` plus `src/ui/core/ticketTheme.css` for the app chrome.
@@ -366,6 +404,11 @@ The through-line: **every flashy effect either moved to the GPU, dropped in reso
 | Rifle viewmodel + hitscan | `src/weapon/createViewmodel.js`, `src/weapon/createWeapon.js` | `createViewmodel`, `createWeapon` |
 | Drones + bolts | `src/enemies/createDroneManager.js`, `src/enemies/createEnemyProjectiles.js` | `createDroneManager` |
 | Runner HUD | `src/ui/runner/createRunnerHud.js` | `createRunnerHud` |
+| Armory / missions / records / upgrade screens | `src/ui/runner/metaScreens.js` | `renderArmory`, `renderUpgradePicker` |
+| Progression (shards, rank, missions, daily) | `src/runner/progression.js` | `createProgression` |
+| In-run upgrades | `src/runner/upgrades.js` | `UPGRADES`, `rollUpgradeChoices` |
+| Seeded run RNG (Daily Run) | `src/runner/rng.js` | `setRunSeed`, `rr` |
+| Adaptive music | `src/audio/createAdaptiveMusic.js` | `createAdaptiveMusic` |
 
 ---
 

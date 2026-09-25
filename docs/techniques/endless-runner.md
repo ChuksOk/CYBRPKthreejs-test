@@ -109,8 +109,25 @@ Runner dynamics are listed in `world.collisionHideExtra`, which `collectCollisio
 | `runnerSparkCount` | 256 | 128 |
 | `runnerTracerCount` | 24 | 12 |
 | `runnerWeaponLight` | true | false |
+| `runnerLaneLights` | true | true |
 
 `camera.far` is capped at `segmentLength · runnerSegmentsAhead − 5`, so the view never reaches past the last tile.
+
+## 8. Game-feel and meta layer
+
+- **Time control** (`updateRunning` in `createRunnerGame.js`):
+  - Hit-stop freezes the whole sim for a few real-time milliseconds.
+  - Last-chance slow-mo scales `delta` by 0.35 when `lethalHitImminent()` finds an obstacle about 0.3 s ahead in the current lane that overlaps the player's height, or a bolt that would kill you.
+  - Both count real time, so they never stretch themselves.
+- **Near misses:**
+  - Obstacles are flagged `arrived` when their front reaches the player. A near miss is the player being in that lane having jumped or slid within 0.35 s, or having left that lane within 0.35 s.
+  - Bolts track their closest distance to the player box and report it once they are behind the player.
+- **Determinism:** `rng.js` has two seeded streams, one for the layout and one for drone waves. Combat outcomes change how often the drone spawner rolls, and must never shift the Daily Run's obstacle layout. Drone *behaviour* still uses `Math.random`.
+- **New dynamic objects** (the carrier and its launched scouts) live in the existing drone pools, so `shiftX` and the rain hide list already cover them.
+- **Death animation:** `die()` calls `viewmodel.setDeathProgress(0)` and the `dying` state drives it with `stateTime / DEATH_DURATION` (real time, not the slow-mo delta). `createHands.release()` moves both hands from the gun anchors into rig space; they flinch into a bracing pose, then go limp and drop out of frame while the gun jolts and tumbles away. `resetRun()` passes −1, and `restore()` puts the hands back on the gun.
+- **Run snapshots** (`createRunSnapshots.js`): at random run times (the first at 4–12 s, then every 7–20 s) the game queues a capture. The render loop copies the canvas right after `post.render()`, while it is in the same task, so the WebGPU swap-chain texture can still be read. A reservoir keeps 4 frames. If a run ends before any capture, the fatal frame is kept instead. At game over one random frame is shown on the stub. The player can share it (`sharePhoto`, a 1080×1350 card), save it, or pick another frame.
+- **Moebius comic mode** (`src/tsl/moebius.js`): an alternate post style that replaces the neon grade and film grain in `rebuildSteadyOutput` (`pipeline.setVisualStyle("moebius" | "neon")`). It draws ink outlines from outer log-depth silhouettes plus a luminance Sobel on the scene colour, with the Sobel off on mobile via `performanceProfile.moebiusColorEdges`. Luminance is banded in perceptual space and split-toned (violet shadows, warm lights). Grey surfaces are pulled strongly toward a Moebius ramp (ultramarine → violet → coral → saffron → mint cream); already-coloured surfaces keep their hue. The darkest bands get cross-hatching. It adds lavender distance haze, a turquoise → lavender → peach sky, and warm paper grain. Bloom is added after the ink so neon stays vivid. Glowing shapes (laser tracers, neon, LEDs) then get a thin ink ring from the emissive buffer, drawn over the bloom halo. The player toggles it with STYLE on the start ticket or in Settings → Look, and the choice is saved in localStorage.
+- **Graphics settings** (`platform/graphicsSettings.js`): the Development Mode performance flags are offered in Settings → Graphics as presets (Low / Medium / High / Ultra) plus advanced toggles and sliders, and are saved in localStorage. "High" is the device baseline captured after `applyDevicePerformanceDefaults`. On phones and Safari, resolution is capped at that baseline, and DoF stays locked off in Safari. Rain density sets `weather.setMaxDropCount`.
 
 ## Port checklist
 

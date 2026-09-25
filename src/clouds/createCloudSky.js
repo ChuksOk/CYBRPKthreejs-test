@@ -50,6 +50,23 @@ const CLOUD_NIGHT = {
   smoothness: 1,
 };
 
+/** Overcast / storm deck, blended in by the weather system. */
+const CLOUD_STORM = {
+  windDirection: new THREE.Vector2(0.8, 0.3),
+  cloudDensity: 1.25,
+  noiseScale: 8,
+  distortionStrength: 2.2,
+  contrast: 1.15,
+  opacity: 1,
+  cloudDarkColor: new THREE.Color("#3a3d4a"),
+  cloudLightColor: new THREE.Color("#8d92a3"),
+  lightMultiplier: new THREE.Vector3(0.7, 0.72, 0.8),
+  densityStrength: 0.7,
+  speed: 3.2,
+  detailAmount: 1,
+  smoothness: 1,
+};
+
 function colorToHex(color) {
   return `#${color.getHexString()}`;
 }
@@ -170,12 +187,16 @@ export async function createCloudSky(
     syncParamsFromUniforms();
   }
 
-  function updateFromSun({ evening = 0, night = 0, skyTop, skyBottom }) {
+  function updateFromSun({ evening = 0, night = 0, skyTop, skyBottom, overcast = 0 }) {
     if (skyTop) uniforms.uSkyTop.value.copy(skyTop);
     if (skyBottom) uniforms.uSkyBottom.value.copy(skyBottom);
 
     const dayToEvening = lerpPreset(CLOUD_DAY, CLOUD_EVENING, evening);
-    const preset = lerpPreset(dayToEvening, CLOUD_NIGHT, night);
+    let preset = lerpPreset(dayToEvening, CLOUD_NIGHT, night);
+    if (overcast > 0) {
+      const storm = lerpPreset(CLOUD_STORM, { ...CLOUD_STORM, cloudDarkColor: new THREE.Color("#101119"), cloudLightColor: new THREE.Color("#2c2e3c") }, night);
+      preset = lerpPreset(preset, storm, overcast);
+    }
     applyCloudPreset(preset);
   }
 

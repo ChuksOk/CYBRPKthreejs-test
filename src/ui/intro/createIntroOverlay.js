@@ -1,3 +1,4 @@
+import { AUTHOR_NAME, AUTHOR_URL, GAME_TAGLINE, GAME_TITLE, GAME_TITLE_LINES } from "../../app/credits.js";
 import "./introOverlay.css";
 import gsap from "gsap";
 
@@ -17,22 +18,23 @@ function splitIntoLetters(element, className = "intro-letter") {
 }
 
 export function createIntroOverlay({ onStart } = {}) {
+  const [titleTop, titleBottom] = GAME_TITLE_LINES;
   const root = document.createElement("div");
   root.className = "intro-container";
   root.setAttribute("aria-hidden", "false");
   root.innerHTML = `
     <div class="intro-stack">
-      <p class="intro-kicker">through the glass</p>
-      <h1 class="intro-brand" aria-label="THREEJS-PUNK">
-        <span class="intro-brand-line">THREEJS</span>
-        <span class="intro-brand-line intro-brand-line--accent">PUNK</span>
+      <p class="intro-kicker">sector 7 // drone curfew</p>
+      <h1 class="intro-brand" aria-label="${GAME_TITLE}">
+        <span class="intro-brand-line">${titleTop}</span>
+        <span class="intro-brand-line intro-brand-line--accent">${titleBottom}</span>
       </h1>
       <p class="intro-rule" aria-hidden="true"></p>
-      <p class="intro-tagline">A rain-soaked alley under neon.</p>
+      <p class="intro-tagline">${GAME_TAGLINE}</p>
       <div class="intro-actions">
         <button type="button" class="intro-button" disabled>ENTER</button>
       </div>
-      <p class="intro-credit">Anderson Mancini · Sunag</p>
+      <p class="intro-credit">A game by <a href="${AUTHOR_URL}" target="_blank" rel="noopener noreferrer" style="color:inherit;pointer-events:auto">${AUTHOR_NAME}</a></p>
     </div>
   `;
 

@@ -59,7 +59,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
 
   let currentBaseFov = baseFov;
   const euler = new THREE.Euler(0, 0, 0, "YXZ");
-  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), lockChange: new Set(), reload: new Set() };
+  const listeners = { jump: new Set(), land: new Set(), lane: new Set(), slide: new Set(), lockChange: new Set(), reload: new Set(), weapon: new Set(), special: new Set() };
   const actionQueue = [];
 
   const touchLook = new Map();
@@ -120,6 +120,25 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
           emit("reload");
         }
         break;
+      case "Digit1":
+      case "Digit2":
+      case "Digit3":
+      case "Digit4":
+        if (state.inputEnabled) {
+          emit("weapon", Number(event.code.slice(5)) - 1);
+        }
+        break;
+      case "KeyE":
+      case "KeyF":
+        if (state.inputEnabled) {
+          emit("special");
+        }
+        break;
+      case "KeyQ":
+        if (state.inputEnabled) {
+          emit("weapon", "next");
+        }
+        break;
       default:
         return;
     }
@@ -148,6 +167,19 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     }
   }
 
+  let wheelCooldown = 0;
+  function onWheel(event) {
+    if (!state.active || !state.inputEnabled || !state.pointerLocked) {
+      return;
+    }
+    const now = performance.now();
+    if (now < wheelCooldown || Math.abs(event.deltaY) < 1) {
+      return;
+    }
+    wheelCooldown = now + 180;
+    emit("weapon", event.deltaY > 0 ? "next" : "prev");
+  }
+
   function onPointerLockChange() {
     state.pointerLocked = document.pointerLockElement === domElement;
     if (!state.pointerLocked) {
@@ -174,7 +206,35 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     }
   }
 
-  // ── Touch: left half = swipes, right half = aim drag ─────────────────────
+  // ── Touch: left half = swipes, right half = aim drag (auto-aim otherwise) ─
+  let lastManualLook = -1e9;
+  const _aimDir = new THREE.Vector3();
+
+  /**
+   * Touch auto-aim: ease the look toward a world point (or back to the run
+   * heading when null). A manual drag suspends it for a moment.
+   */
+  function autoAim(target, delta) {
+    if (!state.active || !state.inputEnabled || performance.now() - lastManualLook < 900) {
+      return;
+    }
+    let yaw = 0;
+    let pitch = 0.04;
+    let speed = 2.5;
+    if (target) {
+      _aimDir.copy(target).sub(camera.position).normalize();
+      const worldYaw = Math.atan2(-_aimDir.x, -_aimDir.z);
+      yaw = THREE.MathUtils.euclideanModulo(worldYaw - RUN_HEADING + Math.PI, Math.PI * 2) - Math.PI;
+      pitch = Math.asin(THREE.MathUtils.clamp(_aimDir.y, -1, 1));
+      speed = 7;
+    }
+    yaw = THREE.MathUtils.clamp(yaw, -RUNNER.maxYaw, RUNNER.maxYaw);
+    pitch = THREE.MathUtils.clamp(pitch, RUNNER.minPitch, RUNNER.maxPitch);
+    const blend = expLerpFactor(delta, speed);
+    state.yaw += (yaw - state.yaw) * blend;
+    state.pitch += (pitch - state.pitch) * blend;
+  }
+
   function onPointerDown(event) {
     if (!state.active || event.pointerType === "mouse") {
       return;
@@ -196,6 +256,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       (event.clientX - look.x) * TOUCH_LOOK_SENSITIVITY,
       (event.clientY - look.y) * TOUCH_LOOK_SENSITIVITY,
     );
+    lastManualLook = performance.now();
     look.x = event.clientX;
     look.y = event.clientY;
   }
@@ -225,6 +286,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   domElement.addEventListener("mousedown", onMouseDown);
   document.addEventListener("mouseup", onMouseUp);
   document.addEventListener("pointerlockchange", onPointerLockChange);
+  document.addEventListener("wheel", onWheel, { passive: true });
   domElement.addEventListener("pointerdown", onPointerDown);
   domElement.addEventListener("pointermove", onPointerMove);
   domElement.addEventListener("pointerup", onPointerUp);
@@ -399,7 +461,15 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     state.recoilYaw += yaw;
   }
 
-  function shake(strength, duration = 0.35) {
+  /**
+   * @param {{x:number,y:number}} [direction]  optional screen-space push
+   *   (x right, y up): kicks the view away from the event, then recovers.
+   */
+  function shake(strength, duration = 0.35, direction = null) {
+    if (direction) {
+      state.recoilYaw -= direction.x * strength * 0.9;
+      state.recoilPitch += direction.y * strength * 0.9;
+    }
     state.shakeStrength = Math.max(strength, state.shakeTime > 0 ? state.shakeStrength : 0);
     state.shakeTime = Math.max(state.shakeTime, duration);
   }
@@ -425,6 +495,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     domElement.removeEventListener("mousedown", onMouseDown);
     document.removeEventListener("mouseup", onMouseUp);
     document.removeEventListener("pointerlockchange", onPointerLockChange);
+    document.removeEventListener("wheel", onWheel);
     domElement.removeEventListener("pointerdown", onPointerDown);
     domElement.removeEventListener("pointermove", onPointerMove);
     domElement.removeEventListener("pointerup", onPointerUp);
@@ -450,6 +521,15 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       state.speed = value;
     },
     isTriggerHeld: () => state.trigger,
+    /** On-screen fire button (touch). */
+    setTrigger: (held) => {
+      state.trigger = Boolean(held) && state.inputEnabled;
+    },
+    autoAim,
+    /** Special attack (touch button / E key). */
+    triggerSpecial: () => emit("special"),
+    /** Programmatic weapon select (HUD chips on touch). */
+    selectWeapon: (index) => emit("weapon", index),
     addRecoil,
     shake,
     shiftX,

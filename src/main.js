@@ -21,6 +21,8 @@ import {
 } from "./bootstrap/createRenderer.js";
 import { createCameraDirector } from "./runtime/createCameraDirector.js";
 import { createRunnerGame } from "./runner/createRunnerGame.js";
+import { createWeatherSystem } from "./runner/createWeatherSystem.js";
+import { createDayNightCycle } from "./runner/createDayNightCycle.js";
 import { RUNNER } from "./runner/runnerConfig.js";
 import { FEATURES } from "./world/features.js";
 import { createRenderLoop } from "./runtime/createRenderLoop.js";
@@ -45,7 +47,13 @@ import {
   applyDevicePerformanceDefaults,
   shouldCompileBeforeRenderLoop,
 } from "./platform/performanceProfile.js";
-import { getStoredLookPreset, isDevelopmentModeEnabled } from "./platform/userPreferences.js";
+import {
+  getStoredLookPreset,
+  getStoredVisualStyle,
+  isDevelopmentModeEnabled,
+  setStoredVisualStyle,
+} from "./platform/userPreferences.js";
+import { createGraphicsSettings } from "./platform/graphicsSettings.js";
 import {
   DEFAULT_LOOK_PRESET,
   LOOK_PRESETS,
@@ -132,6 +140,21 @@ async function init(loaderOverlay) {
     lensflare: pipeline.lensflare,
   });
 
+  // Visual style (neon grade / Moebius cel shading), toggled from the
+  // runner menu and Settings; persisted per browser.
+  const visualStyleListeners = new Set();
+  const visualStyle = {
+    get: () => pipeline.getVisualStyle(),
+    set(id) {
+      pipeline.setVisualStyle(id);
+      setStoredVisualStyle(pipeline.getVisualStyle());
+      document.documentElement.classList.toggle("style-moebius", pipeline.getVisualStyle() === "moebius");
+      visualStyleListeners.forEach((listener) => listener(pipeline.getVisualStyle()));
+    },
+    onChange: (listener) => visualStyleListeners.add(listener),
+  };
+  visualStyle.set(getStoredVisualStyle());
+
   const adaptiveDpr = createAdaptiveDprController({
     renderer,
     pipeline,
@@ -180,6 +203,18 @@ async function init(loaderOverlay) {
       baseFov: getBaseFovForLayout(),
     });
     world.collisionHideExtra = runnerGame.collisionHideObjects;
+    runnerGame.setPipeline(pipeline);
+    runnerGame.setVisualStyle(visualStyle);
+    const dayNight = createDayNightCycle({
+      sceneResult,
+      sky: world.sky,
+      envMapBaseIntensity,
+      syncEnvironmentIntensity: lighting.syncEnvironmentIntensity,
+      requestShadowMapUpdate,
+    });
+    runnerGame.setDayNight(dayNight);
+    world.weather = createWeatherSystem({ world, dayNight, audio: runnerGame.audio });
+    runnerGame.setWeather(world.weather);
     world.runnerWarm = runnerGame.warm;
     cameraDirector.setRunner(runnerGame);
     // Tiles beyond the last clone are empty — never draw past them.
@@ -189,6 +224,16 @@ async function init(loaderOverlay) {
     );
     camera.updateProjectionMatrix();
   }
+
+  // Player graphics settings (Settings → Graphics), applied over device defaults.
+  const graphics = createGraphicsSettings({
+    pipeline,
+    ground: world.ground,
+    adaptiveDpr,
+    rain: world.rain,
+    getWeather: () => world.weather ?? null,
+  });
+  graphics.applyStored();
 
   const cameraLayout = createCameraLayoutSync({
     camera,
@@ -219,6 +264,8 @@ async function init(loaderOverlay) {
     pipeline,
     inspectorSession,
     syncLighting: lighting.syncLighting,
+    graphics,
+    visualStyle,
   });
 
   walkModeBridge.onChange = appShell.onWalkModeChange;
@@ -233,6 +280,9 @@ async function init(loaderOverlay) {
     devApp.runner = runnerGame;
   }
   attachDevPerf(devApp, performanceTools.perfApi);
+  if (devApp) {
+    devApp.graphics = graphics;
+  }
 
   const { carEngineAudio, planeEngineAudio, wetFootstepAudio } =
     await appShell.initAudio();

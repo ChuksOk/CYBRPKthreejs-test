@@ -11,11 +11,14 @@ models and sound effects) are CC0 licensed"
 |------|----------|
 | `blaster_repeater.ogg` | Rifle shot |
 | `enemy_attack.ogg` | Drone bolt |
-| `enemy_destroy.ogg` | Drone explosion |
 | `enemy_hurt.ogg` | Drone hit |
 | `jump_a.ogg` | Jump |
 | `land.ogg` | Land |
 | `weapon_change.ogg` | Reload |
 
-Other runner sounds (countdown, pickups, damage, drone hum) are synthesized
+Drone / grenade explosions are synthesized (sub-bass thump, swept noise
+blast, debris crackle, rumble tail and reverb) in
+`src/audio/createRunnerAudio.js`; drop a recording at
+`public/audio/runner/explosion.ogg` to override. Other runner sounds
+(countdown, pickups, damage, drone hum) are synthesized
 at runtime with Web Audio in `src/audio/createRunnerAudio.js`.

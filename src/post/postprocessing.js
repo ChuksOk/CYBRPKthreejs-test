@@ -21,6 +21,7 @@ import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { smaa } from "three/addons/tsl/display/SMAANode.js";
 import { ao } from "three/addons/tsl/display/GTAONode.js";
 import { createCyberpunkLook } from "./look/cyberpunkLook.js";
+import { createMoebiusStyle } from "../tsl/moebius.js";
 import { boxBlurSeparable } from "../tsl/boxBlur.js";
 import { applyRainGlass, createRainGlassUniforms } from "../tsl/rainGlass.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
@@ -167,6 +168,14 @@ export function createPostProcessing(renderer, scene, camera, { rain, smoke } = 
   });
 
   const look = createCyberpunkLook({ scenePass });
+  // Alternate visual style: Moebius graphic-novel cel shading (replaces the
+  // neon grade / film grain when active).
+  const moebius = createMoebiusStyle({
+    scenePass,
+    camera: sceneCamera,
+    colorEdges: performanceProfile.moebiusColorEdges,
+  });
+  let visualStyle = "neon";
 
   const blurSize = uniform(3);
   const blurSpread = uniform(2);
@@ -255,10 +264,16 @@ export function createPostProcessing(renderer, scene, camera, { rain, smoke } = 
     }
 
     const bloomContribution = buildBloomContribution();
-    const preAA = look.buildComposite(beauty, { bloomContribution });
-    const aaOutput = smaa(preAA);
-    steadyOutput = look.applyFilmGrain(preAA);
-    steadyOutputWithSmaa = look.applyFilmGrain(aaOutput);
+    if (visualStyle === "moebius") {
+      const preAA = moebius.apply(beauty, bloomContribution);
+      steadyOutput = preAA;
+      steadyOutputWithSmaa = smaa(preAA);
+    } else {
+      const preAA = look.buildComposite(beauty, { bloomContribution });
+      const aaOutput = smaa(preAA);
+      steadyOutput = look.applyFilmGrain(preAA);
+      steadyOutputWithSmaa = look.applyFilmGrain(aaOutput);
+    }
     composedOutputRef = steadyOutput;
 
     if (introRainGlassActive && introRainGlassUniformsRef) {
@@ -385,6 +400,16 @@ export function createPostProcessing(renderer, scene, camera, { rain, smoke } = 
     });
   }
 
+  /** "neon" (default grade) or "moebius" (graphic-novel cel shading). */
+  function setVisualStyle(id) {
+    const next = id === "moebius" ? "moebius" : "neon";
+    if (next === visualStyle) {
+      return;
+    }
+    visualStyle = next;
+    rebuildSteadyOutput();
+  }
+
   function resizePostProcessing() {
     const width = Math.max(1, renderer.domElement.width);
     const height = Math.max(1, renderer.domElement.height);
@@ -410,6 +435,9 @@ export function createPostProcessing(renderer, scene, camera, { rain, smoke } = 
       ghostAttenuation: lensflareGhostAttenuation,
     },
     look,
+    moebius,
+    setVisualStyle,
+    getVisualStyle: () => visualStyle,
     applyLookPreset,
     restoreCombinedOutput,
     resizePostProcessing,

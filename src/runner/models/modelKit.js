@@ -96,6 +96,24 @@ export function createPartKit() {
     return add(key, geometry, options);
   }
 
+  /**
+   * Extrude an arbitrary THREE.Shape (holes allowed) by `depth`, centered on
+   * Z. Use rotation [-PI/2, 0, 0] to lay it flat (extrusion along +Y).
+   */
+  function shape(key, shapeDef, depth, options = {}) {
+    const bevel = options.bevel ?? Math.min(0.012, depth * 0.2);
+    const geometry = new THREE.ExtrudeGeometry(shapeDef, {
+      depth: Math.max(0.001, depth - bevel * 2),
+      bevelEnabled: bevel > 0,
+      bevelThickness: bevel,
+      bevelSize: bevel,
+      bevelSegments: options.bevelSegments ?? 3,
+      curveSegments: options.curveSegments ?? 10,
+    });
+    geometry.translate(0, 0, -Math.max(0.001, depth - bevel * 2) / 2);
+    return add(key, geometry, options);
+  }
+
   function circle(key, radius, options = {}) {
     return add(key, new THREE.CircleGeometry(radius, options.segments ?? 32), options);
   }
@@ -131,5 +149,36 @@ export function createPartKit() {
     return group;
   }
 
-  return { add, box, cylinder, tube, sphere, torus, profile, circle, plane, build };
+  return { add, box, cylinder, tube, sphere, torus, profile, shape, circle, plane, build };
+}
+
+/** Rounded regular polygon path (sides >= 3) for ducts / shells. */
+export function roundedPolygon(path, radius, sides, corner, rotation = 0) {
+  const pts = [];
+  for (let i = 0; i < sides; i++) {
+    const a = rotation + (i / sides) * Math.PI * 2;
+    pts.push(new THREE.Vector2(Math.cos(a) * radius, Math.sin(a) * radius));
+  }
+  for (let i = 0; i < sides; i++) {
+    const prev = pts[(i + sides - 1) % sides];
+    const cur = pts[i];
+    const next = pts[(i + 1) % sides];
+    const a = cur.clone().sub(prev).normalize().multiplyScalar(-corner).add(cur);
+    const b = next.clone().sub(cur).normalize().multiplyScalar(corner).add(cur);
+    if (i === 0) {
+      path.moveTo(a.x, a.y);
+    } else {
+      path.lineTo(a.x, a.y);
+    }
+    path.quadraticCurveTo(cur.x, cur.y, b.x, b.y);
+  }
+  path.closePath();
+  return path;
+}
+
+/** Thick ring: outer / inner rounded polygons (sides >= 24 ≈ circle). */
+export function ringShape(outer, inner, sides = 6, corner = 0.06, rotation = Math.PI / 6) {
+  const s = roundedPolygon(new THREE.Shape(), outer, sides, sides > 12 ? 0.0001 : corner, rotation);
+  s.holes.push(roundedPolygon(new THREE.Path(), inner, sides, sides > 12 ? 0.0001 : corner * 0.7, rotation));
+  return s;
 }
