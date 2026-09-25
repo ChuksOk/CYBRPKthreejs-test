@@ -28,7 +28,9 @@ import {
  * swaps, so every object in the scene — city, drones, viewmodel — gets it).
  *
  * 1. Ink outlines: outer log-depth silhouettes + a luminance Sobel on the
- *    scene colour (creases, panel lines), faded with distance; never drawn
+ *    scene colour (creases, panel lines). Lines thin with distance: a
+ *    ~2 px ring on near objects, 1 px mid-ground, faint hairlines far
+ *    away (judged by the object's depth, not the background's); never drawn
  *    over glowing pixels. Glowing shapes (laser tracers, neon, LEDs) get
  *    their own thin ink ring from the emissive buffer, drawn over the bloom
  *    so the halo can't wash it out.
@@ -40,7 +42,7 @@ import {
  * 4. Lavender aerial haze, turquoise → lavender → peach comic sky, warm
  *    paper tone + fibre grain.
  *
- * Cost: 5 depth + 5–9 emissive + (optionally) 8 colour fetches per pixel,
+ * Cost: 9 depth + 5–9 emissive + (optionally) 8 colour fetches per pixel,
  * full-res; the colour-edge and diagonal glow taps are skipped when
  * `colorEdges` is false (mobile).
  */
@@ -62,41 +64,48 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
     lineWidth: uniform(1.15),
     depthEdge: uniform(0.045),
     colorEdge: uniform(0.2),
-    lineFadeStart: uniform(55),
-    lineFadeEnd: uniform(140),
+    // Distance-thinned ink: a thick (≈2.2 px) ring up close, a 1 px line in
+    // the mid-ground, fading to a faint hairline far away.
+    lineThickRadius: uniform(2.2),
+    lineThickNear: uniform(3),
+    lineThickFar: uniform(22),
+    lineFadeStart: uniform(30),
+    lineFadeEnd: uniform(130),
+    lineFarOpacity: uniform(0.18),
     bands: uniform(4),
-    exposure: uniform(1.28),
-    lift: uniform(0.08),
+    exposure: uniform(1.2),
+    lift: uniform(0.06),
     // Palette pull: strong on grey / low-chroma surfaces, light on things
     // that already have a colour, so the city goes Moebius-colourful while
     // signage and cars keep their hue.
-    paletteMixGrey: uniform(0.62),
-    paletteMixColor: uniform(0.14),
-    saturation: uniform(1.7),
-    splitTone: uniform(0.35),
+    paletteMixGrey: uniform(0.66),
+    paletteMixColor: uniform(0.1),
+    saturation: uniform(2.1),
+    splitTone: uniform(0.45),
     hatchSpacing: uniform(6),
-    hatchStrength: uniform(0.55),
+    hatchStrength: uniform(0.4),
     hazeStart: uniform(40),
     hazeEnd: uniform(170),
-    hazeAmount: uniform(0.42),
-    paperAmount: uniform(0.18),
+    hazeAmount: uniform(0.26),
+    paperAmount: uniform(0.07),
     bloomAmount: uniform(0.6),
     glowOutlineWidth: uniform(1),
     glowOutline: uniform(0.92),
     ink: uniform(linearColor(0x1a130e)),
-    // Arzach / Airtight Garage ramp: ultramarine-violet shadows, coral
-    // mids, saffron lights, mint-cream highlights.
-    shadow: uniform(linearColor(0x3a3f9e)),
-    shadow2: uniform(linearColor(0x8a4fb8)),
-    mid: uniform(linearColor(0xf0654f)),
-    light: uniform(linearColor(0xf7c33e)),
-    highlight: uniform(linearColor(0xf2fbe2)),
-    shadowTint: uniform(new THREE.Vector3(0.78, 0.86, 1.28)),
-    lightTint: uniform(new THREE.Vector3(1.18, 1.04, 0.8)),
-    haze: uniform(linearColor(0xe6a9d0)),
-    skyTop: uniform(linearColor(0x21b8c8)),
-    skyMid: uniform(linearColor(0xb7a2ee)),
-    skyHorizon: uniform(linearColor(0xffb088)),
+    // Arzach / Airtight Garage ramp, full-strength (not pastel): deep
+    // ultramarine and violet shadows, vermilion mids, saffron lights, warm
+    // cream highlights.
+    shadow: uniform(linearColor(0x1c24a8)),
+    shadow2: uniform(linearColor(0x6a1fc4)),
+    mid: uniform(linearColor(0xff3d24)),
+    light: uniform(linearColor(0xffb300)),
+    highlight: uniform(linearColor(0xfff0c2)),
+    shadowTint: uniform(new THREE.Vector3(0.72, 0.84, 1.38)),
+    lightTint: uniform(new THREE.Vector3(1.24, 1.05, 0.72)),
+    haze: uniform(linearColor(0xe06ab8)),
+    skyTop: uniform(linearColor(0x00a9d4)),
+    skyMid: uniform(linearColor(0x8a5cf0)),
+    skyHorizon: uniform(linearColor(0xff7a45)),
     paper: uniform(linearColor(0xfbf1dc)),
   };
 
@@ -113,13 +122,29 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
     const logC = log(max(center, 0.01));
     const offsets = [vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1)];
     // Outer silhouettes only: ink the far pixel next to a nearer one, so
-    // lines sit around objects rather than eating into thin ones.
+    // lines sit around objects rather than eating into thin ones. Two
+    // radii: 1 px everywhere, plus a wider ring kept only for near objects.
+    // Width is judged by the object's depth (the nearest tap), not the
+    // background pixel the line is drawn on.
     let depthDelta = float(0);
+    let objectDepth = center;
     for (const offset of offsets) {
-      const d = log(max(viewDepthAt(uv.add(offset.mul(texel))), 0.01));
-      depthDelta = max(depthDelta, logC.sub(d));
+      const z = viewDepthAt(uv.add(offset.mul(texel)));
+      objectDepth = objectDepth.min(z);
+      depthDelta = max(depthDelta, logC.sub(log(max(z, 0.01))));
     }
-    let line = smoothstep(uniforms.depthEdge, uniforms.depthEdge.mul(2.2), depthDelta);
+    let wideDelta = float(0);
+    let wideDepth = center;
+    for (const offset of offsets) {
+      const z = viewDepthAt(uv.add(offset.mul(texel).mul(uniforms.lineThickRadius)));
+      wideDepth = wideDepth.min(z);
+      wideDelta = max(wideDelta, logC.sub(log(max(z, 0.01))));
+    }
+    const thin = smoothstep(uniforms.depthEdge, uniforms.depthEdge.mul(2.2), depthDelta);
+    const nearness = float(1).sub(smoothstep(uniforms.lineThickNear, uniforms.lineThickFar, wideDepth));
+    const thick = smoothstep(uniforms.depthEdge, uniforms.depthEdge.mul(2.2), wideDelta).mul(nearness);
+    let line = max(thin, thick);
+    objectDepth = objectDepth.min(wideDepth);
 
     if (colorEdges) {
       // Sobel on luminance (perceptual) for interior contour lines.
@@ -138,9 +163,11 @@ export function createMoebiusStyle({ scenePass, camera, colorEdges = true }) {
       line = max(line, smoothstep(uniforms.colorEdge, uniforms.colorEdge.mul(1.8), grad).mul(0.85));
     }
 
-    const fade = float(1).sub(smoothstep(uniforms.lineFadeStart, uniforms.lineFadeEnd, center));
+    // Far lines become faint hairlines (sub-pixel width reads as opacity).
+    const distant = smoothstep(uniforms.lineFadeStart, uniforms.lineFadeEnd, objectDepth);
+    const opacity = mix(float(1), uniforms.lineFarOpacity, distant);
     // Glowing pixels (neon, laser cores) are never inked.
-    return line.mul(fade.mul(0.75).add(0.25)).mul(glowMaskAt(uv).oneMinus());
+    return line.mul(opacity).mul(glowMaskAt(uv).oneMinus());
   });
 
   /** Thin ink ring just outside glowing shapes (laser beams, neon). */
