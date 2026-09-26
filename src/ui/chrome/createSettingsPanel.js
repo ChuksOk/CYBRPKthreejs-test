@@ -148,6 +148,29 @@ function renderMoebiusSection(moebius) {
           </div>`;
 }
 
+function renderAudioSection(audio) {
+  if (!audio) {
+    return "";
+  }
+  const row = (key, label, hint) => `
+          <label class="settings-gfx-row settings-gfx-row--range">
+            <span class="settings-gfx-text">
+              <span class="settings-gfx-title">${label}</span>
+              <span class="settings-gfx-value" data-audio-value="${key}"></span>
+            </span>
+            <input type="range" class="settings-gfx-range" min="0" max="1" step="0.01" data-audio-key="${key}" aria-label="${label}" />
+            <span class="settings-gfx-hint">${hint}</span>
+          </label>`;
+  return `
+        <div class="settings-divider" role="separator"></div>
+
+        <div class="settings-section">
+          <p class="settings-section-title">Audio</p>
+          ${row("music", "Music volume", "Soundtrack and synth score")}
+          ${row("sfx", "Sound effects", "Weapons, drones, engines, rain ambience")}
+        </div>`;
+}
+
 function renderGameplaySection(gameplay) {
   if (!gameplay?.showAimAssist) {
     return "";
@@ -189,6 +212,7 @@ export function createSettingsPanel({
   onVisualStyleChange,
   moebius = null,
   gameplay = null,
+  audio = null,
 } = {}) {
   const root = document.createElement("div");
   root.className = "settings-overlay";
@@ -216,6 +240,8 @@ export function createSettingsPanel({
           </label>
           ${renderMoebiusSection(moebius)}
         </div>
+
+        ${renderAudioSection(audio)}
 
         ${renderGraphicsSection(graphics)}
 
@@ -260,6 +286,22 @@ export function createSettingsPanel({
   const moebiusInputs = [...root.querySelectorAll("[data-moebius-key]")];
   const moebiusPresetLabel = root.querySelector("[data-moebius-preset-label]");
   const gameplayInputs = [...root.querySelectorAll("[data-gameplay-key]")];
+  const audioInputs = [...root.querySelectorAll("[data-audio-key]")];
+
+  function syncAudio() {
+    if (!audio) {
+      return;
+    }
+    const values = { music: audio.getMusic(), sfx: audio.getSfx() };
+    for (const input of audioInputs) {
+      const key = input.dataset.audioKey;
+      input.value = String(values[key]);
+      const label = root.querySelector(`[data-audio-value="${key}"]`);
+      if (label) {
+        label.textContent = `${Math.round(values[key] * 100)}%`;
+      }
+    }
+  }
 
   function formatMoebius(key, value) {
     const option = moebius?.options.find((entry) => entry.key === key);
@@ -370,6 +412,7 @@ export function createSettingsPanel({
     styleToggle.checked = getVisualStyle() === "moebius";
     syncMoebius();
     syncGameplay();
+    syncAudio();
     root.hidden = false;
   }
 
@@ -476,6 +519,18 @@ export function createSettingsPanel({
     syncMoebius();
   });
 
+  for (const input of audioInputs) {
+    input.addEventListener("input", () => {
+      const value = Number(input.value);
+      if (input.dataset.audioKey === "music") {
+        audio?.setMusic(value);
+      } else {
+        audio?.setSfx(value);
+      }
+      syncAudio();
+    });
+  }
+
   for (const input of gameplayInputs) {
     input.addEventListener(input.type === "checkbox" ? "change" : "input", () => {
       gameplay?.set(input.dataset.gameplayKey, input.type === "checkbox" ? input.checked : Number(input.value));
@@ -531,6 +586,7 @@ export function createSettingsPanel({
     syncGraphics,
     syncMoebius,
     syncGameplay,
+    syncAudio,
     destroy() {
       document.removeEventListener("keydown", onKeyDown);
       root.remove();

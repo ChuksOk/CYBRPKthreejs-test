@@ -602,3 +602,7 @@
 .settings-mini-btn:hover {
   background: rgba(239, 68, 68, 0.2);
 }
+
+.settings-gfx-row--range > .settings-gfx-hint {
+  margin-top: -4px;
+}

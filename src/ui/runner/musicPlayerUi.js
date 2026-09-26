@@ -1,6 +1,7 @@
 import "./musicPlayer.css";
 import { MUSIC_SOURCES } from "../../audio/createMusicPlayer.js";
 import { formatTime, trackLabel } from "../../audio/musicCatalog.js";
+import { getSfxVolume, setSfxVolume } from "../../audio/audioState.js";
 
 /**
  * Soundtrack UI (EA FC "tracks" style): the full catalog screen, the pause
@@ -84,6 +85,7 @@ export function renderMusicScreen(player, { back = "menu" } = {}) {
               <button type="button" class="mu-btn mu-play" data-music="toggle" data-music-live="play" title="Play / pause">${ICONS.play}</button>
               <button type="button" class="mu-btn" data-music="next" title="Next (N)">${ICONS.next}</button>
               <label class="mu-volume" title="Music volume">${ICONS.note}<input type="range" min="0" max="1" step="0.01" value="${settings.volume}" data-music="volume" aria-label="Music volume" /></label>
+              <label class="mu-volume mu-volume--sfx" title="Sound effects volume"><span class="t-meta">SFX</span><input type="range" min="0" max="1" step="0.01" value="${getSfxVolume()}" data-music="sfx" aria-label="Sound effects volume" /></label>
             </div>
           </div>
         </section>
@@ -279,6 +281,8 @@ export function bindMusicControls(root, player, { onRerender } = {}) {
   function onInput(event) {
     if (event.target.dataset?.music === "volume") {
       player.setVolume(Number(event.target.value));
+    } else if (event.target.dataset?.music === "sfx") {
+      setSfxVolume(Number(event.target.value));
     }
   }
 

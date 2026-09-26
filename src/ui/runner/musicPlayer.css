@@ -895,3 +895,13 @@ html.runner-playing .np-toast.is-visible {
     width: 150px;
   }
 }
+
+.mu-volume--sfx {
+  flex: 0.8;
+  margin-left: 4px;
+  color: var(--t-pink);
+}
+
+.mu-volume--sfx input {
+  accent-color: #ff4f74;
+}

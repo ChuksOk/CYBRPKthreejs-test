@@ -13,6 +13,7 @@ import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
 import { savePhoto, sharePhoto, shareRun } from "../ui/runner/shareCard.js";
 import { createRunSnapshots } from "./createRunSnapshots.js";
 import { createFlightMode } from "./createFlightMode.js";
+import { carMark } from "../ui/runner/metaScreens.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
 import { createMusicPlayer } from "../audio/createMusicPlayer.js";
 import {
@@ -298,7 +299,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         audio,
         getWorldColliders: () => track?.colliders ?? [],
         getMods: () => runMods,
-        getMetaDamage: () => 1 + 0.06 * (meta.tiers.damage ?? 0),
+        // Armory: Hot Loads always; Car Cannons while flying the Sky Run car.
+        getMetaDamage: () =>
+          (1 + 0.06 * (meta.tiers.damage ?? 0)) * (flight.isActive() ? 1 + 0.1 * (meta.tiers.carGuns ?? 0) : 1),
         isUnlocked: (index) => progression.isWeaponUnlocked(index),
         onLocked: (index) => {
           hud.showBanner(`${WEAPONS[index]?.code ?? "GUN"} LOCKED — ARMORY`, 1.4);
@@ -493,7 +496,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.slowmoCooldown = 0;
     game.invuln = 0;
     game.sector = 1;
-    game.nextFlightAt = 380;
+    game.nextFlightAt = firstFlightDistance();
     game.flightPromptTimer = 0;
     game.deathDetail = "";
     currentLane = 1;
@@ -531,7 +534,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       audio.stopMusic();
     }
   }
-  music.on("state", () => syncSynthScore());
+  music.on("state", (state) => {
+    syncSynthScore();
+    // Synth score follows the music volume too.
+    audio.setMusicVolume(state.settings.volume);
+  });
+  audio.setMusicVolume(music.getState().settings.volume);
 
   function enterMenu() {
     restoreTheme();
@@ -971,11 +979,30 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   // ── Sky Run (flying car) ────────────────────────────────────────────────
+  function carUpgradeLevel() {
+    return ["carHull", "carGuns", "carRepair", "carPermit"].reduce((sum, id) => sum + (meta.tiers[id] ?? 0), 0);
+  }
+
+  function flightHud() {
+    return {
+      hull: flight.getHullFraction(),
+      hp: flight.state.hull,
+      max: flight.state.maxHull,
+      time: flight.state.time,
+      mark: carMark(carUpgradeLevel()),
+    };
+  }
+
+  /** Armory Sky Permit: first appearance and spacing shrink per level. */
+  function firstFlightDistance() {
+    return 380 - 80 * (meta.tiers.carPermit ?? 0);
+  }
+
   function startFlight() {
     if (flight.isActive() || game.state !== "running") {
       return;
     }
-    flight.enter(controls.state.x);
+    flight.enter(controls.state.x, { maxHull: RUNNER.flightHull * (1 + 0.2 * (meta.tiers.carHull ?? 0)) });
     controls.setFlight(true);
     // Chase cam: the rifle / hands hide; tracers leave from the car's cannons.
     viewmodel?.setVisible(false);
@@ -986,7 +1013,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.showBanner("SKY RUN", 1.8);
     hud.setPrompt(isTouch ? "SWIPE ↑↓ CLIMB / DIVE · ←→ STRAFE" : "W / S  CLIMB · DIVE   —   A / D  STRAFE");
     game.flightPromptTimer = 3.2;
-    hud.setFlight({ hull: 1, time: 0 });
+    hud.setFlight(flightHud());
     audio.play("upgrade", { volume: 0.7 });
     audio.play("go", { volume: 0.5, detune: -300 });
     controls.shake(0.08, 0.5);
@@ -1026,7 +1053,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.flashDamage(0.3);
     audio.play("damage", { volume: 0.45, detune: -400 });
     controls.shake(0.06, 0.25);
-    hud.setFlight({ hull: flight.getHullFraction(), time: flight.state.time, hit: true });
+    hud.setFlight({ ...flightHud(), hit: true });
     if (flight.damage(amount)) {
       endFlight();
     }
@@ -1108,7 +1135,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     // Sky Run power-up: rare, never during the tutorial, spaced out.
     if (game.tutorial < 0 && game.distance >= game.nextFlightAt && freeLanes.length && rr() < 0.22) {
       pickups.spawn("flycar", x - 8, rrPick(freeLanes), 1.2);
-      game.nextFlightAt = game.distance + rrRange(900, 1400);
+      game.nextFlightAt = game.distance + rrRange(900, 1400) * (1 - 0.18 * (meta.tiers.carPermit ?? 0));
       return;
     }
     if (rr() < 0.09 + d * 0.04) {
@@ -1611,7 +1638,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     if (flight.isActive()) {
       // Sky Run pays ×1.5 on distance.
       game.bonus += step * 0.5;
-      hud.setFlight({ hull: flight.getHullFraction(), time: flight.state.time });
+      // Armory Auto-Repair: hull regenerates after 2 s without a hit.
+      const repair = meta.tiers.carRepair ?? 0;
+      if (repair > 0 && game.sinceDamage > 2) {
+        flight.repair(3 * repair * delta);
+      }
+      hud.setFlight(flightHud());
     }
     dayNight?.update(delta);
     weather?.update(delta);

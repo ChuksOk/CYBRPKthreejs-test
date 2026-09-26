@@ -55,6 +55,7 @@ import {
 } from "./platform/userPreferences.js";
 import { createGraphicsSettings } from "./platform/graphicsSettings.js";
 import { createMoebiusSettings } from "./post/moebiusSettings.js";
+import { getSfxVolume, setSfxVolume } from "./audio/audioState.js";
 import {
   getGameplaySettings,
   resetGameplaySettings,
@@ -276,6 +277,13 @@ async function init(loaderOverlay) {
     graphics,
     visualStyle,
     moebiusSettings,
+    // Settings → Audio: soundtrack / synth volume + sound effects.
+    audio: {
+      getMusic: () => runnerGame?.music.getState().settings.volume ?? 0.7,
+      setMusic: (value) => runnerGame?.music.setVolume(value),
+      getSfx: getSfxVolume,
+      setSfx: setSfxVolume,
+    },
     gameplay: {
       get: getGameplaySettings,
       set: setGameplaySetting,

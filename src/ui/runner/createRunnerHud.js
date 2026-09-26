@@ -230,13 +230,14 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
   });
   // Sky Run hull gauge (bottom-centre while flying the car).
   const flightPanel = el("div", "rh-flight", root, `
-    <div class="fl-head"><span class="t-meta">SKY RUN</span><b class="fl-mult">×1.5</b><span class="t-meta fl-time">00.0S</span></div>
+    <div class="fl-head"><span class="t-meta">SKY RUN</span><span class="t-meta fl-mark">QUADRA MK-I</span><b class="fl-mult">×1.5</b><span class="t-meta fl-time">00.0S</span></div>
     <div class="fl-bar"><b class="fl-trail"></b><i></i></div>
     <div class="fl-foot"><span class="t-meta">HULL</span><b class="fl-num">100</b></div>`);
   const flightFill = flightPanel.querySelector(".fl-bar i");
   const flightTrail = flightPanel.querySelector(".fl-trail");
   const flightNum = flightPanel.querySelector(".fl-num");
   const flightTime = flightPanel.querySelector(".fl-time");
+  const flightMark = flightPanel.querySelector(".fl-mark");
   let flightTrailValue = 1;
   function setFlight(data) {
     flightPanel.classList.toggle("is-visible", Boolean(data));
@@ -249,7 +250,8 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     // Trail catches up to show the chunk just lost.
     flightTrailValue = Math.max(hull, flightTrailValue - 0.012);
     flightTrail.style.transform = `scaleX(${flightTrailValue})`;
-    flightNum.textContent = String(Math.round(hull * 100)).padStart(3, "0");
+    flightNum.textContent = `${Math.ceil(data.hp ?? hull * 100)}${data.max ? ` / ${Math.round(data.max)}` : ""}`;
+    flightMark.textContent = `QUADRA MK-${data.mark ?? "I"}`;
     flightTime.textContent = `${(data.time ?? 0).toFixed(1).padStart(4, "0")}S`;
     flightPanel.classList.toggle("is-low", hull < 0.3);
     if (data.hit) {

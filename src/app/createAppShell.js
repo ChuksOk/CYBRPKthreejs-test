@@ -79,6 +79,7 @@ export function createAppShell({
   visualStyle = null,
   moebiusSettings = null,
   gameplay = null,
+  audio = null,
 }) {
   const uiState = createAppUiState();
   let finishedIntro = false;
@@ -148,6 +149,7 @@ export function createAppShell({
         onVisualStyleChange: (id) => visualStyle?.set(id),
         moebius: moebiusSettings,
         gameplay,
+        audio,
         onRestart: () => {
           visualStyle?.set("neon");
           moebiusSettings?.reset();

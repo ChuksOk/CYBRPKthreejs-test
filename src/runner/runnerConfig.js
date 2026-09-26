@@ -45,7 +45,7 @@ export const RUNNER = {
   flightSpring: { lateralHz: 1.05, lateralDamping: 0.72, verticalHz: 0.85, verticalDamping: 0.8 },
   flightRollDuration: 0.62,
   flightSpeedBoost: 1.3,
-  flightHull: 100,
+  flightHull: 300,
 
   maxHealth: 100,
   maxShield: 60,

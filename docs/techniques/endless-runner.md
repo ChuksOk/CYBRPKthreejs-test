@@ -136,9 +136,10 @@ Runner dynamics are listed in `world.collisionHideExtra`, which `collectCollisio
   - Hitscan still fires from the camera through the crosshair; `weapon.setMuzzleProvider` sends tracers from the car's alternating cannons. Specials launch from the nose.
   - Drones fight at altitude via a virtual `player.floorY` 4.5 m below the car.
   - Ground obstacles are cleared and their spawner paused. Sky hazards (tier billboards, lane pylons, one-open-cell gates) and shard arcs take over, getting denser with flight time.
-  - `damagePlayer` routes all damage to the car's hull (100), shown on the HUD hull gauge. Distance pays ×1.5, and speed is ×1.3.
+  - `damagePlayer` routes all damage to the car's hull (300 base; Armory **SKY CAR** tiers: Reinforced Chassis +20% hull per level, Car Cannons +10% damage while flying, Auto-Repair +3 hull/s after 2 s without a hit, Sky Permit brings the pickup sooner and more often; total levels give the Quadra's Mk shown on the gauge), shown on the HUD hull gauge. Distance pays ×1.5, and speed is ×1.3.
   - At 0 hull the car explodes and its wreck tumbles away. The runner drops back to the street (`setFlight(false)`: gravity plus the first-person blend) with 2.6 s of invulnerability, a slow-mo beat and a 70 m clear street.
   - The car and hazards are in `collisionHideObjects`, shift with the floating origin, and are warmed at startup. Dev shortcut: `__app.runner.startFlight()`.
+- **Audio volumes**: `audioState` holds a persisted SFX volume. `audioVolume` (read by ambience, engines and footsteps) is its base level scaled by SFX, so existing subscribers follow it. Runner audio has an SFX bus (`master`) and a separate music bus for the synth score, which follows the soundtrack's music volume. Settings → Audio has Music and Sound-effects sliders, and the MUSIC screen has a matching SFX slider.
 - **Graphics settings** (`platform/graphicsSettings.js`): the Development Mode performance flags are offered in Settings → Graphics as presets (Low / Medium / High / Ultra) plus advanced toggles and sliders, and are saved in localStorage. "High" is the device baseline captured after `applyDevicePerformanceDefaults`. On phones and Safari, resolution is capped at that baseline, and DoF stays locked off in Safari. Rain density sets `weather.setMaxDropCount`.
 
 ## Port checklist

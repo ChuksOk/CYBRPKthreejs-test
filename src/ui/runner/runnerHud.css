@@ -2824,3 +2824,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
   30% { transform: translate(calc(-50% + 5px), 0); box-shadow: inset 3px 0 0 var(--t-pink), 0 0 0 2px var(--t-pink); }
   60% { transform: translate(calc(-50% - 4px), 0); }
 }
+
+.fl-mark {
+  color: var(--t-acid);
+}

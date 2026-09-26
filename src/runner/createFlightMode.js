@@ -179,8 +179,10 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
-  function enter(playerX) {
+  /** @param {{ maxHull?: number }} [options]  hull after Armory upgrades */
+  function enter(playerX, { maxHull = RUNNER.flightHull } = {}) {
     state.active = true;
+    state.maxHull = maxHull;
     state.hull = state.maxHull;
     state.time = 0;
     state.nextHazardX = playerX + 70;
