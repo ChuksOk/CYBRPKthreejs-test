@@ -46,16 +46,42 @@ const SNAPSHOT_SCALE = 1.5;
 const CLICKABLE =
   "button, a[href], input, label, select, summary, [data-action], [data-special], [role='button'], [role='tab'], [role='switch'], [onclick], [tabindex]:not([tabindex='-1'])";
 
-function createCanvasTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 2;
-  canvas.height = 2;
+function makeTexture(canvas) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.generateMipmaps = false;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  return { canvas, texture };
+  return texture;
+}
+
+function createCanvasTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 2;
+  canvas.height = 2;
+  return { canvas, texture: makeTexture(canvas), width: 2, height: 2 };
+}
+
+/**
+ * GPU texture storage is allocated once at its first upload, so a canvas that
+ * changes size needs a brand-new texture. Returns true when it was rebuilt.
+ */
+function syncSurface(surface) {
+  const { canvas } = surface;
+  if (canvas.width === surface.width && canvas.height === surface.height) {
+    surface.texture.needsUpdate = true;
+    return false;
+  }
+  surface.texture.dispose();
+  surface.texture = makeTexture(canvas);
+  surface.width = canvas.width;
+  surface.height = canvas.height;
+  return true;
+}
+
+function setMap(mesh, texture) {
+  mesh.material.map = texture;
+  mesh.material.needsUpdate = true;
 }
 
 function createQuad(texture, name, renderOrder = 1000) {
@@ -87,10 +113,22 @@ function isShown(element) {
   return rect.width > 1 && rect.height > 1;
 }
 
-/** Crop a snapshot (flipY texture) to a CSS-px rect of the viewport. */
-function cropTexture(texture, rect, viewportWidth, viewportHeight) {
-  texture.repeat.set((rect.right - rect.left) / viewportWidth, (rect.bottom - rect.top) / viewportHeight);
-  texture.offset.set(rect.left / viewportWidth, 1 - rect.bottom / viewportHeight);
+/**
+ * Crop a shared snapshot texture (flipY) to a CSS-px rect of the viewport via
+ * the quad's UVs, so every card samples one texture uploaded once.
+ */
+function cropQuad(mesh, rect, viewportWidth, viewportHeight) {
+  const u0 = rect.left / viewportWidth;
+  const u1 = rect.right / viewportWidth;
+  const v0 = 1 - rect.bottom / viewportHeight;
+  const v1 = 1 - rect.top / viewportHeight;
+  const uv = mesh.geometry.attributes.uv;
+  // PlaneGeometry(1, 1) vertex order: top-left, top-right, bottom-left, bottom-right.
+  uv.setXY(0, u0, v1);
+  uv.setXY(1, u1, v1);
+  uv.setXY(2, u0, v0);
+  uv.setXY(3, u1, v0);
+  uv.needsUpdate = true;
 }
 
 /**
@@ -141,10 +179,9 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
   // ── Running HUD cards ──────────────────────────────────────────────────
   const hudSurface = createCanvasTexture();
   const cards = HUD_CARDS.map((selector) => {
-    const texture = hudSurface.texture.clone();
-    const mesh = createQuad(texture, `xr-hud${selector.replace(".", "-")}`);
+    const mesh = createQuad(hudSurface.texture, `xr-hud${selector.replace(".", "-")}`);
     group.add(mesh);
-    return { selector, texture, mesh };
+    return { selector, mesh };
   });
   const hudState = { dirty: true, busy: false, wait: 0 };
 
@@ -214,7 +251,9 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       return;
     }
     screenState.rect = { left: 0, top: 0, right: size.width, bottom: size.height };
-    screenSurface.texture.needsUpdate = true;
+    if (syncSurface(screenSurface)) {
+      setMap(screenMesh, screenSurface.texture);
+    }
     screenMesh.scale.set(SCREEN_WIDTH, (SCREEN_WIDTH * size.height) / size.width, 1);
     screenMesh.visible = true;
   }
@@ -280,15 +319,18 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     if (!active || screenState.shown) {
       return;
     }
-    hudSurface.texture.needsUpdate = true;
+    if (syncSurface(hudSurface)) {
+      for (const card of cards) {
+        setMap(card.mesh, hudSurface.texture);
+      }
+    }
     cards.forEach((card, index) => {
       const rect = rects[index];
       card.mesh.visible = Boolean(rect);
       if (!rect) {
         return;
       }
-      cropTexture(card.texture, rect, size.width, size.height);
-      card.texture.needsUpdate = true;
+      cropQuad(card.mesh, rect, size.width, size.height);
       placeCard(card.mesh, rect, size.width, size.height);
     });
   }
