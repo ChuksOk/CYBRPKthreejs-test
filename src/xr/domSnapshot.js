@@ -40,6 +40,17 @@ const SNAPSHOT_CSS = `
 
 const dataUrlCache = new Map();
 
+/** Reject after `ms` so one stuck asset / decode can never wedge the HUD. */
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function toDataUrl(url) {
   if (url.startsWith("data:")) {
     return url;
@@ -47,7 +58,7 @@ async function toDataUrl(url) {
   if (!dataUrlCache.has(url)) {
     dataUrlCache.set(
       url,
-      fetch(url)
+      withTimeout(fetch(url), 4000, `fetch ${url}`)
         .then((response) => (response.ok ? response.blob() : null))
         .then(
           (blob) =>
@@ -243,6 +254,7 @@ function collectUsage(root) {
 export function createDomSnapshotter() {
   let model = null;
   let preparing = null;
+  let stage = "idle";
 
   /** Parse and inline the page CSS (once; call again after new styles load). */
   function prepare({ force = false } = {}) {
@@ -315,7 +327,7 @@ export function createDomSnapshotter() {
         );
       }
     });
-    await Promise.all(jobs);
+    await withTimeout(Promise.all(jobs), 5000, "snapshot images");
 
     // Scroll positions are live state, not markup: shift scrolled content.
     const scrolledSources = [element, ...pick(element, "*")];
@@ -347,9 +359,11 @@ export function createDomSnapshotter() {
    *   transparent: drop the page (html / body) background, for cropped cards.
    */
   async function snapshot(element, canvas, { scale = 1.5, skip = null, transparent = false } = {}) {
+    stage = "prepare";
     if (!model) {
-      await prepare();
+      await withTimeout(prepare(), 8000, "snapshot prepare");
     }
+    stage = "clone";
     const usage = collectUsage(element);
     const width = Math.max(1, Math.round(window.innerWidth));
     const height = Math.max(1, Math.round(window.innerHeight));
@@ -393,9 +407,17 @@ export function createDomSnapshotter() {
       `<foreignObject x="0" y="0" width="${width}" height="${height}">${markup}</foreignObject></svg>`;
 
     const image = new Image();
-    image.decoding = "async";
+    stage = "decode";
+    // `load`, not decode(): decode() can stall while the page is in the
+    // background (the flat page often is, behind the headset); drawImage
+    // decodes synchronously anyway.
+    const loaded = new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = () => reject(new Error("snapshot image failed to load"));
+    });
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-    await image.decode();
+    await withTimeout(loaded, 6000, "snapshot load");
+    stage = "draw";
 
     canvas.width = Math.round(width * scale);
     canvas.height = Math.round(height * scale);
@@ -405,5 +427,5 @@ export function createDomSnapshotter() {
     return { width, height, scale };
   }
 
-  return { prepare, snapshot, isReady: () => model !== null };
+  return { prepare, snapshot, isReady: () => model !== null, getStage: () => stage };
 }

@@ -196,6 +196,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     lastSnapshot: -Infinity,
     rect: null, // CSS px crop of the viewport shown on the panel
     metresPerPx: SCREEN_METRES_PER_PX,
+    token: 0, // bumps when a stuck snapshot is abandoned
   };
   let clock = 0;
 
@@ -287,7 +288,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
   }
 
   // ── Snapshots ──────────────────────────────────────────────────────────
-  async function refreshScreen() {
+  async function refreshScreen(token) {
     const fit = fitRunnerScreen(domHud?.screen);
     await settleAnimations(SCREEN_SKIP);
     const rect = visibleUiRect(SCREEN_SKIP);
@@ -305,7 +306,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       transparent: true,
     });
     screenState.metresPerPx = SCREEN_METRES_PER_PX / fit;
-    if (!active || !screenState.shown) {
+    if (!active || !screenState.shown || token !== screenState.token) {
       return;
     }
     // GPU storage is allocated at the first upload: a new size needs a new
@@ -332,6 +333,13 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
   }
 
   function pumpScreen() {
+    // Watchdog: a snapshot that never settles must not freeze the panel.
+    if (screenState.busy && clock - screenState.lastSnapshot > 8) {
+      console.warn(`[xr] menu snapshot stuck at "${snapshotter.getStage()}" — retrying`);
+      screenState.busy = false;
+      screenState.token += 1;
+      screenState.majorAt = clock;
+    }
     if (!screenState.shown || screenState.busy) {
       return;
     }
@@ -344,10 +352,18 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     screenState.minorDirty = false;
     screenState.lastSnapshot = clock;
     screenState.busy = true;
-    refreshScreen()
-      .catch((error) => console.warn("[xr] menu snapshot failed:", error))
+    const token = ++screenState.token;
+    refreshScreen(token)
+      .catch((error) => {
+        console.warn("[xr] menu snapshot failed:", error);
+        if (token === screenState.token) {
+          screenState.majorAt = clock + 1; // try again
+        }
+      })
       .finally(() => {
-        screenState.busy = false;
+        if (token === screenState.token) {
+          screenState.busy = false;
+        }
       });
   }
 
@@ -597,6 +613,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       visible: screenMesh.visible,
       liveRect: visibleUiRect(SCREEN_SKIP),
       fit: domHud?.screen?.style.getPropertyValue("--xr-fit"),
+      stage: snapshotter.getStage(),
       mode: domHud?.screen?.dataset.mode,
       animations: document.getAnimations().filter((a) => a.playState === "running").map((a) => `${a.animationName ?? a.transitionProperty ?? "anim"}@${a.effect?.target?.className ?? ""}:${a.effect?.getTiming?.().iterations}`).slice(0, 12),
     }),
