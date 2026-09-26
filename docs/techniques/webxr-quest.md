@@ -8,7 +8,7 @@ Primary code:
 |-------|------|
 | Boot decision, headset budgets, offscreen-render guard | `src/xr/xrSupport.js` |
 | Rig, controllers, input, recenter, haptics, session, ENTER VR button | `src/xr/createXRMode.js` |
-| In-headset HUD (snapshots of the flat UI, laser input, damage shell) | `src/xr/createXRHud.js`, `src/xr/domSnapshot.js` |
+| In-headset HUD: menu snapshots + laser input, native in-run cards | `src/xr/createXRHud.js`, `src/xr/domSnapshot.js`, `src/xr/createXRHudCards.js` |
 | Renderer backend + XR flags | `src/bootstrap/createRenderer.js` |
 | Frame order in VR | `src/runtime/createRenderLoop.js` |
 | Camera pose override, `pushAction` | `src/controls/createRunnerControls.js` |
@@ -28,7 +28,7 @@ WebGPU XR sessions need the experimental `XRGPUBinding`, which the Quest browser
 | `?noxr` | Never XR |
 | Anything else | Normal WebGPU boot; if `immersive-vr` is supported the button says **VR MODE** and reloads with `?xr` |
 
-XR mode also applies `applyXRPerformanceDefaults()` (1 city tile ahead, 2 500 rain drops, 256² height map with frame skip, no weapon lights, no sun-shadow refresh, no billboards or AO). The TSL is unchanged: the WebGL2 backend runs the same node materials and the rain compute.
+XR mode renders 90% eye buffers with plain PCF shadows, and also applies `applyXRPerformanceDefaults()` (1 city tile ahead, 2 500 rain drops, 256² height map with frame skip, no weapon lights, no sun-shadow refresh, no billboards or AO). The TSL is unchanged: the WebGL2 backend runs the same node materials and the rain compute.
 
 ## 2. Two cameras
 
@@ -81,26 +81,41 @@ renderer.render(scene, xrCamera)             (no ground mirror, no post stack)
 
 Aiming the trigger off the page panel starts / resumes / restarts, so the loop never needs precise pointing.
 
-## 5. HUD: the flat UI, in the headset
+## 5. HUD: the flat UI, adapted for the headset
 
-DOM overlays are invisible in an immersive session. Instead of redrawing a VR-only UI, the headset shows **pictures of the real flat UI**. The design matches exactly and no feature is lost.
+DOM overlays are invisible in an immersive session. The headset keeps the flat game's design and every feature, adapted for comfort and a standalone GPU budget.
 
-**Rasterizer** (`domSnapshot.js`): clones a DOM subtree into an SVG `<foreignObject>` together with the page's own CSS. `html` / `body` / `:root` selectors are retargeted to wrapper divs, and fonts and images are inlined as data URLs. The SVG is decoded as an image and drawn to a `CanvasTexture`. Chromium (Quest Browser) renders foreignObject with full CSS: clip-path, gradients, custom properties and web fonts. Live state that isn't markup is baked into the clone: checkbox values, `<select>` choices, canvas pixels and scroll offsets. Entry animations are frozen at their final style.
+**Menus** (every state except running / dying): pictures of the real page (`domSnapshot.js`).
 
-**Menus** (every state except running / dying): the *whole page* minus the 3D canvas is shown on a 2.9 m virtual screen. That covers the header, runner tickets, Armory, Missions, Records, soundtrack player, Settings (graphics, audio, Moebius) and About. A `MutationObserver` on `<body>` re-snapshots on change (at most every 150 ms). The laser drives the real page:
+- Scope: start ticket, pause, game over, upgrades, Armory, Missions, Records, soundtrack, Style, countdown, plus the header, Settings and About.
+- Rasterizer: clones the DOM into an SVG `<foreignObject>` with the page's own CSS.
+  - `html` / `body` / `:root` selectors are retargeted.
+  - Fonts and images are inlined, woff2 only.
+  - Each snapshot keeps only the rules whose classes exist in it, plus the fonts it uses.
+  - Chromium renders foreignObject with full CSS.
+  - It must be a **data:** URL: a blob URL taints the canvas, and WebGL then refuses it.
+- While presenting, `html.xr-presenting` rules (`xrButton.css`) drop the full-screen backdrops, top-align tall tickets and hide the flat now-playing toast. The snapshot is transparent and cropped to the visible UI, so the tickets float in the street about 2.2 m ahead.
+- A `MutationObserver` re-snapshots quickly on structural changes (new nodes, class / data changes). Inline-style and text ticks (progress bars, clocks) refresh at most every 1.5 s.
+- The laser drives the real page:
+  - `elementsFromPoint` hit-tests, and synthetic `pointermove` / `pointerdown` / `pointerup` + `click` keep the idle and hover logic working.
+  - Range inputs drag while the trigger is held. `<select>` cycles its options.
+  - The stick scrolls the list under the laser.
+  - The hovered control gets an acid outline.
+- Clicks run inside the XR session's `selectstart`. That is real user activation, so gesture-gated features (music playback, share) work.
 
-- It hit-tests the pointed viewport point with `document.elementsFromPoint`.
-- It dispatches `pointermove` / `pointerdown` / `pointerup` + `click`, so idle and hover logic keeps working.
-- Range inputs drag while the trigger is held. `<select>` cycles its options, since native dropdowns can't open in a headset.
-- The stick scrolls the scrollable container under the laser.
-- The hovered control gets an acid outline (`.is-xr-hover`, only drawn in snapshots).
+**Runs:** `createXRHudCards.js` repaints the flat HUD cards natively on small canvases. Rasterizing DOM several times a second causes judder on a Quest.
 
-**Runs:** the flat HUD root is snapshotted at 4 Hz and cut into per-card quads: score ticket, vitals, ammo, weapon chips, Sky Run hull, orders, boss bar, banner, prompt, toasts, mission stamp, music card. Each quad sits where its card sits on the flat screen, wrapped onto an arc around the head. The crosshair, target brackets, threat arrows and score pop-ups are screen-projected in the flat game, so VR leaves them out. The laser and haptics cover them.
+- Cards: score ticket, orders, vitals, ammo + special, weapon chips, Sky Run hull, carrier bar, banner, prompt, toasts / mission stamp, now playing.
+- Values are read from the live flat HUD (text, state classes, bar `scaleX`), so the strings always match the flat game.
+- The look follows `runnerHud.css`: palette, notches, dot grids, barcodes, Barlow Condensed + JetBrains Mono.
+- A card repaints only when its values change (≤ 10 Hz).
+- The cards are body-locked on an arc within ±30° (score / orders / vitals left, chips / ammo right, banner / boss / toasts / prompt / hull centred).
 
-While in VR the runner HUD lists the Touch controller scheme (`hud.setXRMode`), and tutorial / Sky Run prompts use VR wording.
+The crosshair, target brackets, threat arrows and score pop-ups are screen-projected in the flat game, so VR leaves them out. The laser and haptics cover them. While in VR the runner HUD lists the Touch controller scheme (`hud.setXRMode`), and tutorial / Sky Run prompts use VR wording.
 
-- **Damage:** a red back-face sphere around the head (both eyes, no FOV math), plus haptics. `mirrorHud` forwards only `flashDamage` / `hitMarker`; everything else comes from the DOM itself.
-- Quads live on `VIEWMODEL_LAYER`, so the AO, mirror and height passes never see them. The whole rig is also in `world.collisionHideExtra` (the controller models load onto layer 0).
+- **Audio:** every controller select / squeeze resumes the soundtrack (`music.resumeFromGesture()`) and the SFX context. The flat page reporting `hidden` no longer pauses a VR run; the XR session's own `visibilitychange` does.
+- **Damage:** a red back-face sphere around the head, plus haptics. `mirrorHud` forwards only `flashDamage` / `hitMarker`.
+- Quads live on `VIEWMODEL_LAYER`, so the AO, mirror and height passes never see them. The whole rig is also in `world.collisionHideExtra`.
 
 ## 6. Testing without a headset
 
@@ -122,8 +137,9 @@ On a real Quest, open the dev server over HTTPS on the LAN (`npm run dev` prints
 | Constant | File | Meaning |
 |----------|------|---------|
 | `XR_OFFSET` | `createViewmodel.js` | Gun grip relative to the controller ray origin |
-| `SCREEN_WIDTH`, `SCREEN_POSITION`, `HUD_ARC_WIDTH`, `HUD_DISTANCE` | `createXRHud.js` | Page panel / HUD card placement in player space |
-| `HUD_SNAPSHOT_INTERVAL`, `SCREEN_SNAPSHOT_INTERVAL` | `createXRHud.js` | Snapshot rates (main-thread cost) |
+| `SCREEN_METRES_PER_PX`, `SCREEN_DISTANCE` | `createXRHud.js` | Menu ticket size / distance |
+| `MAJOR_DELAY`, `MINOR_INTERVAL` | `createXRHud.js` | Menu snapshot rates (main-thread cost) |
+| `CARDS[].place`, `ARC_RADIUS`, `METRES_PER_PX` | `createXRHudCards.js` | In-run card layout |
 | `DUCK_ENTER` / `DUCK_EXIT` | `createXRMode.js` | Physical duck thresholds (m) |
 | `STICK_ENGAGE` / `STICK_RELEASE` | `createXRMode.js` | Flick hysteresis |
 | `applyXRPerformanceDefaults` | `xrSupport.js` | Headset budgets |
