@@ -28,6 +28,7 @@ const _offset = new THREE.Vector3();
 const _origin = new THREE.Vector3();
 const _direction = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _chase = new THREE.Vector3();
 
 /**
  * Meta Quest / WebXR mode for the runner.
@@ -72,6 +73,7 @@ export function createXRMode({
   space.add(xrCamera);
 
   const hud = createXRHud({
+    domHud: runnerGame.hud,
     onHit: (kill) => pulse("right", kill ? 0.6 : 0.25, kill ? 60 : 18),
     onDamage: (amount) => pulse("both", 0.35 + 0.6 * amount, 90),
   });
@@ -198,6 +200,17 @@ export function createXRMode({
     // Slides only lower the view by what the player isn't already ducking.
     const slideDip = Math.min(0, state.eyeHeight - RUNNER.eyeHeight + duckAmount());
     rig.position.set(state.x, state.feetY + slideDip, state.z);
+    // Sky Run: ride the game's chase point (behind + above the car, on its
+    // smoothed follow path) instead of sitting inside the hull. No roll.
+    const chase = THREE.MathUtils.smootherstep(state.flightBlend ?? 0, 0, 1);
+    if (chase > 0) {
+      _chase.set(
+        state.x - RUNNER.chaseDistance,
+        state.camY + RUNNER.chaseHeight - RUNNER.eyeHeight,
+        state.camZ,
+      );
+      rig.position.lerp(_chase, chase);
+    }
     rig.updateMatrixWorld(true);
 
     const right = slotFor("right");
@@ -269,30 +282,28 @@ export function createXRMode({
         recenter();
         pulse(slot.hand, 0.3, 40);
       }
-      const flick = stickFlick(slot);
-      if (flick && hud.isPicking()) {
-        if (flick === "left" || flick === "right") {
-          hud.moveHighlight(flick === "left" ? -1 : 1);
+      if (running) {
+        const flick = stickFlick(slot);
+        if (flick) {
+          controls.pushAction(flick === "up" ? "jump" : flick === "down" ? "slide" : flick);
         }
-      } else if (flick && running) {
-        controls.pushAction(flick === "up" ? "jump" : flick === "down" ? "slide" : flick);
+      } else if (hud.isPointing()) {
+        // Menus: the stick scrolls whatever list is under the laser.
+        const y = slot.source?.gamepad?.axes?.[3] ?? 0;
+        if (Math.abs(y) > 0.25) {
+          hud.scroll(y * 18);
+        }
       }
     }
 
     if (right) {
-      if (hud.isPicking()) {
-        const index = hud.pickCardFromRay(aimRay(right));
-        if (index >= 0) {
-          hud.setHighlight(index);
-        }
+      // Menus are the real DOM screens (snapshots): the laser clicks them.
+      if (!running) {
+        hud.pointAt(aimRay(right));
       }
       const trigger = edge(right, BTN_TRIGGER);
-      if (trigger && !running) {
-        if (hud.isPicking()) {
-          runnerGame.xrAction("pick", hud.getHighlight());
-        } else {
-          runnerGame.xrAction("confirm");
-        }
+      if (trigger && !running && !hud.click()) {
+        runnerGame.xrAction("confirm");
       }
       if (edge(right, BTN_SQUEEZE) && running) {
         controls.requestReload();
@@ -300,9 +311,7 @@ export function createXRMode({
       if (edge(right, BTN_LOWER)) {
         if (running) {
           controls.pushAction("jump");
-        } else if (hud.isPicking()) {
-          runnerGame.xrAction("pick", hud.getHighlight());
-        } else {
+        } else if (!hud.click()) {
           runnerGame.xrAction("confirm");
         }
       }
@@ -352,44 +361,6 @@ export function createXRMode({
     }
   }
 
-  // ── HUD stats (read straight from the runner, no DOM projection) ──────
-  const stats = {
-    score: 0,
-    combo: 1,
-    distance: 0,
-    health: 0,
-    maxHealth: RUNNER.maxHealth,
-    shield: 0,
-    maxShield: RUNNER.maxShield,
-    ammo: 0,
-    magSize: 0,
-    reloading: false,
-    overclock: 0,
-    weaponIndex: 0,
-    special: { type: "", charge: 0, ready: false },
-  };
-
-  function readStats() {
-    const game = runnerGame.game;
-    const weapon = runnerGame.weapon?.state;
-    const special = runnerGame.specials.state;
-    stats.score = game.score;
-    stats.combo = game.combo;
-    stats.distance = game.distance;
-    stats.health = game.health;
-    stats.shield = game.shield;
-    stats.maxShield = runnerGame.maxShield();
-    stats.ammo = weapon?.ammo ?? 0;
-    stats.magSize = weapon?.magSize ?? 0;
-    stats.reloading = weapon?.reloading ?? false;
-    stats.overclock = weapon?.overclock ?? 0;
-    stats.weaponIndex = weapon?.index ?? 0;
-    stats.special.type = special.type ?? "";
-    stats.special.charge = special.charge ?? 0;
-    stats.special.ready = Boolean(special.ready);
-    return stats;
-  }
-
   // ── Per-frame hooks (createRenderLoop) ─────────────────────────────────
   function beforeUpdate() {
     if (recenterPending && framesPresented > 2 && xrCamera.position.lengthSq() > 0) {
@@ -400,7 +371,7 @@ export function createXRMode({
 
   function afterUpdate(delta) {
     const state = runnerGame.getState();
-    hud.update(delta, state === "running" || state === "dying" ? readStats() : null);
+    hud.update(delta);
 
     const menu = state !== "running" && state !== "countdown" && state !== "dying";
     laser.visible = Boolean(laser.parent);
@@ -427,6 +398,7 @@ export function createXRMode({
     controls.setXR(true, applyPose);
     viewmodel?.setXRMode(true);
     hud.reset();
+    hud.setActive(true);
     runnerGame.setXRHud(hud);
     world.ground?.setReflectionEnabled?.(false);
     document.documentElement.classList.add("xr-presenting");
@@ -447,6 +419,7 @@ export function createXRMode({
     controls.setXR(false);
     viewmodel?.setXRMode(false);
     runnerGame.setXRHud(null);
+    hud.setActive(false);
     world.ground?.setReflectionEnabled?.(performanceProfile.groundReflection);
     flushDeferredShadowUpdate?.();
     document.documentElement.classList.remove("xr-presenting");

@@ -71,23 +71,16 @@ const TUTORIAL_STEPS = [
   { id: "special", desktop: "E — USE YOUR SPECIAL", touch: "TAP SPECIAL — USE IT", xr: "LEFT TRIGGER — THROW YOUR SPECIAL" },
 ];
 
-/** DOM HUD calls that the in-headset HUD (src/xr/createXRHud.js) mirrors. */
-const XR_MIRRORED_HUD = new Set([
-  "showScreen",
-  "hideScreen",
-  "showBanner",
-  "toast",
-  "setPrompt",
-  "setBoss",
-  "setSlowmo",
-  "flashDamage",
-  "hitMarker",
-  "setVisible",
-]);
+/**
+ * DOM HUD calls the in-headset HUD also needs (src/xr/createXRHud.js). The
+ * headset shows snapshots of the DOM itself, so only the effects that are not
+ * DOM — the damage shell and haptics — are forwarded.
+ */
+const XR_MIRRORED_HUD = new Set(["flashDamage", "hitMarker"]);
 
 /**
- * The DOM HUD is invisible inside a WebXR session, so every mirrored call is
- * also forwarded to the VR HUD while one is attached.
+ * The DOM HUD is invisible inside a WebXR session: forward the mirrored calls
+ * to the VR HUD while one is attached.
  */
 function mirrorHud(domHud, getXRHud) {
   return new Proxy(domHud, {
@@ -1121,7 +1114,13 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     obstacles.clear();
     runStats.flights = (runStats.flights ?? 0) + 1;
     hud.showBanner("SKY RUN", 1.8);
-    hud.setPrompt(isTouch ? "SWIPE ↑↓ CLIMB / DIVE · ←→ STRAFE" : "W / S  CLIMB · DIVE   —   A / D  STRAFE");
+    hud.setPrompt(
+      controls.isXR()
+        ? "STICK ↑↓ CLIMB · DIVE   —   STICK ←→ STRAFE"
+        : isTouch
+          ? "SWIPE ↑↓ CLIMB / DIVE · ←→ STRAFE"
+          : "W / S  CLIMB · DIVE   —   A / D  STRAFE",
+    );
     game.flightPromptTimer = 3.2;
     hud.setFlight(flightHud());
     audio.play("upgrade", { volume: 0.7 });
@@ -2037,9 +2036,14 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     /** In-headset HUD (src/xr/createXRHud.js); null outside a VR session. */
     setXRHud: (value) => {
       xrHud = value;
-      if (xrHud) {
-        xrHud.setVisible(game.state !== "idle" && game.state !== "menu" && game.state !== "dead");
-        xrHud.syncScreen?.(hud.getScreenMode(), game);
+      // Screens list the Touch controller scheme while in VR; re-render the
+      // visible one so the headset snapshot picks it up.
+      hud.setXRMode(Boolean(value));
+      const mode = hud.getScreenMode();
+      if (mode === "start") {
+        showStart();
+      } else if (mode === "pause") {
+        hud.showScreen("pause");
       }
     },
   };

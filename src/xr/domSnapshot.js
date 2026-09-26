@@ -32,6 +32,7 @@ const SNAPSHOT_CSS = `
   caret-color: transparent !important;
 }
 .xr-html .xr-enter-button { display: none !important; }
+.xr-html .is-xr-hover { outline: 3px solid #d9ff3b !important; outline-offset: 2px; }
 `;
 
 const dataUrlCache = new Map();
@@ -184,6 +185,20 @@ export function createDomSnapshotter() {
       }
     });
     await Promise.all(jobs);
+
+    // Scroll positions are live state, not markup: shift scrolled content.
+    const scrolledSources = [element, ...element.querySelectorAll("*")];
+    const scrolledTargets = [clone, ...clone.querySelectorAll("*")];
+    scrolledSources.forEach((source, index) => {
+      const target = scrolledTargets[index];
+      if (!target || (source.scrollTop === 0 && source.scrollLeft === 0)) {
+        return;
+      }
+      target.style.overflow = "hidden";
+      for (const child of target.children) {
+        child.style.translate = `${-source.scrollLeft}px ${-source.scrollTop}px`;
+      }
+    });
     return clone;
   }
 

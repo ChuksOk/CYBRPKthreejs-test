@@ -525,7 +525,21 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     ? createNowPlayingToast(music, { isSuppressed: () => screen.dataset.mode === "music" })
     : null;
 
-  const controls = isTouch
+  // WebXR (Meta Quest): the headset shows snapshots of these screens
+  // (src/xr/createXRHud.js), so they list the Touch controller scheme.
+  let xrMode = false;
+  const XR_CONTROLS = [
+    ["STICK ← →", "SWITCH LANE"],
+    ["A / STICK ↑", "JUMP"],
+    ["B / DUCK", "SLIDE"],
+    ["R-TRIGGER", "FIRE"],
+    ["R-GRIP", "RELOAD"],
+    ["L-GRIP / X", "WEAPON"],
+    ["L-TRIGGER", "SPECIAL"],
+    ["Y", "PAUSE"],
+    ["STICK CLICK", "RECENTER"],
+  ];
+  const baseControls = isTouch
     ? [
         ["SWIPE ← →", "SWITCH LANE"],
         ["SWIPE ↑", "JUMP"],
@@ -547,9 +561,12 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
         ["ESC", "PAUSE"],
         ["T", "AIM ASSIST"],
       ];
-  const controlsHtml = controls
-    .map(([key, label]) => `<div class="k-row"><kbd>${key}</kbd><span>${label}</span></div>`)
-    .join("");
+  const controlsHtmlFor = (list) =>
+    list.map(([key, label]) => `<div class="k-row"><kbd>${key}</kbd><span>${label}</span></div>`).join("");
+  const baseControlsHtml = controlsHtmlFor(baseControls);
+  const xrControlsHtml = controlsHtmlFor(XR_CONTROLS);
+  /** Touch / desktop / VR variant of a hint line. */
+  const inputHint = (touch, desktop, xr) => (xrMode ? xr : isTouch ? touch : desktop);
 
   function renderSpecialPicker(selected) {
     return `
@@ -583,7 +600,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             <div class="tk-tag"><span class="t-meta">${STORY.player.toUpperCase()} IS ON A BREAK, PLAYING:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
             <div class="tk-side">
               <span class="tk-ghost">${STORY.year}</span>
-              <div class="tk-keys">${controlsHtml}</div>
+              <div class="tk-keys">${xrMode ? xrControlsHtml : baseControlsHtml}</div>
             </div>
           </div>
           ${renderSpecialPicker(special)}
@@ -619,7 +636,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
         <div class="lb-rule"><i></i><i></i><i></i></div>
         <button class="tk-button" data-action="resume"><span>RESUME</span><span>→</span></button>
         <p class="lb-narr">${NARRATOR.pause()}</p>
-        <div class="t-meta lb-note">${isTouch ? "TAP RESUME TO CONTINUE" : "CLICK TO RE-LOCK THE MOUSE"}</div>
+        <div class="t-meta lb-note">${inputHint("TAP RESUME TO CONTINUE", "CLICK TO RE-LOCK THE MOUSE", "Y OR TRIGGER TO RESUME")}</div>
         ${music ? renderMiniPlayer(music) : ""}
       </div>`;
   }
@@ -799,7 +816,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             <button class="tk-button tk-button--ghost" data-action="menu"><span>MENU</span><span>≡</span></button>
           </div>
           ${barcode(score % 97 + 5, 70)}
-          <span class="t-code">${isTouch ? "/ / TAP TO RE-ENTER" : "/ / ENTER TO RESTART"}</span>
+          <span class="t-code">${inputHint("/ / TAP TO RE-ENTER", "/ / ENTER TO RESTART", "/ / POINT + TRIGGER")}</span>
         </div>
       </div>`;
   }
@@ -1245,5 +1262,10 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     onFire: (fn) => { handlers.fire = fn; },
     onSpecialSelect: (fn) => { handlers.specialSelect = fn; },
     getScreenMode: () => screen.dataset.mode || "",
+    /** WebXR session: screens list the Touch controller scheme. */
+    setXRMode: (value) => {
+      xrMode = Boolean(value);
+      document.documentElement.classList.toggle("runner-xr", xrMode);
+    },
   };
 }

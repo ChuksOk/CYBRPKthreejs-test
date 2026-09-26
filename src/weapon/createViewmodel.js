@@ -180,6 +180,13 @@ export function createViewmodel({ scene, camera }) {
     if (xrMode) {
       pivot.position.set(XR_OFFSET.x, XR_OFFSET.y + switchDip * 0.5 + reloadDip, XR_OFFSET.z + recoil * 0.03);
       pivot.rotation.set(recoil * 0.1 - reloadRoll * 0.4 + switchDip * 1.5, 0, reloadRoll * 0.6);
+      if (deathT >= 0) {
+        // Death: the gun slips out of the hand and drops away.
+        const fall = Math.max(0, deathT - 0.1);
+        pivot.position.y -= 1.7 * fall * fall;
+        pivot.rotation.x += 1.5 * fall;
+        pivot.rotation.z -= 2.8 * fall * fall;
+      }
       rig.position.copy(camera.position);
       rig.quaternion.copy(camera.quaternion);
       rig.updateMatrixWorld(true);
