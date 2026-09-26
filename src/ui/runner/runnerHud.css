@@ -982,7 +982,7 @@
   animation: tk-in 0.25s ease;
 }
 
-.countdown b {
+.countdown > b {
   font-family: var(--t-display);
   font-weight: 800;
   font-size: clamp(110px, 18vw, 190px);
@@ -2406,7 +2406,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
 }
 
 /* Countdown digits punch in. */
-.countdown b {
+.countdown > b {
   display: inline-block;
   animation: ui-count 0.5s var(--ui-spring);
 }
@@ -2827,4 +2827,503 @@ html.runner-playing.runner-touch body .audio-btn-root {
 
 .fl-mark {
   color: var(--t-acid);
+}
+
+/* ── Orders: in-run mission tracker ────────────────────────────────── */
+.rh-orders {
+  left: 20px;
+  top: 300px;
+  width: 250px;
+  padding: 7px 10px 9px;
+  background: rgba(12, 14, 19, 0.84);
+  color: var(--t-paper);
+  border-left: 4px solid var(--t-acid);
+  clip-path: var(--t-notch-sm);
+  display: none;
+}
+
+.rh-orders.has-missions {
+  display: block;
+}
+
+.o-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  color: var(--t-acid);
+}
+
+.o-count {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+.o-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.o-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  column-gap: 7px;
+  row-gap: 3px;
+  padding: 3px 4px;
+  margin: 0 -4px;
+}
+
+.o-check {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--t-grey);
+  transform: rotate(45deg) scale(0.8);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.o-text {
+  font-family: var(--t-display);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.o-num {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--t-paper-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.o-bar {
+  grid-column: 2 / 4;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.o-bar i {
+  display: block;
+  height: 100%;
+  background: var(--t-cobalt-2);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.o-row.is-near .o-bar i,
+.o-row.is-near .o-check {
+  background: var(--t-pink);
+  border-color: var(--t-pink);
+}
+
+.o-row.is-near .o-num {
+  color: var(--t-pink);
+}
+
+.o-row.is-near .o-check {
+  animation: o-near 0.9s ease-in-out infinite;
+}
+
+@keyframes o-near {
+  50% { transform: rotate(45deg) scale(1.15); box-shadow: 0 0 10px var(--t-pink); }
+}
+
+.o-row.is-done .o-check {
+  background: var(--t-acid);
+  border-color: var(--t-acid);
+}
+
+.o-row.is-done .o-text {
+  color: var(--t-grey);
+  text-decoration: line-through;
+  text-decoration-color: var(--t-acid);
+}
+
+.o-row.is-done .o-num {
+  color: var(--t-acid);
+}
+
+.o-row.is-done .o-bar i {
+  background: var(--t-acid);
+}
+
+.o-row.is-tick {
+  animation: o-tick 0.6s ease-out;
+}
+
+@keyframes o-tick {
+  from { background: rgba(93, 135, 246, 0.45); }
+}
+
+.o-row.is-complete {
+  animation: o-complete 1.2s ease-out;
+}
+
+@keyframes o-complete {
+  0% { background: var(--t-acid); color: var(--t-ink); transform: scale(1.06); }
+  60% { background: rgba(217, 255, 59, 0.35); transform: none; }
+}
+
+.rh-orders.is-all-done {
+  border-left-color: var(--t-pink);
+}
+
+.runner-hud.is-entering .rh-orders { animation: ui-from-left 0.5s var(--ui-spring) 0.16s backwards; }
+
+@media (max-width: 900px), (max-height: 560px) {
+  .rh-orders {
+    left: 10px;
+    width: 190px;
+  }
+
+  .o-text {
+    font-size: 13px;
+  }
+}
+
+/* Touch: one line — the closest-to-done order (+ count). */
+.runner-hud.is-touch .rh-orders {
+  left: max(10px, env(safe-area-inset-left));
+  width: 150px;
+  padding: 4px 7px 6px;
+  border-left-width: 3px;
+  background: rgba(12, 14, 19, 0.6);
+}
+
+.runner-hud.is-touch .o-row:not(.is-focus) {
+  display: none;
+}
+
+.runner-hud.is-touch .rh-orders.is-all-done .o-row:last-child {
+  display: grid;
+}
+
+.runner-hud.is-touch .o-text {
+  font-size: 12px;
+}
+
+.runner-hud.is-touch .o-head {
+  margin-bottom: 1px;
+}
+
+/* ── Mission complete stamp (centre) ───────────────────────────────── */
+.rh-mission {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: min(440px, 86vw);
+  padding: 10px 26px 12px;
+  background: var(--t-acid);
+  color: var(--t-ink);
+  clip-path: var(--t-notch);
+  border-top: 6px solid var(--t-pink);
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+}
+
+.rh-mission.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  animation: rm-stamp 0.5s var(--ui-spring);
+}
+
+@keyframes rm-stamp {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(1.7) rotate(-4deg); filter: blur(3px); }
+  55% { opacity: 1; transform: translate(-50%, 0) scale(0.96) rotate(1deg); filter: none; }
+  100% { transform: translate(-50%, 0) scale(1) rotate(0); }
+}
+
+.rm-title {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+}
+
+.rm-text {
+  font-family: var(--t-display);
+  font-weight: 600;
+  font-size: 18px;
+  text-transform: uppercase;
+}
+
+.rm-reward {
+  padding: 2px 8px;
+  margin-top: 2px;
+  background: var(--t-ink);
+  color: var(--t-acid);
+}
+
+/* ── Mini music player (top-right) ─────────────────────────────────── */
+.rh-music {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  width: 220px;
+  padding: 5px 10px 7px 5px;
+  background: rgba(12, 14, 19, 0.82);
+  color: var(--t-paper);
+  clip-path: var(--t-notch-sm);
+  box-shadow: inset 3px 0 0 var(--t-acid);
+}
+
+.rh-music.is-visible {
+  display: flex;
+}
+
+.rmu-cover {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  object-fit: cover;
+  margin-left: 3px;
+}
+
+.rmu-text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.rmu-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--t-acid);
+  font-size: 8px;
+}
+
+.rmu-status .mu-eq {
+  height: 8px;
+}
+
+.rmu-status .mu-eq i {
+  width: 2px;
+  animation-play-state: running;
+}
+
+.rh-music.is-paused .rmu-status {
+  color: var(--t-grey);
+}
+
+.rh-music.is-paused .mu-eq i {
+  animation-play-state: paused;
+}
+
+.rmu-title {
+  overflow: hidden;
+  font-family: var(--t-display);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rmu-progress {
+  position: absolute;
+  left: 49px;
+  right: 10px;
+  bottom: 4px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rmu-progress i {
+  display: block;
+  height: 100%;
+  background: var(--t-acid);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.rh-music.is-new {
+  animation: ui-from-right 0.5s var(--ui-spring);
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+  .rh-music {
+    top: 10px;
+    right: 10px;
+    width: 170px;
+  }
+
+  .rmu-cover {
+    flex-basis: 30px;
+    width: 30px;
+    height: 30px;
+  }
+
+  .rmu-progress {
+    left: 41px;
+  }
+}
+
+/* Touch: left of the pause button, art + eq only. */
+.runner-hud.is-touch .rh-music {
+  top: max(10px, env(safe-area-inset-top));
+  right: calc(max(10px, env(safe-area-inset-right)) + 60px);
+  width: 138px;
+  padding: 4px 8px 6px 4px;
+}
+
+.runner-hud.is-touch .rmu-title {
+  font-size: 12px;
+}
+
+/* ── Orders lists (briefing / menu / game over) ────────────────────── */
+.ord-list {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+}
+
+.ord-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ord-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  column-gap: 9px;
+  row-gap: 4px;
+  padding: 6px 10px 7px;
+  background: var(--t-paper);
+  color: var(--t-ink);
+  border-left: 5px solid var(--t-cobalt);
+  clip-path: var(--t-notch-sm);
+}
+
+.ord-row b {
+  font-family: var(--t-display);
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ord-check {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--t-ink);
+  transform: rotate(45deg) scale(0.8);
+}
+
+.ord-num {
+  grid-column: 3;
+  grid-row: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ord-reward {
+  grid-column: 2 / 4;
+  grid-row: 3;
+  color: var(--t-grey);
+}
+
+.ord-bar {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  height: 4px;
+  background: rgba(12, 14, 19, 0.15);
+}
+
+.ord-bar i {
+  display: block;
+  height: 100%;
+  background: var(--t-cobalt);
+  transform-origin: left;
+}
+
+.ord-row.is-done {
+  background: var(--t-acid);
+  border-left-color: var(--t-ink);
+}
+
+.ord-row.is-done .ord-check {
+  background: var(--t-ink);
+}
+
+.ord-row.is-done .ord-bar i {
+  background: var(--t-ink);
+}
+
+/* Briefing under the countdown digit. */
+.countdown-orders {
+  width: min(420px, 80vw);
+  margin-top: 10px;
+  text-align: left;
+}
+
+.countdown-orders .ord-list {
+  margin: 0;
+}
+
+.countdown-orders .ord-row {
+  animation: ui-rise 0.4s var(--ui-out) backwards;
+}
+
+.countdown-orders .ord-row:nth-child(3) { animation-delay: 0.1s; }
+.countdown-orders .ord-row:nth-child(4) { animation-delay: 0.2s; }
+
+.countdown > b.is-count {
+  animation: ui-count-again 0.5s var(--ui-spring);
+}
+
+@keyframes ui-count-again {
+  from { opacity: 0; transform: scale(1.8); filter: blur(4px); }
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+  .ord-row {
+    padding: 4px 8px 5px;
+  }
+
+  .ord-row b {
+    font-size: 14px;
+  }
+
+  .ord-reward {
+    display: none;
+  }
+
+  .countdown > b {
+    font-size: clamp(70px, 14vw, 120px);
+  }
+
+  .rh-mission {
+    top: 18%;
+    min-width: min(320px, 80vw);
+    padding: 6px 16px 8px;
+  }
+
+  .rm-title {
+    font-size: 26px;
+  }
+
+  .rm-text {
+    font-size: 14px;
+  }
 }

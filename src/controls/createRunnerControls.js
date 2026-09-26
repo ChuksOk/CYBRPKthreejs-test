@@ -457,6 +457,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   const _crashOffset = new THREE.Vector3(-5.2, 1.9, 3.4);
   // Crash cinematic (Sky Run car destroyed): pushes in on the wreck.
   let crashCam = null;
+  let shakeEnabled = true;
 
   function applyCamera(delta) {
     const bobActive = state.grounded && state.slideTime <= 0 ? 1 : 0;
@@ -666,12 +667,29 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
    *   (x right, y up): kicks the view away from the event, then recovers.
    */
   function shake(strength, duration = 0.35, direction = null) {
+    if (!shakeEnabled) {
+      return;
+    }
     if (direction) {
       state.recoilYaw -= direction.x * strength * 0.9;
       state.recoilPitch += direction.y * strength * 0.9;
     }
     state.shakeStrength = Math.max(strength, state.shakeTime > 0 ? state.shakeStrength : 0);
     state.shakeTime = Math.max(state.shakeTime, duration);
+  }
+
+  /**
+   * Game over: block new shakes (explosions, drones keep going behind the
+   * results screen). `clear` also stops the one in progress.
+   */
+  function setShakeEnabled(enabled, { clear = true } = {}) {
+    shakeEnabled = enabled;
+    if (!enabled && clear) {
+      state.shakeTime = 0;
+      state.shakeStrength = 0;
+      state.recoilPitch = 0;
+      state.recoilYaw = 0;
+    }
   }
 
   /** Floating-origin wrap: move the player without any visual change. */
@@ -738,6 +756,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     selectWeapon: (index) => emit("weapon", index),
     addRecoil,
     shake,
+    setShakeEnabled,
     shiftX,
     setFlight,
     isFlying: () => state.flying,

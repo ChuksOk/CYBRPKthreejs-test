@@ -8,7 +8,8 @@ import { SPECIALS } from "../../weapon/createSpecials.js";
 import { GAME_TITLE_LINES } from "../../app/credits.js";
 import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
-import { bindMusicControls, createNowPlayingToast, renderMiniPlayer, renderMusicScreen } from "./musicPlayerUi.js";
+import { bindMusicControls, createNowPlayingToast, eqBars, renderMiniPlayer, renderMusicScreen } from "./musicPlayerUi.js";
+import { trackLabel } from "../../audio/musicCatalog.js";
 
 const ARROW_COUNT = 8;
 const MAG_TICKS = 32;
@@ -96,6 +97,33 @@ function stagger(root, selector) {
   root.querySelectorAll(selector).forEach((node, index) => {
     node.style.setProperty("--i", String(Math.min(index, 14)));
   });
+}
+
+/**
+ * Mission list for the briefing / menu / game-over tickets.
+ * @param {Array<{text:string,value:number,target:number,done:boolean,xp:number,shards:number}>} list
+ */
+function renderOrders(list, { title = "TODAY'S ORDERS", note = "" } = {}) {
+  if (!list?.length) {
+    return "";
+  }
+  const rows = list
+    .map((m) => {
+      const value = Math.min(m.target, Math.floor(m.value ?? 0));
+      const frac = m.target > 0 ? value / m.target : 0;
+      return `<div class="ord-row${m.done ? " is-done" : ""}">
+        <i class="ord-check" aria-hidden="true"></i>
+        <b>${m.text}</b>
+        <span class="t-meta ord-num">${m.done ? "COMPLETE" : `${value} / ${m.target}`}</span>
+        <span class="t-meta ord-reward">+${m.xp} XP · +${m.shards} ◆</span>
+        <span class="ord-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></span>
+      </div>`;
+    })
+    .join("");
+  return `<div class="ord-list">
+    <div class="ord-head"><span class="t-meta">${title}</span>${note ? `<span class="t-meta">${note}</span>` : ""}</div>
+    ${rows}
+  </div>`;
 }
 
 /**
@@ -261,6 +289,144 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     }
   }
 
+  // ── Orders: live mission tracker (left, under the score ticket) ──────
+  const orders = el("div", "rh-card rh-orders", root, `
+    <div class="o-head"><span class="t-meta">ORDERS //</span><b class="o-count">0/3</b></div>
+    <div class="o-rows"></div>`);
+  const orderRows = orders.querySelector(".o-rows");
+  const orderCount = orders.querySelector(".o-count");
+  const orderState = new Map();
+  // Sits right under the score ticket (touch: under the compact vitals).
+  const orderAnchor = isTouch ? vitals : ticket;
+  const placeOrders = () => {
+    orders.style.top = `${orderAnchor.offsetTop + orderAnchor.offsetHeight + 10}px`;
+  };
+  new ResizeObserver(placeOrders).observe(orderAnchor);
+  window.addEventListener("resize", placeOrders);
+
+  /**
+   * @param {Array<{id:string,text:string,value:number,target:number,done:boolean}>|null} list
+   *   Live mission progress; rows tick / flash as values rise.
+   */
+  function setMissions(list) {
+    orders.classList.toggle("has-missions", Boolean(list?.length));
+    if (!list?.length) {
+      return;
+    }
+    const ids = list.map((m) => m.id).join(",");
+    if (orders.dataset.ids !== ids) {
+      orders.dataset.ids = ids;
+      orderState.clear();
+      orderRows.innerHTML = list
+        .map((m) => `<div class="o-row" data-id="${m.id}">
+          <i class="o-check" aria-hidden="true"></i>
+          <span class="o-text">${m.text}</span>
+          <b class="o-num"></b>
+          <span class="o-bar"><i></i></span>
+        </div>`)
+        .join("");
+    }
+    let done = 0;
+    let focus = null;
+    let focusFrac = -1;
+    for (const m of list) {
+      const row = orderRows.querySelector(`[data-id="${m.id}"]`);
+      if (!row) {
+        continue;
+      }
+      const value = Math.min(m.target, Math.floor(m.value));
+      const frac = m.target > 0 ? value / m.target : 0;
+      const prev = orderState.get(m.id);
+      if (!prev || prev.value !== value || prev.done !== m.done) {
+        row.querySelector(".o-bar i").style.transform = `scaleX(${frac.toFixed(3)})`;
+        row.querySelector(".o-num").textContent = m.done ? "DONE" : `${value}/${m.target}`;
+        row.classList.toggle("is-done", m.done);
+        row.classList.toggle("is-near", !m.done && frac >= 0.75);
+        // Progress ticks flash the row; the first sync is silent.
+        if (prev && value > prev.value && !m.done) {
+          bump(row, "is-tick");
+        }
+        if (prev && m.done && !prev.done) {
+          bump(row, "is-complete");
+        }
+        orderState.set(m.id, { value, done: m.done });
+      }
+      if (m.done) {
+        done += 1;
+      } else if (frac > focusFrac) {
+        focus = row;
+        focusFrac = frac;
+      }
+    }
+    for (const row of orderRows.children) {
+      row.classList.toggle("is-focus", row === focus);
+    }
+    orderCount.textContent = `${done}/${list.length}`;
+    orders.classList.toggle("is-all-done", done === list.length);
+  }
+
+  // Mission complete: big centre stamp (queued if several land at once).
+  const missionStamp = el("div", "rh-mission", root, `
+    <span class="rm-label t-meta">ORDER FILLED</span>
+    <b class="rm-title">MISSION COMPLETE</b>
+    <span class="rm-text"></span>
+    <span class="rm-reward t-meta"></span>`);
+  const stampQueue = [];
+  let stampTimer = 0;
+  function showNextStamp() {
+    const m = stampQueue.shift();
+    if (!m) {
+      missionStamp.classList.remove("is-on");
+      return;
+    }
+    missionStamp.querySelector(".rm-text").textContent = m.text;
+    missionStamp.querySelector(".rm-reward").textContent = `+${m.xp} XP · +${m.shards} ◆ AT RUN END`;
+    bump(missionStamp, "is-on");
+    stampTimer = setTimeout(showNextStamp, 2600);
+  }
+  function missionComplete(mission) {
+    stampQueue.push(mission);
+    if (!missionStamp.classList.contains("is-on")) {
+      clearTimeout(stampTimer);
+      showNextStamp();
+    }
+  }
+
+  // ── Mini music player (top-right): album art + title + progress ─────
+  const miniMusic = music
+    ? el("div", "rh-music", root, `
+      <img class="rmu-cover" alt="" />
+      <span class="rmu-text"><span class="t-meta rmu-status">${eqBars(3)}<span class="rmu-state">NOW PLAYING</span></span><b class="rmu-title"></b></span>
+      <span class="rmu-progress"><i></i></span>`)
+    : null;
+  const miniCover = miniMusic?.querySelector(".rmu-cover");
+  const miniTitle = miniMusic?.querySelector(".rmu-title");
+  const miniState = miniMusic?.querySelector(".rmu-state");
+  const miniProgress = miniMusic?.querySelector(".rmu-progress i");
+  function syncMiniMusic(state = music.getState()) {
+    const { track, playing, settings } = state;
+    const show = settings.source === "soundtrack" && Boolean(track);
+    miniMusic.classList.toggle("is-visible", show);
+    if (!show) {
+      return;
+    }
+    if (miniCover.getAttribute("src") !== track.cover.small) {
+      miniCover.setAttribute("src", track.cover.small);
+      bump(miniMusic, "is-new");
+    }
+    const label = trackLabel(track);
+    if (miniTitle.textContent !== label) {
+      miniTitle.textContent = label;
+      miniTitle.title = `${label} — ${track.artist}`;
+    }
+    miniState.textContent = playing ? "NOW PLAYING" : "PAUSED";
+    miniMusic.classList.toggle("is-paused", !playing);
+  }
+  if (miniMusic) {
+    music.on("state", syncMiniMusic);
+    syncMiniMusic();
+  }
+
   // Touch: pause button (top-right). Desktop pauses by releasing the mouse.
   const pauseButton = el("button", "rh-pause-btn", root, '<i></i><i></i><span class="t-meta">PAUSE</span>');
   pauseButton.type = "button";
@@ -392,6 +558,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             </div>
           </div>
           ${renderSpecialPicker(special)}
+          ${meta?.missions ? renderOrders(meta.missions, { title: "ORDERS // COMPLETE FOR XP + ◆", note: `RANK ${meta.rank}` }) : ""}
           ${meta ? `<div class="tk-nav">
             <button data-action="armory"><b>ARMORY</b><span class="t-meta">${meta.shards} ◆</span></button>
             <button data-action="missions"><b>MISSIONS</b><span class="t-meta">RANK ${meta.rank}${meta.missionsReady ? " · !" : ""}</span></button>
@@ -563,7 +730,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     return { open, close, show, isOpen: () => !el.hidden };
   })();
 
-  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null }) {
+  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null, missions = null }) {
     currentPhoto = photo;
     screen.innerHTML = `
       <div class="ticket ticket--over">
@@ -583,7 +750,8 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
               <div><span class="t-meta">${newBest ? "NEW BEST ★" : "BEST"}</span><b>${pad(best, 6)}</b></div>
             </div>
           </div>
-          ${renderRewards(rewards, meta ?? { shards: 0, rank: 1 })}
+          ${renderRewards(missions && rewards ? { ...rewards, completed: [] } : rewards, meta ?? { shards: 0, rank: 1 })}
+          ${renderOrders(missions, { title: "ORDERS // THIS RUN", note: missions?.some((m) => m.done) ? "REWARDS BANKED ✓" : "KEEP PUSHING" })}
           ${build.length ? `<div class="go-build"><span class="t-meta">BUILD</span>${build.map((b) => `<em>${b}</em>`).join("")}</div>` : ""}
         </div>
         <div class="tk-stub">
@@ -673,15 +841,23 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       renderGameOver(data);
     } else if (mode === "countdown") {
       screen.classList.add("is-countdown");
-      screen.innerHTML = `
-        <div class="countdown">
-          <span class="t-meta">BOARDING IN</span>
-          <b>${data.text ?? ""}</b>
-          <span class="t-meta">//VX-TR9 — HOLD LANE</span>
-        </div>`;
+      const digit = changed ? null : screen.querySelector(".countdown > b");
+      if (digit) {
+        // Keep the briefing up; only the digit changes.
+        digit.textContent = data.text ?? "";
+        bump(digit, "is-count");
+      } else {
+        screen.innerHTML = `
+          <div class="countdown">
+            <span class="t-meta">BOARDING IN</span>
+            <b>${data.text ?? ""}</b>
+            <span class="t-meta">//VX-TR9 — HOLD LANE</span>
+            ${data.missions ? `<div class="countdown-orders">${renderOrders(data.missions, { title: "MISSION BRIEFING", note: "TRACKED ON YOUR HUD" })}</div>` : ""}
+          </div>`;
+      }
     }
     // Entrance choreography: staggered rise for list-like children.
-    stagger(screen, ".tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *, .mu-rows > *");
+    stagger(screen, ".ord-row, .tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *, .mu-rows > *");
     screen.classList.toggle("is-fresh", changed);
     if (mode === "gameover") {
       countUp(screen.querySelectorAll(".tk-stats b, .go-rewards b"));
@@ -811,6 +987,11 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
 
     if (!s) {
       return;
+    }
+
+    if (miniMusic?.classList.contains("is-visible")) {
+      const { time, duration } = music.getState();
+      miniProgress.style.transform = `scaleX(${duration > 0 ? Math.min(1, time / duration).toFixed(3) : 0})`;
     }
 
     if (s.clock && s.clock !== last.clock) {
@@ -1006,6 +1187,8 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     showBanner,
     popup,
     toast,
+    setMissions,
+    missionComplete,
     setBoss,
     setPhoto,
     setFlight,

@@ -465,6 +465,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.taken = {};
     game.build = [];
     controls.reset();
+    controls.setShakeEnabled(true);
     flight.reset();
     hud.setFlight(null);
     weapon?.setMuzzleProvider?.(null);
@@ -512,6 +513,19 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     track?.followGround(controls.state.x);
   }
 
+  /** Mission rows for the HUD / briefing / tickets (live values mid-run). */
+  function missionView() {
+    return meta.missions.map((m) => ({
+      id: m.id,
+      text: m.text,
+      target: m.target,
+      value: m.done ? m.target : m.live ?? m.progress ?? 0,
+      done: Boolean(m.done),
+      xp: m.xp,
+      shards: m.shards,
+    }));
+  }
+
   function metaSummary() {
     return {
       shards: meta.shards,
@@ -519,6 +533,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       daily: game.daily,
       dailyBest: progression.todayDailyBest(),
       missionsReady: meta.missions.some((m) => m.done),
+      missions: missionView(),
     };
   }
 
@@ -568,6 +583,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     setRunSeed(game.daily ? todayKey() : null);
     game.nextObstacleX = controls.state.x + FIRST_OBSTACLE_DISTANCE;
     progression.beginRun();
+    hud.setMissions(missionView());
     weather?.randomize();
     applySectorTheme(1);
     game.tutorial = !meta.tutorialDone && !game.daily ? 0 : -1;
@@ -579,7 +595,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.hideScreen();
     hud.setVisible(true);
     game.countdown = 3;
-    hud.showScreen("countdown", { text: "3" });
+    hud.showScreen("countdown", { text: "3", missions: missionView() });
     audio.play("countdown");
     setState("countdown");
   }
@@ -643,7 +659,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.deathCause = cause;
     game.deathDetail = detail;
     controls.setInputEnabled(false);
-    controls.shake(0.18, 0.6);
+    // One death jolt (~0.6 s real time under the death slow-mo), then no
+    // more shakes until the next run.
+    controls.shake(0.18, 0.6 * DEATH_SLOWMO);
+    controls.setShakeEnabled(false, { clear: false });
     hud.flashDamage(1);
     hud.setSlowmo(false);
     audio.play("crash", { volume: 0.6 });
@@ -700,6 +719,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
     runStats.distance = game.distance;
     runStats.cleanDistance = Math.max(runStats.cleanDistance, cleanRun);
+    // Orders as they stood this run (endRun swaps finished ones for new).
+    progression.trackRun(runStats);
+    const missions = missionView();
     const rewards = progression.endRun({
       ...runStats,
       score: game.score,
@@ -709,6 +731,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     });
     game.lastRewards = rewards;
     controls.exitPointerLock();
+    controls.setShakeEnabled(false);
     hud.setVisible(false);
     hud.setBoss(null);
     hud.setPrompt(null);
@@ -725,6 +748,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       daily: game.daily,
       build: game.build,
       photo: photoView(snapshots.pickRandom()),
+      missions,
     });
     setState("dead");
   }
@@ -1706,9 +1730,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       runStats.distance = game.distance;
       runStats.cleanDistance = Math.max(runStats.cleanDistance, cleanRun);
       for (const mission of progression.trackRun(runStats)) {
-        hud.toast("MISSION COMPLETE", mission.text);
-        audio.play("mission", { volume: 0.5 });
+        hud.missionComplete(mission);
+        audio.play("mission", { volume: 0.7 });
       }
+      hud.setMissions(missionView());
     }
 
     // Sector gate → upgrade picker.

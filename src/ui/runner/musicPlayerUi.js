@@ -27,7 +27,7 @@ const pad2 = (value) => String(value).padStart(2, "0");
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-function eqBars(count = 4) {
+export function eqBars(count = 4) {
   return `<span class="mu-eq" aria-hidden="true">${"<i></i>".repeat(count)}</span>`;
 }
 
