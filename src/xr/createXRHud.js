@@ -315,7 +315,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       }
       return;
     }
-    const size = await snapshotter.snapshot(root, hudSurface.canvas, { scale: 1.25 });
+    const size = await snapshotter.snapshot(root, hudSurface.canvas, { scale: 1.25, transparent: true });
     if (!active || screenState.shown) {
       return;
     }

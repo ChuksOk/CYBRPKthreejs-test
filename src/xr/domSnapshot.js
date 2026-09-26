@@ -339,7 +339,11 @@ export function createDomSnapshotter() {
    * Rasterize `element` (laid out at the live viewport size) into `canvas`.
    * @returns {Promise<{ width: number, height: number, scale: number }>}
    */
-  async function snapshot(element, canvas, { scale = 1.5, skip = null } = {}) {
+  /**
+   * @param {{ scale?: number, skip?: string, transparent?: boolean }} [options]
+   *   transparent: drop the page (html / body) background, for cropped cards.
+   */
+  async function snapshot(element, canvas, { scale = 1.5, skip = null, transparent = false } = {}) {
     if (!model) {
       await prepare();
     }
@@ -356,14 +360,18 @@ export function createDomSnapshotter() {
     wrapper.setAttribute("class", `xr-html ${htmlEl.className}`.trim());
     wrapper.setAttribute(
       "style",
-      `${htmlEl.getAttribute("style") ?? ""};position:relative;width:${width}px;height:${height}px;overflow:hidden;`,
+      `${htmlEl.getAttribute("style") ?? ""};position:relative;width:${width}px;height:${height}px;overflow:hidden;` +
+        (transparent ? "background:transparent !important;" : ""),
     );
     const style = document.createElementNS(XHTML_NS, "style");
     style.textContent = buildCss(model, usage.classes, usage.families) + SNAPSHOT_CSS;
     wrapper.appendChild(style);
     const body = document.createElementNS(XHTML_NS, "div");
     body.setAttribute("class", `xr-body ${bodyEl.className}`.trim());
-    body.setAttribute("style", `${bodyEl.getAttribute("style") ?? ""};margin:0;width:100%;height:100%;background:transparent;`);
+    body.setAttribute(
+      "style",
+      `${bodyEl.getAttribute("style") ?? ""};margin:0;width:100%;height:100%;` + (transparent ? "background:transparent !important;" : ""),
+    );
     if (isBody) {
       body.append(...clone.childNodes);
     } else {
