@@ -3068,7 +3068,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
   color: var(--t-acid);
 }
 
-/* ── Mini music player (top-right) ─────────────────────────────────── */
+/* ── Mini music player (desktop: left of the header's ABOUT button, placed in JS) ─────────────────────────────────── */
 .rh-music {
   position: absolute;
   top: 20px;
@@ -3132,7 +3132,7 @@ html.runner-playing.runner-touch body .audio-btn-root {
   font-family: var(--t-display);
   font-weight: 600;
   font-size: 14px;
-  line-height: 1.1;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

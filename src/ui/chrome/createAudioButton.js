@@ -73,6 +73,62 @@ export function createAudioButton({ urls = DEFAULT_URLS, url } = {}) {
     audioEl.volume = getAudioVolume();
   }
 
+  // iOS ignores `element.volume`, so the loops play through a Web Audio
+  // gain that follows the SFX volume (created on the first user gesture).
+  let context = null;
+  let gain = null;
+  const unlockEvents = ["touchend", "click", "keydown"];
+
+  function ensureGraph() {
+    if (context) {
+      return;
+    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+    try {
+      context = new AudioContextClass();
+      gain = context.createGain();
+      gain.gain.value = getAudioVolume();
+      gain.connect(context.destination);
+      for (const audioEl of audioEls) {
+        context.createMediaElementSource(audioEl).connect(gain);
+        audioEl.volume = 1;
+      }
+      // Some mobile browsers only unlock audio on touchend / click.
+      for (const eventName of unlockEvents) {
+        window.addEventListener(eventName, resumeContext, { passive: true });
+      }
+    } catch {
+      context = null;
+      gain = null;
+    }
+  }
+
+  function resumeContext() {
+    if (!context) {
+      return;
+    }
+    if (context.state === "running") {
+      for (const eventName of unlockEvents) {
+        window.removeEventListener(eventName, resumeContext);
+      }
+      return;
+    }
+    context.resume().catch(() => {});
+  }
+
+  function applyVolume(volume) {
+    if (gain) {
+      gain.gain.setTargetAtTime(volume, context.currentTime, 0.05);
+    } else {
+      for (const audioEl of audioEls) {
+        audioEl.volume = volume;
+      }
+    }
+  }
+
   function syncWaveAnimation(playing) {
     wave.classList.toggle("animated", playing);
   }
@@ -115,10 +171,11 @@ export function createAudioButton({ urls = DEFAULT_URLS, url } = {}) {
   }
 
   function play() {
-    const volume = getAudioVolume();
+    ensureGraph();
+    resumeContext();
+    applyVolume(getAudioVolume());
     return Promise.all(
       audioEls.map((audioEl) => {
-        audioEl.volume = volume;
         audioEl.loop = true;
         return audioEl.play();
       }),
@@ -166,7 +223,9 @@ export function createAudioButton({ urls = DEFAULT_URLS, url } = {}) {
     }
   });
 
-  const unsubscribe = subscribe(({ isMusicPlaying }) => {
+  const unsubscribe = subscribe(({ isMusicPlaying, audioVolume }) => {
+    // SFX slider: follow it live, not only on the next play().
+    applyVolume(audioVolume);
     syncWaveAnimation(isMusicPlaying);
 
     if (isMusicPlaying && !isAnyPlaying()) {
@@ -207,6 +266,10 @@ export function createAudioButton({ urls = DEFAULT_URLS, url } = {}) {
       audioEl.removeEventListener("pause", onPause);
       audioEl.removeEventListener("ended", onEnded);
     }
+    for (const eventName of unlockEvents) {
+      window.removeEventListener(eventName, resumeContext);
+    }
+    context?.close().catch(() => {});
     root.remove();
   }
 

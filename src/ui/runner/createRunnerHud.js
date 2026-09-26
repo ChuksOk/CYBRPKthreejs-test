@@ -422,9 +422,37 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     miniState.textContent = playing ? "NOW PLAYING" : "PAUSED";
     miniMusic.classList.toggle("is-paused", !playing);
   }
+  /**
+   * Desktop: sit in the header row, just left of the ABOUT button (layout
+   * offsets, so the header's slide-in transform doesn't matter). Touch hides
+   * the header during runs, so the CSS spot beside PAUSE is used there.
+   */
+  function placeMiniMusic() {
+    if (!miniMusic || isTouch || !miniMusic.classList.contains("is-visible")) {
+      return;
+    }
+    const actions = document.querySelector(".app-header-actions");
+    const header = actions?.offsetParent;
+    if (!actions || !header || !actions.offsetWidth) {
+      miniMusic.style.removeProperty("top");
+      miniMusic.style.removeProperty("right");
+      return;
+    }
+    const left = header.offsetLeft + actions.offsetLeft;
+    const top = header.offsetTop + actions.offsetTop + (actions.offsetHeight - miniMusic.offsetHeight) / 2;
+    miniMusic.style.right = `${Math.round(window.innerWidth - left + 12)}px`;
+    miniMusic.style.top = `${Math.round(Math.max(8, top))}px`;
+  }
   if (miniMusic) {
-    music.on("state", syncMiniMusic);
+    music.on("state", (state) => {
+      const wasVisible = miniMusic.classList.contains("is-visible");
+      syncMiniMusic(state);
+      if (!wasVisible) {
+        placeMiniMusic();
+      }
+    });
     syncMiniMusic();
+    window.addEventListener("resize", placeMiniMusic);
   }
 
   // Touch: pause button (top-right). Desktop pauses by releasing the mouse.
@@ -1173,6 +1201,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     // Cards slide in from their edges each time the HUD comes up.
     if (visible && !root.classList.contains("is-visible")) {
       bump(root, "is-entering");
+      placeMiniMusic();
     }
     root.classList.toggle("is-visible", visible);
   }
