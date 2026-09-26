@@ -65,6 +65,11 @@ const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
  * prefix and suffix text, and child elements like <em>).
  */
 function countUp(nodes, duration = 900, delay = 150) {
+  // VR: the flat page gets no animation frames while the headset presents;
+  // keep the final numbers for the snapshot.
+  if (document.documentElement.classList.contains("xr-presenting")) {
+    return;
+  }
   const items = [];
   for (const node of nodes) {
     const text = [...node.childNodes].find((child) => child.nodeType === 3 && /\d/.test(child.textContent));
@@ -713,7 +718,11 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       }
       show(currentPhoto);
       el.hidden = false;
-      requestAnimationFrame(() => el.classList.add("is-open"));
+      if (xrMode) {
+        el.classList.add("is-open"); // no page frames while the headset presents
+      } else {
+        requestAnimationFrame(() => el.classList.add("is-open"));
+      }
       // PC: real browser fullscreen for the photo.
       if (!isTouch && el.requestFullscreen && !document.fullscreenElement) {
         el.requestFullscreen().catch(() => {});

@@ -86,3 +86,14 @@ html.xr-presenting .np-toast {
 html.xr-presenting .runner-screen > * {
   zoom: var(--xr-fit, 1);
 }
+
+/* The flat page stops producing frames while the headset presents, so CSS
+   animations / transitions would stall at their first frame (screens stuck
+   at opacity 0, tickets mid-slide) and never match the snapshot. Show every
+   state change at its end state instead. */
+html.xr-presenting body *,
+html.xr-presenting body *::before,
+html.xr-presenting body *::after {
+  animation: none !important;
+  transition: none !important;
+}

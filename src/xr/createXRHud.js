@@ -9,7 +9,7 @@ const SCREEN_DISTANCE = 2.2;
 const SCREEN_EYE_Y = 1.5;
 /** Left out of the page snapshot: the scene, the in-run HUD, dev tooling. */
 const SCREEN_SKIP =
-  "canvas, video, iframe, .runner-hud, .xr-enter-button, .intro-overlay, .loader-overlay, #inspector, .inspector, [data-xr-skip]";
+  "canvas, video, iframe, .runner-hud, .xr-enter-button, .intro-container, .intro-overlay, #app-loader, .loader-overlay, #inspector, .inspector, [data-xr-skip]";
 /** Page elements that never count towards the panel crop. */
 const CROP_IGNORE = new Set(["CANVAS", "SCRIPT", "STYLE", "LINK", "NOSCRIPT"]);
 const CROP_MARGIN = 14;
@@ -86,28 +86,26 @@ function visibleUiRect(skip) {
 }
 
 /**
- * Wait for running (finite) CSS animations / transitions on the page UI:
- * the snapshot freezes animations at their final state, so rects measured
- * mid-entrance (a ticket sliding in, a label fading up) would not match it.
+ * Jump running (finite) CSS animations / transitions on the page UI to their
+ * end state. The snapshot shows the final state, so rects measured
+ * mid-entrance would not match it — and while the headset presents, the flat
+ * page stops producing frames, so its animations never advance on their own
+ * (a screen stuck at opacity 0 was left out of the crop entirely).
+ * `html.xr-presenting` also disables new ones (xrButton.css).
  */
-async function settleAnimations(skip, timeout = 900) {
-  const running = document.getAnimations().filter((animation) => {
+function finishAnimations(skip) {
+  for (const animation of document.getAnimations()) {
     const target = animation.effect?.target;
     const iterations = animation.effect?.getTiming?.().iterations;
-    return (
-      animation.playState === "running" &&
-      iterations !== Infinity &&
-      target instanceof Element &&
-      !target.closest(skip)
-    );
-  });
-  if (!running.length) {
-    return;
+    if (iterations === Infinity || !(target instanceof Element) || target.closest(skip)) {
+      continue;
+    }
+    try {
+      animation.finish();
+    } catch {
+      animation.cancel();
+    }
   }
-  await Promise.race([
-    Promise.allSettled(running.map((animation) => animation.finished)),
-    new Promise((resolve) => setTimeout(resolve, timeout)),
-  ]);
 }
 
 /**
@@ -289,8 +287,8 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
 
   // ── Snapshots ──────────────────────────────────────────────────────────
   async function refreshScreen(token) {
+    finishAnimations(SCREEN_SKIP);
     const fit = fitRunnerScreen(domHud?.screen);
-    await settleAnimations(SCREEN_SKIP);
     const rect = visibleUiRect(SCREEN_SKIP);
     if (!rect) {
       screenMesh.visible = false;

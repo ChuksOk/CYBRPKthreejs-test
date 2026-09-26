@@ -810,6 +810,17 @@
   white-space: nowrap;
 }
 
+/* VR: the Touch controller labels are too long for two columns — list them
+   in one column (it still fits beside the title block). */
+html.runner-xr .tk-keys {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+html.runner-xr .k-row {
+  padding: 2px 0;
+}
+
 .tk-foot {
   display: flex;
   flex-wrap: wrap;
