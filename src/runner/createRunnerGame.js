@@ -1087,19 +1087,6 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
   }
 
-  function onSkyCrash(hazard, damage) {
-    if (game.state !== "running") {
-      return;
-    }
-    const label = hazard.kind === "sign" ? "BILLBOARD" : "PYLON";
-    fx.impact?.(playerBox.getCenter(_crashPoint), new THREE.Vector3(-1, 0, 0), { hex: 0xffb300, count: 10 });
-    hud.showBanner(`HIT A ${label}`, 0.9);
-    if (game.invuln <= 0) {
-      damageCar(damage);
-    }
-  }
-  const _crashPoint = new THREE.Vector3();
-
   // ── Combat ─────────────────────────────────────────────────────────────
   function damagePlayer(amount, cause = "SHOT DOWN", detail = "") {
     if (game.state !== "running" || game.invuln > 0) {
@@ -1568,8 +1555,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       onHitAlly: (damage) => specials.damageAlly(damage),
     });
 
-    // Sky Run: car pose, sky hazards, wreck animation (runs after a crash too).
-    flight.update(delta, controls.state, playerBox, onSkyCrash, difficulty());
+    // Sky Run: car pose, shard lines, wreck animation (runs after a crash too).
+    flight.update(delta, controls.state);
 
     if (running) {
       const hit = flying ? null : (checkObstacleArrivals(), obstacles.update(playerBox, player.x));

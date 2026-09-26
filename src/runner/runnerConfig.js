@@ -37,10 +37,11 @@ export const RUNNER = {
 
   // Sky Run (flying car power-up): wider lanes, three altitude tiers above
   // the street floor, chase camera offsets.
-  // Measured against the city model: cables / signs cross the street at
-  // 7–13 m above the floor, and the left side (z ≤ 14) has clutter up to
-  // ~34 m; above 14 m the corridor z 15–36 is clear.
-  flightLaneZ: [17, 24, 31],
+  // Measured against the city + billboard models (rays along each tier,
+  // ±1.8 m): cables / signs cross the street at 7–13 m above the floor, a
+  // left-side sign reaches z 17 at the top tier, and the right facades start
+  // at z 36. Lanes keep the whole car (±1.2 m + roll) inside z 17.5–35.5.
+  flightLaneZ: [20, 26.5, 33],
   flightAltitudes: [16, 20.5, 25],
   chaseDistance: 9.6,
   chaseHeight: 2.9,

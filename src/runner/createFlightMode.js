@@ -1,8 +1,6 @@
 import * as THREE from "three/webgpu";
 import { RUNNER } from "./runnerConfig.js";
 import { createFlyingCarModel } from "./models/createFlyingCarModel.js";
-import { createPartKit } from "./models/modelKit.js";
-import { emissive, gunFinish, gunmetal, paint } from "./models/materials.js";
 import { rr, rrPick, rrRange } from "./rng.js";
 
 /**
@@ -14,62 +12,10 @@ import { rr, rrPick, rrRange } from "./rng.js";
  * - Hull points replace the runner's shield / health while flying; when the
  *   hull hits zero the car explodes, tumbles away as a wreck and the runner
  *   drops back to the street (createRunnerGame handles the hand-off).
- * - Sky hazards: neon billboards spanning an altitude tier (change height),
- *   antenna pylons spanning a lane (change lane) and lane-gates leaving one
- *   open cell. Shard lines are threaded through the air lanes.
+ * - The sky lanes are obstacle-free: drones are the only threat. Shard
+ *   lines are threaded through the air lanes.
  * - Tracers leave from the car's twin cannons (alternating).
  */
-
-const HAZARD_POOL = 14;
-const HAZARD_DAMAGE = { sign: 34, pylon: 30, gate: 38 };
-
-let hazardMaterials = null;
-function getHazardMaterials() {
-  if (!hazardMaterials) {
-    hazardMaterials = {
-      frame: gunFinish({ tint: 0x2a2d33, roughness: 0.55, metalness: 0.5, wear: 0.6 }),
-      panel: paint({ tint: 0x16131e, roughness: 0.4, wear: 0.3 }),
-      metal: gunmetal({ tint: 0x33363c }),
-      pink: emissive(0xff2f8a, 3.2),
-      cyan: emissive(0x2ff0ff, 3),
-      warn: emissive(0xffb300, 3.4, { blink: { rate: 1.6, duty: 0.5 } }),
-    };
-  }
-  return hazardMaterials;
-}
-
-/** Billboard spanning every lane at one altitude (tier height ±1.4 m). */
-function buildSign() {
-  const kit = createPartKit();
-  const width = 22;
-  kit.box("frame", [0.5, 2.8, width], { radius: 0.08 });
-  kit.box("panel", [0.56, 2.3, width - 0.8], { radius: 0.05 });
-  // Neon border + stripes.
-  for (const y of [-1.18, 1.18]) {
-    kit.box("pink", [0.6, 0.08, width - 0.6], { position: [0, y, 0], radius: 0.02, segments: 1 });
-  }
-  for (let i = 0; i < 7; i++) {
-    kit.box(i % 2 ? "cyan" : "pink", [0.6, 1.2, 0.25], { position: [0, 0, -width / 2 + 2 + i * 3], radius: 0.03, segments: 1 });
-  }
-  // Support cables up out of shot.
-  for (const z of [-width / 2 + 1, width / 2 - 1]) {
-    kit.box("metal", [0.08, 12, 0.08], { position: [0, 7.4, z], radius: 0.02, segments: 1 });
-  }
-  return { mesh: kit.build(getHazardMaterials(), { name: "sky-sign" }), half: new THREE.Vector3(0.3, 1.4, width / 2) };
-}
-
-/** Antenna pylon spanning every altitude in one lane. */
-function buildPylon() {
-  const kit = createPartKit();
-  const height = 18;
-  kit.box("frame", [0.8, height, 1.6], { position: [0, height / 2 - 1, 0], radius: 0.08 });
-  for (let i = 0; i < 6; i++) {
-    kit.box("metal", [0.9, 0.12, 1.9], { position: [0, i * 3, 0], radius: 0.03 });
-    kit.box("warn", [0.92, 0.2, 0.2], { position: [0, i * 3 + 1.5, 0.8], radius: 0.04, segments: 1 });
-  }
-  kit.box("cyan", [0.84, height - 2, 0.06], { position: [0, height / 2 - 1, -0.82], radius: 0.02, segments: 1 });
-  return { mesh: kit.build(getHazardMaterials(), { name: "sky-pylon" }), half: new THREE.Vector3(0.45, height / 2, 1) };
-}
 
 export function createFlightMode({ scene, fx, pickups, carModel = null }) {
   const group = new THREE.Group();
@@ -80,22 +26,12 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
   car.root.visible = false;
   group.add(car.root);
 
-  // ── Hazard pool ─────────────────────────────────────────────────────────
-  const hazards = [];
-  for (let i = 0; i < HAZARD_POOL; i++) {
-    const kind = i % 2 === 0 ? "sign" : "pylon";
-    const built = kind === "sign" ? buildSign() : buildPylon();
-    built.mesh.visible = false;
-    group.add(built.mesh);
-    hazards.push({ kind, mesh: built.mesh, half: built.half, active: false, hit: false, box: new THREE.Box3(), damageKind: kind });
-  }
-
   const state = {
     active: false,
     hull: RUNNER.flightHull,
     maxHull: RUNNER.flightHull,
     time: 0,
-    nextHazardX: 0,
+    nextShardX: 0,
     wreck: null,
     muzzleIndex: 0,
   };
@@ -103,84 +39,24 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
   // Smoothed car attitude (radians) so the visual never snaps.
   const attitude = { bank: 0, heading: 0, pitch: 0 };
 
-  function hazardY(tier) {
+  function tierY(tier) {
     return RUNNER.floorY + RUNNER.flightAltitudes[tier];
-  }
-
-  /** Pylons (18 m tall) span every flight tier: base 4 m under the lowest. */
-  function pylonBase() {
-    return hazardY(0) - 4;
-  }
-
-  function takeHazard(kind) {
-    return hazards.find((h) => !h.active && h.kind === kind) ?? null;
-  }
-
-  function placeHazard(hazard, x, y, z, damageKind = hazard.kind) {
-    hazard.active = true;
-    hazard.hit = false;
-    hazard.damageKind = damageKind;
-    hazard.mesh.visible = true;
-    hazard.mesh.position.set(x, y, z);
-    hazard.mesh.updateMatrixWorld(true);
-    // Pylon geometry is built from its base; its box is centred on height/2 - 1.
-    const cy = hazard.kind === "pylon" ? y + hazard.half.y - 1 : y;
-    hazard.box.min.set(x - hazard.half.x, cy - hazard.half.y, z - hazard.half.z);
-    hazard.box.max.set(x + hazard.half.x, cy + hazard.half.y, z + hazard.half.z);
   }
 
   /** Shards threaded through a cell (or a climbing arc between tiers). */
   function spawnShardLine(x, lane, tierFrom, tierTo = tierFrom) {
     for (let i = 0; i < 6; i++) {
       const t = i / 5;
-      const y = THREE.MathUtils.lerp(hazardY(tierFrom), hazardY(tierTo), THREE.MathUtils.smoothstep(t, 0, 1));
+      const y = THREE.MathUtils.lerp(tierY(tierFrom), tierY(tierTo), THREE.MathUtils.smoothstep(t, 0, 1));
       pickups.spawnAt("shard", x + i * 3, y, RUNNER.flightLaneZ[lane]);
     }
   }
 
-  /** One hazard pattern around x; difficulty 0..1 grows with flight time. */
-  function spawnPattern(x, difficulty) {
-    const lanes = [0, 1, 2];
-    const tiers = [0, 1, 2];
-    const roll = rr();
-    const gateChance = 0.15 + difficulty * 0.3;
-    if (roll < gateChance) {
-      // Gate: two signs + one pylon leave a single open cell.
-      const openTier = rrPick(tiers);
-      const openLane = rrPick(lanes);
-      for (const tier of tiers) {
-        if (tier !== openTier) {
-          const sign = takeHazard("sign");
-          if (sign) placeHazard(sign, x, hazardY(tier), RUNNER.flightLaneZ[1], "gate");
-        }
-      }
-      for (const lane of lanes) {
-        if (lane !== openLane && rr() < 0.5 + difficulty * 0.4) {
-          const pylon = takeHazard("pylon");
-          if (pylon) placeHazard(pylon, x + 1.5, pylonBase(), RUNNER.flightLaneZ[lane], "gate");
-          break;
-        }
-      }
-      spawnShardLine(x - 14, openLane, openTier);
-    } else if (roll < gateChance + 0.42) {
-      // Billboard across one tier: fly over or under it.
-      const tier = rrPick(tiers);
-      const sign = takeHazard("sign");
-      if (sign) placeHazard(sign, x, hazardY(tier), RUNNER.flightLaneZ[1]);
-      const freeTier = tier === 1 ? rrPick([0, 2]) : 1;
-      spawnShardLine(x - 12, rrPick(lanes), freeTier);
-    } else {
-      // Pylons: one or two lanes blocked.
-      const blocked = rr() < 0.35 + difficulty * 0.4 ? 2 : 1;
-      const order = [...lanes].sort(() => rr() - 0.5);
-      for (let i = 0; i < blocked; i++) {
-        const pylon = takeHazard("pylon");
-        if (pylon) placeHazard(pylon, x + i * 0.2, pylonBase(), RUNNER.flightLaneZ[order[i]]);
-      }
-      const free = order[blocked];
-      const from = rrPick(tiers);
-      spawnShardLine(x - 12, free, from, rrPick(tiers));
-    }
+  /** Shard lines ahead: a straight run in one cell or a climbing arc. */
+  function spawnShards(x) {
+    const from = rrPick([0, 1, 2]);
+    const to = rr() < 0.4 ? rrPick([0, 1, 2]) : from;
+    spawnShardLine(x, rrPick([0, 1, 2]), from, to);
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -190,7 +66,7 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
     state.maxHull = maxHull;
     state.hull = state.maxHull;
     state.time = 0;
-    state.nextHazardX = playerX + 70;
+    state.nextShardX = playerX + 70;
     state.wreck = null;
     car.root.visible = true;
     car.root.rotation.set(0, 0, 0);
@@ -225,7 +101,6 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
       spin: new THREE.Vector3(Math.random() * 3 + 2, Math.random() * 2, Math.random() * 4 + 3),
       time: 0,
     };
-    clearHazards();
   }
 
   /** Graceful end (run reset / menu): no explosion. */
@@ -233,24 +108,13 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
     state.active = false;
     state.wreck = null;
     car.root.visible = false;
-    clearHazards();
-  }
-
-  function clearHazards() {
-    for (const hazard of hazards) {
-      hazard.active = false;
-      hazard.mesh.visible = false;
-    }
   }
 
   /**
    * @param {number} delta
    * @param {object} controlsState  runner controls state
-   * @param {THREE.Box3} carBox     current car hull box
-   * @param {(hazard:object, damage:number) => void} onCrash
-   * @param {number} difficulty     0..1 overall run difficulty
    */
-  function update(delta, controlsState, carBox, onCrash, difficulty = 0) {
+  function update(delta, controlsState) {
     const s = controlsState;
 
     if (state.wreck) {
@@ -312,26 +176,10 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
     car.root.rotation.set(attitude.bank + roll, attitude.heading, attitude.pitch, "YZX");
     car.root.visible = true;
 
-    // Spawner: patterns ahead, faster as the flight goes on.
-    const flightDifficulty = Math.min(1, difficulty * 0.6 + state.time / 60);
-    while (state.nextHazardX < s.x + 120) {
-      spawnPattern(state.nextHazardX, flightDifficulty);
-      state.nextHazardX += THREE.MathUtils.lerp(38, 24, flightDifficulty) * rrRange(0.9, 1.25);
-    }
-
-    for (const hazard of hazards) {
-      if (!hazard.active) {
-        continue;
-      }
-      if (hazard.box.max.x < s.x - 12) {
-        hazard.active = false;
-        hazard.mesh.visible = false;
-        continue;
-      }
-      if (!hazard.hit && hazard.box.intersectsBox(carBox)) {
-        hazard.hit = true;
-        onCrash?.(hazard, HAZARD_DAMAGE[hazard.damageKind] ?? 30);
-      }
+    // Shard lines ahead.
+    while (state.nextShardX < s.x + 120) {
+      spawnShards(state.nextShardX);
+      state.nextShardX += 30 * rrRange(0.9, 1.3);
     }
   }
 
@@ -348,25 +196,11 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
 
   function shiftX(dx) {
     car.root.position.x += dx;
-    state.nextHazardX += dx;
-    for (const hazard of hazards) {
-      hazard.mesh.position.x += dx;
-      hazard.box.min.x += dx;
-      hazard.box.max.x += dx;
-    }
+    state.nextShardX += dx;
   }
 
   function setWarmupVisible(visible, position) {
     car.root.visible = visible || state.active || Boolean(state.wreck);
-    for (const kind of ["sign", "pylon"]) {
-      const hazard = hazards.find((h) => h.kind === kind && !h.active);
-      if (hazard) {
-        hazard.mesh.visible = visible;
-        if (visible && position) {
-          hazard.mesh.position.copy(position);
-        }
-      }
-    }
     if (visible && position && !state.active) {
       car.root.position.copy(position);
     }
