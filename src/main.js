@@ -274,6 +274,7 @@ async function init(loaderOverlay) {
     devApp.xr = xrMode;
     devApp.camera = camera;
     devApp.renderer = renderer;
+    devApp.world = world;
   }
   attachDevPerf(devApp, performanceTools.perfApi);
 
