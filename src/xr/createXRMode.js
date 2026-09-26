@@ -297,13 +297,21 @@ export function createXRMode({
     }
 
     if (right) {
-      // Menus are the real DOM screens (snapshots): the laser clicks them.
-      if (!running) {
+      // Menus are the whole flat page (snapshots): the laser clicks it.
+      const menus = !running && state !== "dying";
+      hud.setMenuMode(menus);
+      if (menus) {
         hud.pointAt(aimRay(right));
       }
       const trigger = edge(right, BTN_TRIGGER);
-      if (trigger && !running && !hud.click()) {
-        runnerGame.xrAction("confirm");
+      if (trigger && menus) {
+        // Off the panel entirely: trigger still starts / resumes / restarts.
+        if (!hud.press() && !hud.isPointing()) {
+          runnerGame.xrAction("confirm");
+        }
+      }
+      if (!held(right, BTN_TRIGGER)) {
+        hud.release();
       }
       if (edge(right, BTN_SQUEEZE) && running) {
         controls.requestReload();
@@ -311,7 +319,7 @@ export function createXRMode({
       if (edge(right, BTN_LOWER)) {
         if (running) {
           controls.pushAction("jump");
-        } else if (!hud.click()) {
+        } else if (!hud.click() && !hud.isPointing()) {
           runnerGame.xrAction("confirm");
         }
       }

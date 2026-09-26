@@ -8,7 +8,7 @@ Primary code:
 |-------|------|
 | Boot decision, headset budgets, offscreen-render guard | `src/xr/xrSupport.js` |
 | Rig, controllers, input, recenter, haptics, session, ENTER VR button | `src/xr/createXRMode.js` |
-| In-headset HUD (canvas panels, damage shell) | `src/xr/createXRHud.js` |
+| In-headset HUD (snapshots of the flat UI, laser input, damage shell) | `src/xr/createXRHud.js`, `src/xr/domSnapshot.js` |
 | Renderer backend + XR flags | `src/bootstrap/createRenderer.js` |
 | Frame order in VR | `src/runtime/createRenderLoop.js` |
 | Camera pose override, `pushAction` | `src/controls/createRunnerControls.js` |
@@ -47,6 +47,7 @@ rig        position = (player.x, feetY + slideDip, player.z), yaw = run heading 
 - **No forced camera motion.** Head bob, shake, roll and FOV kick exist only on the flat-screen path. Recoil and impacts become haptics instead.
 - **Recenter** (thumbstick click, and automatically on session start) makes the current head pose "standing in the lane, facing +X". It also maps the head height to `RUNNER.eyeHeight`, so seated and standing players get the same view.
 - **Duck to slide:** dropping 0.3 m below the calibrated height triggers a slide, and the slide lasts for as long as the player stays down. A button slide lowers the view only by what the player isn't already ducking.
+- **Sky Run:** while flying, the rig rides the game's chase point (`chaseDistance` behind, `chaseHeight` above the car, on its smoothed `camY` / `camZ` follow path) instead of sitting inside the hull. The chase roll and the crash cinematic are flat-screen only. The rifle hides as it does on the flat screen, and shots still aim down the right controller ray.
 - **Floating-origin wrap:** `controls.shiftX` re-runs the pose override, so the rig jumps with the world in the same frame.
 
 ## 3. Render path while presenting
@@ -67,26 +68,39 @@ renderer.render(scene, xrCamera)             (no ground mirror, no post stack)
 
 | Input | Running | Menus |
 |-------|---------|-------|
-| Right trigger | Fire (aim = right controller ray, light aim assist) | Confirm / pick card |
+| Right trigger | Fire (aim = right controller ray, light aim assist) | Click what the laser points at (hold to drag sliders) |
 | Left trigger | Throw special from the left controller | — |
-| Either stick flick ← → | Change lane | Move upgrade highlight |
-| Stick flick ↑ / A | Jump | A = confirm |
-| Stick flick ↓ / B / physical duck | Slide | B = back / menu |
+| Either stick flick ← → | Change lane (Sky Run: strafe) | — |
+| Stick flick ↑ / A | Jump (Sky Run: climb) | A = click |
+| Stick flick ↓ / B / physical duck | Slide (Sky Run: dive) | B = back / menu |
+| Stick ↑↓ (held) | — | Scroll the list under the laser |
 | Right grip | Reload | — |
 | Left grip / X | Next / previous weapon | X = toggle Daily Run |
 | Y | Pause | Resume |
 | Stick click | Recenter | Recenter |
 
-Upgrade cards can also be picked by pointing the laser at them. The Armory, Missions and Records screens stay 2D-only. In VR they show "available outside VR".
+Aiming the trigger off the page panel starts / resumes / restarts, so the loop never needs precise pointing.
 
-## 5. HUD
+## 5. HUD: the flat UI, in the headset
 
-DOM overlays are invisible in a headset. `createRunnerGame` wraps the DOM HUD in a `Proxy` (`mirrorHud`), so every `showScreen`, `showBanner`, `toast`, `setPrompt`, `flashDamage`, `hitMarker`, … call is also forwarded to `createXRHud` while a session is active. No call site changed.
+DOM overlays are invisible in an immersive session. Instead of redrawing a VR-only UI, the headset shows **pictures of the real flat UI**. The design matches exactly and no feature is lost.
 
-- **Main panel** (1.8 × 1.1 m, 2.5 m ahead): menus, countdown, banners, toasts, tutorial prompts.
-- **Stats strip** (1.2 m wide, low and tilted toward the eyes): HP, shield, score, combo or boss HP, ammo, weapon, special charge.
-- **Damage:** a red back-face sphere around the head (both eyes, no FOV math).
-- Panels live on `VIEWMODEL_LAYER`, so the AO, mirror and height passes never see them. The whole rig is also in `world.collisionHideExtra` (the controller models load onto layer 0).
+**Rasterizer** (`domSnapshot.js`): clones a DOM subtree into an SVG `<foreignObject>` together with the page's own CSS. `html` / `body` / `:root` selectors are retargeted to wrapper divs, and fonts and images are inlined as data URLs. The SVG is decoded as an image and drawn to a `CanvasTexture`. Chromium (Quest Browser) renders foreignObject with full CSS: clip-path, gradients, custom properties and web fonts. Live state that isn't markup is baked into the clone: checkbox values, `<select>` choices, canvas pixels and scroll offsets. Entry animations are frozen at their final style.
+
+**Menus** (every state except running / dying): the *whole page* minus the 3D canvas is shown on a 2.9 m virtual screen. That covers the header, runner tickets, Armory, Missions, Records, soundtrack player, Settings (graphics, audio, Moebius) and About. A `MutationObserver` on `<body>` re-snapshots on change (at most every 150 ms). The laser drives the real page:
+
+- It hit-tests the pointed viewport point with `document.elementsFromPoint`.
+- It dispatches `pointermove` / `pointerdown` / `pointerup` + `click`, so idle and hover logic keeps working.
+- Range inputs drag while the trigger is held. `<select>` cycles its options, since native dropdowns can't open in a headset.
+- The stick scrolls the scrollable container under the laser.
+- The hovered control gets an acid outline (`.is-xr-hover`, only drawn in snapshots).
+
+**Runs:** the flat HUD root is snapshotted at 4 Hz and cut into per-card quads: score ticket, vitals, ammo, weapon chips, Sky Run hull, orders, boss bar, banner, prompt, toasts, mission stamp, music card. Each quad sits where its card sits on the flat screen, wrapped onto an arc around the head. The crosshair, target brackets, threat arrows and score pop-ups are screen-projected in the flat game, so VR leaves them out. The laser and haptics cover them.
+
+While in VR the runner HUD lists the Touch controller scheme (`hud.setXRMode`), and tutorial / Sky Run prompts use VR wording.
+
+- **Damage:** a red back-face sphere around the head (both eyes, no FOV math), plus haptics. `mirrorHud` forwards only `flashDamage` / `hitMarker`; everything else comes from the DOM itself.
+- Quads live on `VIEWMODEL_LAYER`, so the AO, mirror and height passes never see them. The whole rig is also in `world.collisionHideExtra` (the controller models load onto layer 0).
 
 ## 6. Testing without a headset
 
@@ -108,7 +122,8 @@ On a real Quest, open the dev server over HTTPS on the LAN (`npm run dev` prints
 | Constant | File | Meaning |
 |----------|------|---------|
 | `XR_OFFSET` | `createViewmodel.js` | Gun grip relative to the controller ray origin |
-| `STATS_POSITION`, `MAIN_POSITION` | `createXRHud.js` | Panel placement in player space |
+| `SCREEN_WIDTH`, `SCREEN_POSITION`, `HUD_ARC_WIDTH`, `HUD_DISTANCE` | `createXRHud.js` | Page panel / HUD card placement in player space |
+| `HUD_SNAPSHOT_INTERVAL`, `SCREEN_SNAPSHOT_INTERVAL` | `createXRHud.js` | Snapshot rates (main-thread cost) |
 | `DUCK_ENTER` / `DUCK_EXIT` | `createXRMode.js` | Physical duck thresholds (m) |
 | `STICK_ENGAGE` / `STICK_RELEASE` | `createXRMode.js` | Flick hysteresis |
 | `applyXRPerformanceDefaults` | `xrSupport.js` | Headset budgets |

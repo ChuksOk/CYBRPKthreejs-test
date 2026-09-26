@@ -140,10 +140,13 @@ export function createDomSnapshotter() {
   }
 
   /** Clone with live form / canvas / image state baked in. */
-  async function cloneForSnapshot(element) {
+  async function cloneForSnapshot(element, skip) {
     const clone = element.cloneNode(true);
-    const sources = element.querySelectorAll("input, textarea, select, canvas, img");
-    const targets = clone.querySelectorAll("input, textarea, select, canvas, img");
+    // Clone and source share structure, so equal filters keep indices aligned.
+    const keep = (node) => !skip || !node.closest(skip);
+    const pick = (root, selector) => Array.from(root.querySelectorAll(selector)).filter(keep);
+    const sources = pick(element, "input, textarea, select, canvas, img");
+    const targets = pick(clone, "input, textarea, select, canvas, img");
     const jobs = [];
     sources.forEach((source, index) => {
       const target = targets[index];
@@ -157,6 +160,10 @@ export function createDomSnapshotter() {
           target.removeAttribute("checked");
         }
         target.setAttribute("value", source.value);
+      } else if (source instanceof HTMLSelectElement) {
+        target.querySelectorAll("option").forEach((option, i) => {
+          option.toggleAttribute("selected", i === source.selectedIndex);
+        });
       } else if (source instanceof HTMLTextAreaElement) {
         target.textContent = source.value;
       } else if (source instanceof HTMLCanvasElement) {
@@ -187,8 +194,8 @@ export function createDomSnapshotter() {
     await Promise.all(jobs);
 
     // Scroll positions are live state, not markup: shift scrolled content.
-    const scrolledSources = [element, ...element.querySelectorAll("*")];
-    const scrolledTargets = [clone, ...clone.querySelectorAll("*")];
+    const scrolledSources = [element, ...pick(element, "*")];
+    const scrolledTargets = [clone, ...pick(clone, "*")];
     scrolledSources.forEach((source, index) => {
       const target = scrolledTargets[index];
       if (!target || (source.scrollTop === 0 && source.scrollLeft === 0)) {
@@ -199,6 +206,11 @@ export function createDomSnapshotter() {
         child.style.translate = `${-source.scrollLeft}px ${-source.scrollTop}px`;
       }
     });
+    if (skip) {
+      for (const node of clone.querySelectorAll(skip)) {
+        node.remove();
+      }
+    }
     return clone;
   }
 
@@ -206,13 +218,15 @@ export function createDomSnapshotter() {
    * Rasterize `element` (laid out at the live viewport size) into `canvas`.
    * @returns {Promise<{ width: number, height: number, scale: number }>}
    */
-  async function snapshot(element, canvas, { scale = 1.5 } = {}) {
+  async function snapshot(element, canvas, { scale = 1.5, skip = null } = {}) {
     if (!css) {
       await prepare();
     }
     const width = Math.max(1, Math.round(window.innerWidth));
     const height = Math.max(1, Math.round(window.innerHeight));
-    const clone = await cloneForSnapshot(element);
+    // document.body → its children go straight into the wrapper body div.
+    const isBody = element === document.body;
+    const clone = await cloneForSnapshot(element, skip);
 
     const htmlEl = document.documentElement;
     const bodyEl = document.body;
@@ -228,9 +242,16 @@ export function createDomSnapshotter() {
     const body = document.createElementNS(XHTML_NS, "div");
     body.setAttribute("class", `xr-body ${bodyEl.className}`.trim());
     body.setAttribute("style", `${bodyEl.getAttribute("style") ?? ""};margin:0;width:100%;height:100%;background:transparent;`);
-    body.appendChild(clone);
+    if (isBody) {
+      body.append(...clone.childNodes);
+    } else {
+      body.appendChild(clone);
+    }
     wrapper.appendChild(body);
 
+    for (const node of body.querySelectorAll("script, noscript")) {
+      node.remove();
+    }
     const markup = new XMLSerializer().serializeToString(wrapper);
     const svg =
       `<svg xmlns="http://www.w3.org/2000/svg" width="${width * scale}" height="${height * scale}" viewBox="0 0 ${width} ${height}">` +

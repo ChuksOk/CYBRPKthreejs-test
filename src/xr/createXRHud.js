@@ -29,16 +29,22 @@ const HUD_CARDS = [
 const HUD_ARC_WIDTH = 2.3;
 const HUD_DISTANCE = 1.75;
 const HUD_EYE_DROP = 0.08;
-/** Menu tickets: one CSS px in metres, and where the panel floats. */
-const SCREEN_METRES_PER_PX = 0.0021;
-const SCREEN_POSITION = new THREE.Vector3(0, 1.5, -2.3);
-const SCREEN_MARGIN = 18;
+/**
+ * Menus: the *whole* flat page (header, runner ticket screens, settings,
+ * about, soundtrack player …) minus the 3D canvas, on a virtual screen this
+ * wide, floating ahead of the player.
+ */
+const SCREEN_WIDTH = 2.9;
+const SCREEN_POSITION = new THREE.Vector3(0, 1.55, -2.35);
+/** Left out of the page snapshot (the scene itself, dev tooling). */
+const SCREEN_SKIP = "canvas, video, iframe, .xr-enter-button, #inspector, .inspector, [data-xr-skip]";
 
 const HUD_SNAPSHOT_INTERVAL = 0.25; // s — the ticket's numbers tick at 4 Hz
-const SCREEN_SNAPSHOT_DEBOUNCE = 0.06;
+const SCREEN_SNAPSHOT_INTERVAL = 0.15;
 const SNAPSHOT_SCALE = 1.5;
 
-const CLICKABLE = "button, a, input, label, select, [data-action], [data-special], [role='button']";
+const CLICKABLE =
+  "button, a[href], input, label, select, summary, [data-action], [data-special], [role='button'], [role='tab'], [role='switch'], [onclick], [tabindex]:not([tabindex='-1'])";
 
 function createCanvasTexture() {
   const canvas = document.createElement("canvas");
@@ -81,33 +87,6 @@ function isShown(element) {
   return rect.width > 1 && rect.height > 1;
 }
 
-/** Union of the visible children's rects (the ticket, not the dim backdrop). */
-function contentRect(screen) {
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-  for (const child of screen.children) {
-    if (!isShown(child)) {
-      continue;
-    }
-    const rect = child.getBoundingClientRect();
-    left = Math.min(left, rect.left);
-    top = Math.min(top, rect.top);
-    right = Math.max(right, rect.right);
-    bottom = Math.max(bottom, rect.bottom);
-  }
-  if (!Number.isFinite(left)) {
-    return null;
-  }
-  return {
-    left: Math.max(0, left - SCREEN_MARGIN),
-    top: Math.max(0, top - SCREEN_MARGIN),
-    right: Math.min(window.innerWidth, right + SCREEN_MARGIN),
-    bottom: Math.min(window.innerHeight, bottom + SCREEN_MARGIN),
-  };
-}
-
 /** Crop a snapshot (flipY texture) to a CSS-px rect of the viewport. */
 function cropTexture(texture, rect, viewportWidth, viewportHeight) {
   texture.repeat.set((rect.right - rect.left) / viewportWidth, (rect.bottom - rect.top) / viewportHeight);
@@ -116,13 +95,15 @@ function cropTexture(texture, rect, viewportWidth, viewportHeight) {
 
 /**
  * VR HUD made of *pictures of the flat UI* (see domSnapshot.js), so the
- * headset matches the ticket / label design exactly:
+ * headset matches the flat game exactly and keeps all of its functionality:
  *
- * - Menu screens (start ticket, pause, game over, upgrades, armory, missions,
- *   records, soundtrack, countdown) are snapshotted whenever the DOM changes
- *   and shown on one floating panel. The laser clicks the real DOM elements
- *   under the pointer, so every flat-screen menu works in the headset.
- * - The running HUD is snapshotted at 4 Hz and cut into per-card quads.
+ * - Menus (start ticket, pause, game over, upgrades, armory, missions,
+ *   records, soundtrack, countdown — plus the header, Settings, About and the
+ *   music player): the whole page minus the 3D canvas is snapshotted when it
+ *   changes and shown on a virtual screen. The laser drives the real page:
+ *   clicks, slider drags, dropdowns (cycled) and scrolling.
+ * - Runs: the flat HUD is snapshotted at 4 Hz and cut into per-card quads,
+ *   laid out where they sit on the flat screen.
  *
  * DOM HUD calls still arrive through mirrorHud (createRunnerGame.js); only
  * flashDamage / hitMarker need VR-side work (red shell + haptics).
@@ -141,8 +122,8 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     dirty: true,
     busy: false,
     wait: 0,
-    rect: null, // CSS px crop of the viewport shown on the panel
-    viewport: { width: 1, height: 1 },
+    shown: false, // menus: the page panel is wanted
+    rect: null, // viewport rect (CSS px) the panel shows
   };
 
   // Pointer cursor on the panel.
@@ -201,12 +182,11 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     screenObserver.disconnect();
     hudObserver.disconnect();
     if (active) {
-      if (domHud?.screen) {
-        screenObserver.observe(domHud.screen, observerOptions);
-      }
+      screenObserver.observe(document.body, observerOptions);
       if (domHud?.root) {
         hudObserver.observe(domHud.root, observerOptions);
       }
+      dragging = null;
       screenState.dirty = true;
       hudState.dirty = true;
       // Styles can change between sessions (settings, Moebius, music CSS).
@@ -222,24 +202,40 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
 
   // ── Snapshots ──────────────────────────────────────────────────────────
   async function refreshScreen() {
-    const screen = domHud?.screen;
-    const mode = screen?.dataset.mode;
-    const rect = mode ? contentRect(screen) : null;
-    if (!screen || !mode || !rect) {
+    if (!screenState.shown) {
       screenMesh.visible = false;
-      screenState.rect = null;
       return;
     }
-    const size = await snapshotter.snapshot(screen, screenSurface.canvas, { scale: SNAPSHOT_SCALE });
-    if (!active) {
+    const size = await snapshotter.snapshot(document.body, screenSurface.canvas, {
+      scale: SNAPSHOT_SCALE,
+      skip: SCREEN_SKIP,
+    });
+    if (!active || !screenState.shown) {
       return;
     }
-    screenState.rect = rect;
-    screenState.viewport = size;
-    cropTexture(screenSurface.texture, rect, size.width, size.height);
+    screenState.rect = { left: 0, top: 0, right: size.width, bottom: size.height };
     screenSurface.texture.needsUpdate = true;
-    screenMesh.scale.set((rect.right - rect.left) * SCREEN_METRES_PER_PX, (rect.bottom - rect.top) * SCREEN_METRES_PER_PX, 1);
+    screenMesh.scale.set(SCREEN_WIDTH, (SCREEN_WIDTH * size.height) / size.width, 1);
     screenMesh.visible = true;
+  }
+
+  /** Menus show the full page panel; runs show the HUD cards. */
+  function setMenuMode(value) {
+    const shown = Boolean(value);
+    if (shown === screenState.shown) {
+      return;
+    }
+    screenState.shown = shown;
+    screenState.dirty = true;
+    screenState.wait = 0;
+    hudState.dirty = true;
+    if (!shown) {
+      screenMesh.visible = false;
+      pointer = null;
+      cursor.visible = false;
+      setHover(null);
+      dragging = null;
+    }
   }
 
   const _placement = new THREE.Vector3();
@@ -259,7 +255,10 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
 
   async function refreshHud() {
     const root = domHud?.root;
-    if (!root) {
+    if (!root || screenState.shown) {
+      for (const card of cards) {
+        card.mesh.visible = false;
+      }
       return;
     }
     // Rects are read before the snapshot so crops and layout agree.
@@ -278,7 +277,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       return;
     }
     const size = await snapshotter.snapshot(root, hudSurface.canvas, { scale: 1.25 });
-    if (!active) {
+    if (!active || screenState.shown) {
       return;
     }
     hudSurface.texture.needsUpdate = true;
@@ -309,10 +308,11 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       });
   }
 
-  // ── Laser pointer on the menu panel ────────────────────────────────────
+  // ── Laser pointer on the page panel ────────────────────────────────────
   const _hits = [];
   let hover = null;
   let pointer = null; // { x, y } in CSS px of the live viewport
+  let dragging = null; // range input being dragged with the trigger held
 
   function setHover(element) {
     if (hover === element) {
@@ -323,21 +323,45 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     hover?.classList.add("is-xr-hover");
   }
 
-  /** DOM element under a viewport point, restricted to the menu screen. */
+  /** Topmost page element under a viewport point (never the 3D canvas). */
   function elementAt(x, y) {
-    const screen = domHud?.screen;
-    if (!screen) {
-      return null;
-    }
     for (const element of document.elementsFromPoint(x, y)) {
-      if (screen.contains(element)) {
-        return element;
+      if (element === document.documentElement || element === document.body) {
+        continue;
       }
+      if (element.matches(SCREEN_SKIP) || element.closest(SCREEN_SKIP)) {
+        continue;
+      }
+      return element;
     }
     return null;
   }
 
-  /** @returns {boolean} true while the ray is on the menu panel */
+  /** Synthetic pointer events keep the flat UI's idle / hover logic alive. */
+  function dispatchPointer(type, target, x, y) {
+    target?.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: x,
+        clientY: y,
+        pointerId: 71,
+        pointerType: "mouse",
+        isPrimary: true,
+        button: type === "pointermove" ? -1 : 0,
+        buttons: type === "pointerdown" || type === "pointermove" && dragging ? 1 : 0,
+      }),
+    );
+  }
+
+  let lastMove = null;
+
+  function clickableAt(x, y) {
+    return elementAt(x, y)?.closest(CLICKABLE) ?? null;
+  }
+
+  /** @returns {boolean} true while the ray is on the page panel */
   function pointAt(raycaster) {
     pointer = null;
     cursor.visible = false;
@@ -353,33 +377,79 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       setHover(null);
       return false;
     }
-    // hit.uv spans the plane; map it back through the crop.
     const x = rect.left + hit.uv.x * (rect.right - rect.left);
     const y = rect.top + (1 - hit.uv.y) * (rect.bottom - rect.top);
     pointer = { x, y };
+    if (!lastMove || Math.abs(lastMove.x - x) + Math.abs(lastMove.y - y) > 2) {
+      lastMove = { x, y };
+      dispatchPointer("pointermove", elementAt(x, y) ?? document.body, x, y);
+    }
     cursor.position.set(hit.uv.x - 0.5, hit.uv.y - 0.5, 0.002);
     cursor.scale.set(1 / screenMesh.scale.x, 1 / screenMesh.scale.y, 1);
     cursor.visible = true;
-    setHover(elementAt(x, y)?.closest(CLICKABLE) ?? null);
+    if (dragging) {
+      setRangeFromPointer(dragging);
+    } else {
+      setHover(clickableAt(x, y));
+    }
     return true;
   }
 
-  /** Click whatever the laser points at. Returns true when something was clicked. */
-  function click() {
+  function setRangeFromPointer(input) {
+    const rect = input.getBoundingClientRect();
+    const t = Math.min(1, Math.max(0, (pointer.x - rect.left) / Math.max(1, rect.width)));
+    const min = Number(input.min || 0);
+    const max = Number(input.max || 100);
+    const step = Number(input.step) || 0;
+    let value = min + t * (max - min);
+    if (step > 0) {
+      value = Math.round((value - min) / step) * step + min;
+    }
+    if (String(value) !== input.value) {
+      input.value = String(value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  /**
+   * Trigger pressed: click what the laser points at (sliders start a drag,
+   * dropdowns cycle their options). Returns true when something was hit.
+   */
+  function press() {
     if (!pointer) {
       return false;
     }
-    const element = elementAt(pointer.x, pointer.y);
-    const target = element?.closest(CLICKABLE) ?? null;
+    const under = elementAt(pointer.x, pointer.y);
+    dispatchPointer("pointerdown", under ?? document.body, pointer.x, pointer.y);
+    dispatchPointer("pointerup", under ?? document.body, pointer.x, pointer.y);
+    const target = under?.closest(CLICKABLE) ?? null;
     if (!target) {
+      // Plain click on the backdrop (closes overlays like Settings).
+      under?.click();
       return false;
     }
-    if (target instanceof HTMLInputElement && (target.type === "range" || target.type === "text")) {
-      target.focus();
+    if (target instanceof HTMLInputElement && target.type === "range") {
+      dragging = target;
+      setRangeFromPointer(target);
+      return true;
+    }
+    if (target instanceof HTMLSelectElement) {
+      // Native dropdowns cannot open in a headset: step through the options.
+      target.selectedIndex = (target.selectedIndex + 1) % Math.max(1, target.options.length);
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
     target.click();
     return true;
+  }
+
+  /** Trigger released: finish a slider drag. */
+  function release() {
+    if (dragging) {
+      dragging.dispatchEvent(new Event("change", { bubbles: true }));
+      dragging = null;
+    }
   }
 
   /** Scroll the scrollable container under the laser (thumbstick in menus). */
@@ -413,7 +483,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     if (!active) {
       return;
     }
-    pump(screenState, SCREEN_SNAPSHOT_DEBOUNCE, refreshScreen, delta);
+    pump(screenState, SCREEN_SNAPSHOT_INTERVAL, refreshScreen, delta);
     pump(hudState, HUD_SNAPSHOT_INTERVAL, refreshHud, delta);
     if (damage > 0) {
       damage = Math.max(0, damage - delta * 2.2);
@@ -442,8 +512,16 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     damageMesh,
     screenMesh,
     setActive,
+    setMenuMode,
     pointAt,
-    click,
+    press,
+    release,
+    /** Click without drag semantics (A button). */
+    click: () => {
+      const hit = press();
+      release();
+      return hit;
+    },
     scroll,
     isPointing: () => pointer !== null,
     hasScreen: () => screenMesh.visible,
