@@ -409,6 +409,8 @@ export function createXRMode({
   }
 
   function render() {
+    // Draw to the XR layer even if an offscreen pass left a target bound.
+    renderer.setRenderTarget(null);
     renderer.render(scene, xrCamera);
     framesPresented += 1;
   }

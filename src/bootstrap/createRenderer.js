@@ -51,6 +51,12 @@ export async function createRenderer({ xr = false, xrWebGPU = false } = {}) {
     renderer.xr.setReferenceSpaceType("local-floor");
     // Fixed foveation: cheap on Quest, invisible at the lens edges.
     renderer.xr.setFoveation(1);
+    // r185: XRManager's frame callback passes `_getFrameBufferTarget()`
+    // straight to foveateBoundTexture, which is null whenever a render
+    // target is still bound at frame start — the throw kills every XR frame.
+    const foveateBoundTexture = renderer.xr.foveateBoundTexture.bind(renderer.xr);
+    renderer.xr.foveateBoundTexture = (renderTarget) =>
+      renderTarget ? foveateBoundTexture(renderTarget) : undefined;
   }
   renderer.setPixelRatio(getStaticPixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
