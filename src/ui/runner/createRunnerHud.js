@@ -5,7 +5,7 @@ import "@fontsource/jetbrains-mono/latin-700.css";
 import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
 import { SPECIALS } from "../../weapon/createSpecials.js";
-import { GAME_TITLE_LINES } from "../../app/credits.js";
+import { GAME_TITLE_LINES, STORY } from "../../app/credits.js";
 import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
 import { bindMusicControls, createNowPlayingToast, eqBars, renderMiniPlayer, renderMusicScreen } from "./musicPlayerUi.js";
@@ -157,7 +157,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
   // ── Score ticket (top-left) ──────────────────────────────────────────────
   const ticket = el("div", "rh-card rh-ticket", root);
   ticket.innerHTML = `
-    <div class="t-strip"><span>RUN PASS</span><span class="rh-sector">SECTOR 01</span><span class="rh-clock">00:00</span></div>
+    <div class="t-strip"><span>${STORY.player.toUpperCase()}</span><span class="rh-sector">SECTOR 01</span><span class="rh-clock">00:00</span></div>
     <div class="t-body">
       <span class="t-meta">SCORE:</span>
       <span class="t-big rh-score-value">000000</span>
@@ -167,7 +167,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
         <div class="t-combo"><span class="t-meta">COMBO</span><b class="rh-combo">×1.0</b></div>
       </div>
     </div>
-    <div class="t-stub">${barcode(11, 54, { height: 18 })}<span class="t-code">//VX-RN-<b class="rh-code">0000</b></span></div>`;
+    <div class="t-stub">${barcode(11, 54, { height: 18 })}<span class="t-code">//OE-${STORY.year}-<b class="rh-code">0000</b></span></div>`;
   const scoreValue = ticket.querySelector(".rh-score-value");
   const distValue = ticket.querySelector(".rh-dist");
   const speedValue = ticket.querySelector(".rh-speed");
@@ -180,7 +180,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
   // ── Vitals label (bottom-left) ─────────────────────────────────────────
   const vitals = el("div", "rh-card rh-vitals", root);
   vitals.innerHTML = `
-    <div class="v-head"><span class="t-meta">UNIT // VX-TR9</span><span class="t-meta">SET 2</span></div>
+    <div class="v-head"><span class="t-meta">${STORY.player.toUpperCase()} // SIM LINK</span><span class="t-meta">${STORY.year}</span></div>
     <div class="v-row">
       <span class="v-label">SHIELD</span>
       <div class="v-bar shield"><b class="v-trail"></b><i></i></div>
@@ -504,7 +504,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     '<div class="rb-head"><span class="t-meta">CARRIER // HOSTILE</span><span class="t-meta rb-state">ARMORED</span></div><div class="rb-bar"><i></i></div>');
   const bossFill = bossBar.querySelector(".rb-bar i");
   const bossState = bossBar.querySelector(".rb-state");
-  const prompt = el("div", "rh-prompt", root, '<span class="t-meta">TRAINING</span><b></b>');
+  const prompt = el("div", "rh-prompt", root, '<span class="t-meta">WARM-UP</span><b></b>');
   const promptText = prompt.querySelector("b");
   const slowmo = el("div", "rh-slowmo", root);
   // Speed lines: radial streaks that fade in near top speed (pure CSS layer).
@@ -573,15 +573,15 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       <div class="ticket ticket--start">
         <div class="tk-main">
           <div class="tk-top">
-            <span class="t-meta">PASS TIER</span>
-            <span class="t-meta">GROUP<br><b>A</b></span>
-            <span class="t-meta">CLEARANCE<br><b>DRONE CURFEW</b></span>
+            <span class="t-meta">PLAYER<br><b>${STORY.player.toUpperCase()}</b></span>
+            <span class="t-meta">YEAR<br><b>${STORY.year}</b></span>
+            <span class="t-meta">SIMULATION<br><b>${STORY.world.toUpperCase()}</b></span>
             <span class="tk-arrow">↗</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag"><span class="t-meta">SECTOR:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
+            <div class="tk-tag"><span class="t-meta">ON A BREAK, PLAYING:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
             <div class="tk-side">
-              <span class="tk-ghost">2077</span>
+              <span class="tk-ghost">${STORY.year}</span>
               <div class="tk-keys">${controlsHtml}</div>
             </div>
           </div>
@@ -595,16 +595,16 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             <button data-action="style" class="tk-style${style === "moebius" ? " is-on" : ""}" aria-pressed="${style === "moebius"}"><b>STYLE</b><span class="t-meta">${style === "moebius" ? "MOEBIUS ✎" : "NEON ◐"}</span></button>
           </div>` : ""}
           <div class="tk-foot">
-            <span class="t-meta">JUMP BARRIERS</span><span class="t-meta">SLIDE BEAMS</span><span class="t-meta">DODGE CARS</span><span class="t-meta">DROP DRONES</span>
+            <span class="t-meta">DODGE OBSTACLES</span><span class="t-meta">COLLECT ENERGY</span><span class="t-meta">DROP THE DRONES</span><span class="t-meta">DON'T GET CAUGHT</span>
           </div>
         </div>
         <div class="tk-stub">
-          <div class="tk-stub-head"><span class="t-meta">ONE RUN ONLY</span><span class="t-meta">2B</span></div>
+          <div class="tk-stub-head"><span class="t-meta">HOW FAR CAN SHE GET?</span><span class="t-meta">OE</span></div>
           <div class="tk-best"><span class="t-meta">${daily ? "DAILY BEST" : "BEST SCORE"}</span><b>${pad(daily ? meta.dailyBest : best, 6)}</b></div>
           ${meta ? `<button class="tk-daily${daily ? " is-on" : ""}" data-action="daily"><i></i><span><b>DAILY RUN</b><span class="t-meta">SAME SEED FOR EVERYONE TODAY</span></span></button>` : ""}
-          <button class="tk-button" data-action="start"><span>${daily ? "START DAILY" : "START RUN"}</span><span>→</span></button>
+          <button class="tk-button" data-action="start"><span>${daily ? "DAILY DIVE" : "DIVE IN"}</span><span>→</span></button>
           ${barcode(3, 70)}
-          <span class="t-code">/ / V X - R N 7 /</span>
+          <span class="t-code">/ / O L D - E A R T H /</span>
         </div>
       </div>`;
   }
@@ -612,7 +612,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
   function renderPause() {
     screen.innerHTML = `
       <div class="label label--pause">
-        <div class="lb-head"><span class="t-meta">SIGNAL HELD</span><span class="t-meta">⚠</span></div>
+        <div class="lb-head"><span class="t-meta">SIM ON HOLD</span><span class="t-meta">${STORY.year}</span></div>
         <div class="lb-title">PAUSED</div>
         <div class="lb-rule"><i></i><i></i><i></i></div>
         <button class="tk-button" data-action="resume"><span>RESUME</span><span>→</span></button>
@@ -760,6 +760,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
 
   function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null, missions = null }) {
     currentPhoto = photo;
+    const quip = STORY.quips[Math.floor(Math.random() * STORY.quips.length)];
     screen.innerHTML = `
       <div class="ticket ticket--over">
         <div class="tk-main">
@@ -770,7 +771,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             <span class="tk-arrow">↘</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag tk-tag--pink"><span class="t-meta">RESULT:</span><span class="tk-title">SIGNAL<br>LOST</span></div>
+            <div class="tk-tag tk-tag--pink"><span class="t-meta">THE GAME CAUGHT ${STORY.player.toUpperCase()}:</span><span class="tk-title">CAUGHT<br>${pad(distance, 4)}M</span><span class="t-meta go-quip">${STORY.player.toUpperCase()}: “${quip}”</span></div>
             <div class="tk-stats">
               <div><span class="t-meta">SCORE</span><b>${pad(score, 6)}</b></div>
               <div><span class="t-meta">DISTANCE</span><b>${pad(distance, 4)}<em>M</em></b></div>
@@ -783,8 +784,8 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
           ${build.length ? `<div class="go-build"><span class="t-meta">BUILD</span>${build.map((b) => `<em>${b}</em>`).join("")}</div>` : ""}
         </div>
         <div class="tk-stub">
-          <div class="tk-stub-head"><span class="t-meta">RE-ENTRY</span><span class="t-meta">${newBest ? "★" : "N1"}</span></div>
-          <button class="tk-button" data-action="restart"><span>RUN AGAIN</span><span>↻</span></button>
+          <div class="tk-stub-head"><span class="t-meta">STILL ON BREAK</span><span class="t-meta">${newBest ? "★" : "N1"}</span></div>
+          <button class="tk-button" data-action="restart"><span>ONE MORE RUN</span><span>↻</span></button>
           <div class="go-photo" data-photo>${renderPhoto(photo)}</div>
           <div class="tk-row2">
             <button class="tk-button tk-button--ghost" data-action="share"><span>SHARE</span><span>⇪</span></button>
@@ -877,9 +878,9 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       } else {
         screen.innerHTML = `
           <div class="countdown">
-            <span class="t-meta">BOARDING IN</span>
+            <span class="t-meta">DIVING IN</span>
             <b>${data.text ?? ""}</b>
-            <span class="t-meta">//VX-TR9 — HOLD LANE</span>
+            <span class="t-meta">// ${STORY.player.toUpperCase()} — SYNCING TO ${STORY.world.toUpperCase()}</span>
             ${data.missions ? `<div class="countdown-orders">${renderOrders(data.missions, { title: "MISSION BRIEFING", note: "TRACKED ON YOUR HUD" })}</div>` : ""}
           </div>`;
       }

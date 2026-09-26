@@ -31,6 +31,7 @@ import {
 import { createSpecials } from "../weapon/createSpecials.js";
 import { WEAPONS } from "../weapon/weaponTypes.js";
 import { RUNNER } from "./runnerConfig.js";
+import { STORY } from "../app/credits.js";
 import { createProgression } from "./progression.js";
 import { createRunMods, rollUpgradeChoices, UPGRADES } from "./upgrades.js";
 import { rr, rrDrone, rrPick, rrRange, rrShuffle, rrWeighted, setRunSeed, todayKey } from "./rng.js";
@@ -600,7 +601,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     setState("countdown");
   }
 
-  function beginRun(label = "RUN") {
+  function beginRun(label = `RUN, ${STORY.player.toUpperCase()}`) {
     hud.hideScreen();
     hud.showBanner(label, 1.1);
     audio.play("go");
@@ -672,7 +673,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
     // Short run with no photo yet: keep the fatal frame.
     if (!snapshots.count() && !snapshots.wantsCapture()) {
-      snapshots.request({ ...photoMoment(), label: "FINAL MOMENT" });
+      snapshots.request({ ...photoMoment(), label: "CAUGHT" });
     }
     // Hands let go of the gun; animated over DEATH_DURATION (real time).
     viewmodel?.setDeathProgress(0);
@@ -980,7 +981,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function finishTutorial() {
     game.tutorial = -1;
     hud.setPrompt(null);
-    hud.showBanner("TRAINING COMPLETE", 1.8);
+    hud.showBanner("WARMED UP — NOW RUN", 1.8);
     progression.setTutorialDone();
     game.nextObstacleX = controls.state.x + 40;
     game.droneTimer = 2;
@@ -1336,7 +1337,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   function spawnSectorWave() {
-    hud.showBanner(`SECTOR ${game.sector}`, 1.8);
+    hud.showBanner(`SECTOR ${game.sector} — THE GAME ADAPTS`, 1.8);
     applySectorTheme(game.sector);
     const waveSize = Math.min(3, 1 + Math.floor(difficulty() * 3));
     for (let i = 0; i < waveSize; i++) {
@@ -1350,7 +1351,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
     const boss = drones.spawn("carrier", player, { force: true });
     if (boss) {
-      hud.showBanner("CARRIER INBOUND", 2.2);
+      hud.showBanner("THE GAME SENDS A CARRIER", 2.2);
       audio.play("boss", { volume: 0.7 });
       if (isTouch) {
         vibrate([100, 60, 100]);

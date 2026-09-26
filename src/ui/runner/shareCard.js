@@ -1,4 +1,4 @@
-import { GAME_TITLE, GAME_TITLE_LINES, AUTHOR_NAME, AUTHOR_URL } from "../../app/credits.js";
+import { GAME_TITLE, GAME_TITLE_LINES, AUTHOR_NAME, AUTHOR_URL, STORY } from "../../app/credits.js";
 
 /**
  * Draws the game-over ticket as a 1080×1350 PNG (score, distance, build,
@@ -76,7 +76,7 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
 
   ctx.fillStyle = C.ink;
   ctx.font = mono(24);
-  ctx.fillText(daily ? "DAILY RUN" : "RUN PASS", 100, 120);
+  ctx.fillText(daily ? "DAILY RUN" : `${STORY.player.toUpperCase()} · ${STORY.year}`, 100, 120);
   ctx.fillText(new Date().toISOString().slice(0, 10), 420, 120);
   ctx.fillText(`RANK ${rank}`, 760, 120);
   ctx.font = display(80);
@@ -94,7 +94,7 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   ctx.font = display(170);
   ctx.fillText(String(score).padStart(6, "0"), 120, 400);
   ctx.font = mono(22);
-  ctx.fillText(cause.slice(0, 30), 128, 470);
+  ctx.fillText(`CAUGHT · ${cause}`.slice(0, 30), 128, 470);
 
   // Stat boxes.
   const stats = [
@@ -159,7 +159,7 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   ctx.setLineDash([]);
   ctx.fillStyle = C.ink;
   ctx.font = display(64);
-  ctx.fillText("CAN YOU BEAT IT?", 100, 1080);
+  ctx.fillText("HOW FAR CAN YOU GET?", 100, 1080);
   ctx.font = mono(22);
   ctx.fillText(`BY ${AUTHOR_NAME.toUpperCase()} · ${AUTHOR_URL.replace(/^https?:\/\//, "").replace(/\/$/, "").toUpperCase()}`, 100, 1120);
   barcode(ctx, 100, 1150, W - 200, 100, score % 97 + 5);
@@ -198,7 +198,7 @@ export function downloadBlob(blob, filename) {
 
 export async function shareRun(stats) {
   const blob = await drawShareCard(stats);
-  const text = `I scored ${stats.score} (${Math.floor(stats.distance)} m, ${stats.kills} drones) in ${GAME_TITLE}${stats.daily ? " — Daily Run" : ""}.`;
+  const text = `Made it ${Math.floor(stats.distance)} m across ${STORY.world} before ${GAME_TITLE} caught me — ${stats.score} pts, ${stats.kills} drones down${stats.daily ? " (Daily Run)" : ""}. How far can you get?`;
   return shareImage(blob, `low-gamma-redux-${stats.score}.png`, text);
 }
 

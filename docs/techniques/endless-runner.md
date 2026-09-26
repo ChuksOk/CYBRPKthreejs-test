@@ -2,6 +2,19 @@
 
 **Goal:** turn one hand-built alley into an infinite first-person run with drones to shoot, without re-authoring the city in Blender and without breaking the rain collision, wet ground, or post stack.
 
+**Story frame** (`STORY` in `src/app/credits.js`): in 2223, **Anaiis** takes a break and dives into LOW GAMMA, an immersive FPS runner set on **Old Earth**. She races through a stylized simulation, dodging obstacles and collecting energy, to see how far she can get before the game catches her. All player-facing copy speaks from inside that frame:
+
+| Mechanic | In the fiction |
+|----------|----------------|
+| Player | Anaiis (HUD strip, vitals "SIM LINK", start ticket PLAYER / YEAR / SIMULATION) |
+| City | The Old Earth simulation (countdown "SYNCING TO OLD EARTH") |
+| Shards (`◆`) | **Energy**: pickups, Armory currency, missions (internal ids stay `shards`) |
+| Drones / carriers | The game hunting her ("THE GAME SENDS A CARRIER", sectors "THE GAME ADAPTS") |
+| Death | **CAUGHT** at N m. The game-over ticket leads with distance plus a random Anaiis quip (`STORY.quips`) |
+| Retry / menu | "ONE MORE RUN" / "STILL ON BREAK", start button "DIVE IN", pause "SIM ON HOLD" |
+
+Keep new UI copy in this voice, and read names and years from `STORY` instead of hard-coding them.
+
 Primary code:
 
 | Piece | File |

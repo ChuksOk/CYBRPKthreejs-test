@@ -6,6 +6,7 @@ import {
   BASE_PROJECT_CREDIT,
   GAME_TAGLINE,
   GAME_TITLE,
+  STORY,
 } from "../../app/credits.js";
 
 const CLOSE_ICON = `
@@ -54,7 +55,7 @@ export function createAboutPanel({ state } = {}) {
       </button>
 
       <header class="ab-hero">
-        <span class="ab-kicker">About the game</span>
+        <span class="ab-kicker">${STORY.year} · A break on ${STORY.world}</span>
         <h2 class="ab-title" id="ab-title">${GAME_TITLE}</h2>
         <p class="ab-tagline">${GAME_TAGLINE}</p>
       </header>
@@ -62,14 +63,14 @@ export function createAboutPanel({ state } = {}) {
       <div class="ab-grid">
         <section class="ab-main">
           <p class="ab-lead">
-            ${GAME_TITLE} is a first-person endless runner and shooter set in a
-            neon cyberpunk city under drone curfew. Sprint the street, switch lanes,
-            vault barriers, slide under beams and shoot the drone fleet out of the sky.
+            ${STORY.premise} ${STORY.goal}
           </p>
           <p class="ab-text">
-            Every run builds on the last: pick upgrades at each sector gate, take down
-            carrier bosses, complete missions, climb 50 ranks and spend shards in the
-            Armory. The weather and the time of day change as you run.
+            You are ${STORY.player}. Sprint the neon streets of the simulation, switch
+            lanes, vault barriers, slide under beams and shoot down the drones the game
+            sends to catch you. Every run builds on the last: pick upgrades at each sector
+            gate, take down carrier bosses, complete missions, climb 50 ranks and spend
+            energy in the Armory. The weather and the time of day shift as the sim runs.
           </p>
 
           <dl class="ab-stats">

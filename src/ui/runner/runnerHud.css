@@ -3327,3 +3327,15 @@ html.runner-playing.runner-touch body .audio-btn-root {
     font-size: 14px;
   }
 }
+
+/* Anaiis's line on the game-over ticket. */
+.go-quip {
+  max-width: 17em;
+  margin-top: 10px;
+  padding: 4px 7px;
+  background: var(--t-ink);
+  color: var(--t-acid);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: none;
+}
