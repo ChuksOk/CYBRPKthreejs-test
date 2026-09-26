@@ -99,6 +99,8 @@ device.installRuntime({ forceInstall: true });
 // then: open /?xr, click ENTER VR, and drive device.controllers.right.updateButtonValue("trigger", 1) …
 ```
 
+IWER returns `null` for `XRWebGLLayer.framebuffer` (it draws to the default framebuffer). Real headsets return an opaque framebuffer, as the spec requires. three's WebGL backend uses the framebuffer as a `WeakMap` key, so under IWER every XR render throws. In the emulator, override the getter with a real offscreen framebuffer (RGBA8 + DEPTH24 renderbuffers at `drawingBufferWidth × drawingBufferHeight`). You can then `readPixels` it to inspect the headset frame.
+
 On a real Quest, open the dev server over HTTPS on the LAN (`npm run dev` prints the address; `@vitejs/plugin-basic-ssl` is already configured), accept the certificate, then press **ENTER VR** on the start ticket.
 
 ## Tuning knobs

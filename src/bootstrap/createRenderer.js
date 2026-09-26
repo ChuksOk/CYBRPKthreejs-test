@@ -53,7 +53,8 @@ export async function createRenderer({ xr = false, xrWebGPU = false } = {}) {
     renderer.xr.setFoveation(1);
     // r185: XRManager's frame callback passes `_getFrameBufferTarget()`
     // straight to foveateBoundTexture, which is null whenever a render
-    // target is still bound at frame start — the throw kills every XR frame.
+    // target is still bound at frame start (e.g. a pass threw mid-frame).
+    // Unguarded, that one error repeats and kills every later XR frame.
     const foveateBoundTexture = renderer.xr.foveateBoundTexture.bind(renderer.xr);
     renderer.xr.foveateBoundTexture = (renderTarget) =>
       renderTarget ? foveateBoundTexture(renderTarget) : undefined;
