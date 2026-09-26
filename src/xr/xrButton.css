@@ -80,3 +80,9 @@ html.xr-presenting .runner-screen {
 html.xr-presenting .np-toast {
   display: none !important;
 }
+
+/* Tickets zoom to fit the headset's page viewport (fitRunnerScreen in
+   createXRHud.js); the VR panel scales back up so the size is unchanged. */
+html.xr-presenting .runner-screen > * {
+  zoom: var(--xr-fit, 1);
+}

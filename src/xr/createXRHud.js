@@ -85,6 +85,55 @@ function visibleUiRect(skip) {
   };
 }
 
+/**
+ * Wait for running (finite) CSS animations / transitions on the page UI:
+ * the snapshot freezes animations at their final state, so rects measured
+ * mid-entrance (a ticket sliding in, a label fading up) would not match it.
+ */
+async function settleAnimations(skip, timeout = 900) {
+  const running = document.getAnimations().filter((animation) => {
+    const target = animation.effect?.target;
+    const iterations = animation.effect?.getTiming?.().iterations;
+    return (
+      animation.playState === "running" &&
+      iterations !== Infinity &&
+      target instanceof Element &&
+      !target.closest(skip)
+    );
+  });
+  if (!running.length) {
+    return;
+  }
+  await Promise.race([
+    Promise.allSettled(running.map((animation) => animation.finished)),
+    new Promise((resolve) => setTimeout(resolve, timeout)),
+  ]);
+}
+
+/**
+ * Tickets are laid out for a desktop window; the headset's page viewport is
+ * often shorter, which clips the bottom. Zoom the runner screen's content
+ * (live DOM and snapshot alike) until it fits; the panel is scaled back up
+ * in metres so its physical size stays the same. Returns the zoom.
+ */
+function fitRunnerScreen(screen) {
+  const content = screen?.firstElementChild;
+  if (!content || !screen.dataset.mode) {
+    return 1;
+  }
+  screen.style.setProperty("--xr-fit", "1");
+  // Layout sizes (not transformed rects): unaffected by entry animations.
+  const width = content.offsetWidth;
+  const height = content.offsetHeight;
+  if (!width || !height) {
+    return 1;
+  }
+  const zoom = Math.min(1, (window.innerHeight - 24) / height, (window.innerWidth - 24) / width);
+  const fit = Math.max(0.45, Math.floor(zoom * 100) / 100);
+  screen.style.setProperty("--xr-fit", String(fit));
+  return fit;
+}
+
 /** PlaneGeometry(1,1) UVs → a CSS-px rect of a viewport-sized snapshot. */
 function cropQuad(mesh, rect, width, height) {
   const u0 = rect.left / width;
@@ -146,6 +195,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     minorDirty: false,
     lastSnapshot: -Infinity,
     rect: null, // CSS px crop of the viewport shown on the panel
+    metresPerPx: SCREEN_METRES_PER_PX,
   };
   let clock = 0;
 
@@ -201,6 +251,10 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       if (!target || target.closest?.(SCREEN_SKIP)) {
         continue;
       }
+      // Our own zoom-to-fit writes (fitRunnerScreen) are not page changes.
+      if (target === domHud?.screen && mutation.attributeName === "style") {
+        continue;
+      }
       // New content or state classes → soon. Inline styles (progress bars)
       // and text ticks (clocks, timers) → at most every MINOR_INTERVAL.
       const major =
@@ -234,17 +288,23 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
 
   // ── Snapshots ──────────────────────────────────────────────────────────
   async function refreshScreen() {
+    const fit = fitRunnerScreen(domHud?.screen);
+    await settleAnimations(SCREEN_SKIP);
     const rect = visibleUiRect(SCREEN_SKIP);
     if (!rect) {
       screenMesh.visible = false;
       screenState.rect = null;
+      // Still animating in / not laid out yet: look again shortly.
+      screenState.majorAt = clock + 0.4;
       return;
     }
     const size = await snapshotter.snapshot(document.body, screenCanvas, {
-      scale: SNAPSHOT_SCALE,
+      // Zoomed-out tickets get proportionally more pixels.
+      scale: Math.min(2.4, SNAPSHOT_SCALE / fit),
       skip: SCREEN_SKIP,
       transparent: true,
     });
+    screenState.metresPerPx = SCREEN_METRES_PER_PX / fit;
     if (!active || !screenState.shown) {
       return;
     }
@@ -261,10 +321,11 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     }
     screenState.rect = rect;
     cropQuad(screenMesh, rect, size.width, size.height);
-    screenMesh.scale.set((rect.right - rect.left) * SCREEN_METRES_PER_PX, (rect.bottom - rect.top) * SCREEN_METRES_PER_PX, 1);
+    const metresPerPx = screenState.metresPerPx;
+    screenMesh.scale.set((rect.right - rect.left) * metresPerPx, (rect.bottom - rect.top) * metresPerPx, 1);
     // Keep a hint of the page layout, but centre the UI on the eyes.
-    const cx = ((rect.left + rect.right) / 2 - size.width / 2) * SCREEN_METRES_PER_PX;
-    const cy = (size.height / 2 - (rect.top + rect.bottom) / 2) * SCREEN_METRES_PER_PX;
+    const cx = ((rect.left + rect.right) / 2 - size.width / 2) * metresPerPx;
+    const cy = (size.height / 2 - (rect.top + rect.bottom) / 2) * metresPerPx;
     screenMesh.position.set(cx * 0.35, SCREEN_EYE_Y + cy * 0.35, -SCREEN_DISTANCE);
     screenMesh.updateMatrixWorld();
     screenMesh.visible = true;
@@ -379,9 +440,14 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       lastMove = { x, y };
       dispatchPointer("pointermove", elementAt(x, y) ?? document.body, x, y);
     }
-    cursor.position.copy(hit.point);
+    // The cursor lives in the HUD group (which rides the player rig): place
+    // it in group space, a hair in front of the panel.
+    _local.set(_local.x, _local.y, 0.004);
+    screenMesh.localToWorld(_local);
+    group.worldToLocal(_local);
+    cursor.position.copy(_local);
     cursor.quaternion.copy(screenMesh.quaternion);
-    cursor.scale.setScalar(0.018);
+    cursor.scale.setScalar(dragging || hover ? 0.03 : 0.022);
     cursor.visible = true;
     if (dragging) {
       setRangeFromPointer(dragging);
