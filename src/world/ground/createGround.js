@@ -12,6 +12,7 @@ import {
 } from "three/tsl";
 import { createRainRipples } from "../../tsl/rainRipples.js";
 import { performanceProfile } from "../../platform/performanceProfile.js";
+import { withXRDisabled } from "../../xr/xrSupport.js";
 import { RAIN_LAYER } from "../weather/createCollisionRain.js";
 
 const ALBEDO_PATH = "/textures/wet-puddles-albedo.jpg";
@@ -267,7 +268,7 @@ export function createGround(scene, {
     renderer.setMRT?.(null);
     renderer.setRenderTarget(renderTarget);
     renderer.autoClear = true;
-    renderer.render(scene, mirrorCamera);
+    withXRDisabled(renderer, () => renderer.render(scene, mirrorCamera));
 
     renderer.setMRT?.(prevMRT);
     renderer.setRenderTarget(prevTarget);

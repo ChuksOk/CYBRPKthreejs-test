@@ -7,6 +7,13 @@ import { createHands } from "./createHands.js";
 
 /** Grip sits bottom-right; the procedural carbine is modelled in meters. */
 const BASE_OFFSET = new THREE.Vector3(0.165, -0.168, -0.37);
+/**
+ * VR: the rig follows the right controller's target-ray pose (see
+ * src/xr/createXRMode.js), so the grip sits just below and behind the ray
+ * origin instead of bottom-right of the view.
+ */
+const XR_OFFSET = new THREE.Vector3(0, -0.045, 0.085);
+const XR_CANT = new THREE.Euler(0, 0, 0);
 
 function expLerpFactor(delta, speed) {
   return 1 - Math.exp(-delta * speed);
@@ -67,12 +74,28 @@ export function createViewmodel({ scene, camera }) {
   let recoilVelocity = 0;
   let reloadT = -1;
   let visible = true;
+  let xrMode = false;
+  let onKick = null;
   const _muzzleWorld = new THREE.Vector3();
 
   function kick(strength = 1) {
     recoilVelocity += 3.2 * strength;
     flash.trigger();
     hands.fire();
+    onKick?.(strength);
+  }
+
+  /** VR: gun in the right hand, no procedural arms, sway or bob. */
+  function setXRMode(value) {
+    xrMode = Boolean(value);
+    hands.setVisible(!xrMode);
+    for (const gun of guns) {
+      if (xrMode) {
+        gun.root.rotation.copy(XR_CANT);
+      } else {
+        gun.root.rotation.set(0.015, 0.03, -0.035);
+      }
+    }
   }
 
   function setReloadProgress(t) {
@@ -137,6 +160,15 @@ export function createViewmodel({ scene, camera }) {
       reloadRoll = 0.45 * s;
     }
 
+    if (xrMode) {
+      pivot.position.set(XR_OFFSET.x, XR_OFFSET.y + switchDip * 0.5 + reloadDip, XR_OFFSET.z + recoil * 0.03);
+      pivot.rotation.set(recoil * 0.1 - reloadRoll * 0.4 + switchDip * 1.5, 0, reloadRoll * 0.6);
+      rig.position.copy(camera.position);
+      rig.quaternion.copy(camera.quaternion);
+      rig.updateMatrixWorld(true);
+      return;
+    }
+
     pivot.position.set(
       BASE_OFFSET.x + swayOffset.x + bobX,
       BASE_OFFSET.y + swayOffset.y + bobY + airLift + slideDip + reloadDip + switchDip,
@@ -172,6 +204,11 @@ export function createViewmodel({ scene, camera }) {
     throwSpecial: (type, onRelease) => hands.throwItem(type, onRelease),
     isThrowing: () => hands.isThrowing(),
     setVisible,
+    setXRMode,
+    /** Called on every shot (VR haptics). */
+    setKickListener: (fn) => {
+      onKick = fn;
+    },
     setOverclock: () => {},
     /** Live ammo counter on the receiver screen. */
     setAmmoDisplay: (ammo, mag, overclock, reloading) => guns[current].drawAmmo(ammo, mag, overclock, reloading),

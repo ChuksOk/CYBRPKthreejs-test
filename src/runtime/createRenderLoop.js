@@ -13,12 +13,20 @@ export function createRenderLoop({
   getIntroActive,
   onFrame,
   runnerGame = null,
+  getXRMode = null,
 }) {
   const timer = new THREE.Timer();
 
   function renderFrame() {
     timer.update();
     const delta = timer.getDelta();
+    // WebXR (Meta Quest): controller input first, then the runner poses the
+    // rig + game camera (src/xr/createXRMode.js).
+    const xr = getXRMode?.();
+    const xrActive = xr?.isPresenting() ?? false;
+    if (xrActive) {
+      xr.beforeUpdate(delta);
+    }
 
     // Runner owns the camera pose in runner mode; it must be final before
     // the height map, rain, reflection and post passes read it.
@@ -56,6 +64,14 @@ export function createRenderLoop({
     });
     if (carRainActive) {
       world.carSurfaceRain.update(delta);
+    }
+
+    if (xrActive) {
+      // Stereo: no planar mirror, no post stack (RenderPipeline draws its
+      // output quad with XR disabled). Tone mapping still applies.
+      xr.afterUpdate(delta);
+      xr.render();
+      return;
     }
 
     if (performanceTools?.shouldUpdateGroundReflection()) {

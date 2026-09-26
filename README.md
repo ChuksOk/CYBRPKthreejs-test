@@ -409,6 +409,7 @@ The through-line: **every flashy effect either moved to the GPU, dropped in reso
 | In-run upgrades | `src/runner/upgrades.js` | `UPGRADES`, `rollUpgradeChoices` |
 | Seeded run RNG (Daily Run) | `src/runner/rng.js` | `setRunSeed`, `rr` |
 | Adaptive music | `src/audio/createAdaptiveMusic.js` | `createAdaptiveMusic` |
+| WebXR (Meta Quest) mode | `src/xr/createXRMode.js`, `src/xr/createXRHud.js`, `src/xr/xrSupport.js` | `createXRMode`, `wantsXRMode` — see [webxr-quest.md](docs/techniques/webxr-quest.md) |
 
 ---
 

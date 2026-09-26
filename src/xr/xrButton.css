@@ -1,0 +1,43 @@
+/* ENTER VR — ticket-label style, left of the audio button (audioButton.css).
+ * Above the full-screen runner ticket (.runner-screen, z-index 950). */
+html body .xr-enter-button {
+  position: fixed;
+  right: 96px;
+  bottom: 30px;
+  z-index: 960;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--cyber-border, rgba(217, 255, 59, 0.4));
+  background: var(--cyber-bg, rgba(12, 14, 19, 0.9));
+  color: var(--t-acid, #d9ff3b);
+  font-family: var(--t-display, sans-serif);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.12em;
+  clip-path: var(--cyber-clip-sm);
+  box-shadow: var(--cyber-glow);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+html body .xr-enter-button:hover,
+html body .xr-enter-button:focus-visible {
+  background: var(--cyber-bg-hover, rgba(217, 255, 59, 0.14));
+  border-color: var(--cyber-border-hover, #d9ff3b);
+  outline: none;
+}
+
+html body .xr-enter-button[hidden] {
+  display: none;
+}
+
+html body .xr-enter-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Gameplay on touch hides the chrome; keep VR entry out of the way too. */
+html.runner-playing body .xr-enter-button {
+  display: none;
+}

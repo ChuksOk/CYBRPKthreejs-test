@@ -251,10 +251,11 @@ export function createWeapon({
     }
 
     // Touch: firing is the on-screen button; aim is automatic, and shots
-    // get a little magnetism toward a drone near the crosshair.
+    // get a little magnetism toward a drone near the crosshair (also in VR,
+    // where the aim ray is the right controller).
     let assistTarget = null;
     const wantsFire = controls.isTriggerHeld();
-    if (wantsFire && controls.isTouch()) {
+    if (wantsFire && (controls.isAimAssisted?.() ?? controls.isTouch())) {
       aimDirection(_direction);
       assistTarget = drones.findInCone(camera.position, _direction, ASSIST_ANGLE, RANGE);
     }

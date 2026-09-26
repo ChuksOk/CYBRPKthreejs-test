@@ -49,6 +49,12 @@ import {
 } from "./platform/performanceProfile.js";
 import { getStoredLookPreset, isDevelopmentModeEnabled } from "./platform/userPreferences.js";
 import {
+  applyXRPerformanceDefaults,
+  wantsWebGPUXR,
+  wantsXRMode,
+} from "./xr/xrSupport.js";
+import { createXRMode } from "./xr/createXRMode.js";
+import {
   DEFAULT_LOOK_PRESET,
   LOOK_PRESETS,
 } from "./post/look/cyberpunkLook.js";
@@ -63,6 +69,11 @@ init(loader).catch((error) => {
 async function init(loaderOverlay) {
   // Must run before createRenderer so the initial setPixelRatio sees iOS caps.
   applyDevicePerformanceDefaults();
+  // Meta Quest / ?xr: WebXR-capable renderer + headset budgets.
+  const xrBoot = FEATURES.runner && wantsXRMode();
+  if (xrBoot) {
+    applyXRPerformanceDefaults();
+  }
   syncLayoutClass();
 
   loaderOverlay.setProgress(0.03);
@@ -75,12 +86,15 @@ async function init(loaderOverlay) {
   loaderOverlay.setProgress(0.1);
   loaderOverlay.setStatus("SPINNING UP RENDERER");
 
-  const { renderer } = await createRenderer();
+  const { renderer } = await createRenderer({
+    xr: xrBoot,
+    xrWebGPU: xrBoot && wantsWebGPUXR(),
+  });
 
   loaderOverlay.setProgress(0.2);
   loaderOverlay.setStatus("LINKING WEBGPU");
 
-  const { requestShadowMapUpdate } = createShadowUpdater({
+  const { requestShadowMapUpdate, flushDeferredShadowUpdate } = createShadowUpdater({
     renderer,
     getSunLight: () => sunLight,
   });
@@ -172,6 +186,7 @@ async function init(loaderOverlay) {
   });
 
   let runnerGame = null;
+  let xrMode = null;
   if (FEATURES.runner && world.track) {
     loaderOverlay.setStatus("ARMING DRONES");
     runnerGame = await createRunnerGame({
@@ -201,6 +216,18 @@ async function init(loaderOverlay) {
       RUNNER.segmentLength * performanceProfile.runnerSegmentsAhead - 5,
     );
     camera.updateProjectionMatrix();
+
+    // WebXR: always created so desktop PC-VR users get a "VR MODE" button
+    // (reloads with ?xr); only an XR-mode renderer can enter directly.
+    xrMode = createXRMode({
+      renderer,
+      scene,
+      camera,
+      runnerGame,
+      world,
+      flushDeferredShadowUpdate,
+    });
+    world.collisionHideExtra = [...world.collisionHideExtra, xrMode.rig];
   }
 
   const cameraLayout = createCameraLayoutSync({
@@ -244,6 +271,8 @@ async function init(loaderOverlay) {
   });
   if (devApp && runnerGame) {
     devApp.runner = runnerGame;
+    devApp.xr = xrMode;
+    devApp.camera = camera;
   }
   attachDevPerf(devApp, performanceTools.perfApi);
 
@@ -264,6 +293,7 @@ async function init(loaderOverlay) {
     revealAppUi: () => {
       appShell.revealAppUi();
       runnerGame?.enterMenu();
+      xrMode?.setAvailable(true);
       adaptiveSampleGate.allow = true;
     },
     world,
@@ -281,6 +311,7 @@ async function init(loaderOverlay) {
     getIntroActive: introFlow.isIntroActive,
     onFrame: (delta) => appShell.updateHud(delta),
     runnerGame,
+    getXRMode: () => xrMode,
   });
 
   await finalizeStartupLighting({

@@ -25,6 +25,7 @@ WebGPU + Three.js **TSL** demo: cyberpunk alley, walk mode (BVH), GPU rain with 
 | Collision rain uses `useDedicatedPass: false` | [`createCollisionRain.js`](src/world/weather/createCollisionRain.js); do not assume a separate rain composite pass is active |
 | Hide rain/sky/smoke/planes from height pass | [`collisionHideObjects.js`](src/world/weather/collisionHideObjects.js) (runner dynamics via `world.collisionHideExtra`) |
 | Runner: player stays in tile 0 | New dynamic runner objects need a `shiftX(dx)` called from `applyWrap` in [`createRunnerGame.js`](src/runner/createRunnerGame.js) |
+| Offscreen `renderer.render` (RT passes) | Wrap in `withXRDisabled` ([`xrSupport.js`](src/xr/xrSupport.js)) — while presenting, the renderer swaps in the XR camera for every render call |
 | New expensive work: half-res, frame-skip, or distance fade | Match existing patterns in `performanceProfile` |
 | Safari / mobile | Respect [`applyDevicePerformanceDefaults`](src/platform/performanceProfile.js) (DoF off on Safari, etc.) |
 
@@ -44,6 +45,7 @@ WebGPU + Three.js **TSL** demo: cyberpunk alley, walk mode (BVH), GPU rain with 
 | Feature toggle | [`features.js`](src/world/features.js) |
 | Runner / shooter gameplay | [`createRunnerGame.js`](src/runner/createRunnerGame.js), [`runnerConfig.js`](src/runner/runnerConfig.js) — see [endless-runner.md](docs/techniques/endless-runner.md) |
 | Rifle / drones | [`src/weapon/`](src/weapon/), [`src/enemies/`](src/enemies/) |
+| WebXR / Meta Quest | [`src/xr/`](src/xr/) — see [webxr-quest.md](docs/techniques/webxr-quest.md) |
 
 ## Technique recipes (replicate elsewhere)
 

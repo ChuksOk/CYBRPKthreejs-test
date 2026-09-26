@@ -8,5 +8,6 @@ Focused guides for humans and coding agents. Each doc is self-contained enough t
 | Wet ground (ripples + planar reflection) | [wet-ground.md](./wet-ground.md) | `src/world/ground/createGround.js`, `src/tsl/rainRipples.js` |
 | Car surface rain (procedural drops) | [car-surface-rain.md](./car-surface-rain.md) | `src/tsl/surfaceRain.js`, `src/world/car/applyCarSurfaceRain.js` |
 | Endless runner + drone shooter (tiled city, floating origin, viewmodel) | [endless-runner.md](./endless-runner.md) | `src/runner/`, `src/weapon/`, `src/enemies/` |
+| WebXR on Meta Quest (rig, controllers, VR HUD, stereo render path) | [webxr-quest.md](./webxr-quest.md) | `src/xr/` |
 
 The [README](../../README.md) and [AGENTS.md](../../AGENTS.md) remain the index.

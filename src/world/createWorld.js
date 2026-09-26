@@ -180,6 +180,8 @@ export async function createWorld({
       renderer,
       collisionHeight,
       camera,
+      // Read at call time: device / XR budgets are applied after module load.
+      count: performanceProfile.collisionRainCount,
     });
   }
 

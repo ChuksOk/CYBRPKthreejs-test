@@ -29,8 +29,14 @@ async function getWebGPULimits() {
   return {};
 }
 
-export async function createRenderer() {
-  const requiredLimits = await getWebGPULimits();
+/**
+ * @param {{ xr?: boolean, xrWebGPU?: boolean }} [options]
+ *   xr: boot for WebXR (Meta Quest). Uses the WebGL2 backend unless xrWebGPU
+ *   (XRGPUBinding) is available — see src/xr/xrSupport.js.
+ */
+export async function createRenderer({ xr = false, xrWebGPU = false } = {}) {
+  const forceWebGL = xr && !xrWebGPU;
+  const requiredLimits = forceWebGL ? {} : await getWebGPULimits();
 
   const renderer = new THREE.WebGPURenderer({
     antialias: false,
@@ -38,7 +44,14 @@ export async function createRenderer() {
     powerPreference: "high-performance",
     stencil: false,
     requiredLimits,
+    forceWebGL,
   });
+  if (xr) {
+    renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType("local-floor");
+    // Fixed foveation: cheap on Quest, invisible at the lens edges.
+    renderer.xr.setFoveation(1);
+  }
   renderer.setPixelRatio(getStaticPixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -67,9 +80,19 @@ export async function createRenderer() {
 }
 
 export function createShadowUpdater({ renderer, getSunLight }) {
+  let deferred = false;
+
   function requestShadowMapUpdate() {
     const sunLight = getSunLight?.();
     if (!sunLight || !renderer) {
+      return;
+    }
+
+    // In a WebXR session the renderer would draw the shadow map with the XR
+    // camera (it swaps it in for every render call); keep the last map and
+    // refresh once the session ends.
+    if (renderer.xr?.isPresenting) {
+      deferred = true;
       return;
     }
 
@@ -77,7 +100,14 @@ export function createShadowUpdater({ renderer, getSunLight }) {
     renderer.shadowMap.needsUpdate = true;
   }
 
-  return { requestShadowMapUpdate };
+  function flushDeferredShadowUpdate() {
+    if (deferred) {
+      deferred = false;
+      requestShadowMapUpdate();
+    }
+  }
+
+  return { requestShadowMapUpdate, flushDeferredShadowUpdate };
 }
 
 export function applyRendererPixelRatio(renderer, pipeline, dpr) {

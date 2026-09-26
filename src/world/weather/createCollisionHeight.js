@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import { float, positionWorld, uniform, vec2, vec4 } from "three/tsl";
 import { performanceProfile } from "../../platform/performanceProfile.js";
+import { withXRDisabled } from "../../xr/xrSupport.js";
 
 class CollisionHeight {
   constructor({ width, height, depth, resolution }) {
@@ -121,7 +122,7 @@ export function createCollisionHeight({
     scene.overrideMaterial = collision.material;
     renderer.setMRT?.(null);
     renderer.setRenderTarget(collision.renderTarget);
-    renderer.render(scene, collision.camera);
+    withXRDisabled(renderer, () => renderer.render(scene, collision.camera));
 
     renderer.setMRT?.(prevMRT);
     renderer.setRenderTarget(prevTarget);

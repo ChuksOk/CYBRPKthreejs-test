@@ -51,12 +51,46 @@ const NEAR_MISS_WINDOW = 0.35;
 const SECTOR_THEMES = ["magentaRain", "tealDusk", "sinCity", "neonNoir", "silentHill"];
 
 const TUTORIAL_STEPS = [
-  { id: "lane", desktop: "A / D — CHANGE LANE", touch: "SWIPE ← → — CHANGE LANE" },
-  { id: "jump", desktop: "SPACE — JUMP THE BARRIER", touch: "SWIPE ↑ — JUMP THE BARRIER" },
-  { id: "slide", desktop: "S — SLIDE UNDER THE BEAM", touch: "SWIPE ↓ — SLIDE UNDER THE BEAM" },
-  { id: "shoot", desktop: "CLICK — SHOOT THE DRONE", touch: "HOLD FIRE — SHOOT THE DRONE" },
-  { id: "special", desktop: "E — USE YOUR SPECIAL", touch: "TAP SPECIAL — USE IT" },
+  { id: "lane", desktop: "A / D — CHANGE LANE", touch: "SWIPE ← → — CHANGE LANE", xr: "FLICK STICK ← → — CHANGE LANE" },
+  { id: "jump", desktop: "SPACE — JUMP THE BARRIER", touch: "SWIPE ↑ — JUMP THE BARRIER", xr: "A / STICK ↑ — JUMP THE BARRIER" },
+  { id: "slide", desktop: "S — SLIDE UNDER THE BEAM", touch: "SWIPE ↓ — SLIDE UNDER THE BEAM", xr: "DUCK / B — SLIDE UNDER THE BEAM" },
+  { id: "shoot", desktop: "CLICK — SHOOT THE DRONE", touch: "HOLD FIRE — SHOOT THE DRONE", xr: "RIGHT TRIGGER — SHOOT THE DRONE" },
+  { id: "special", desktop: "E — USE YOUR SPECIAL", touch: "TAP SPECIAL — USE IT", xr: "LEFT TRIGGER — THROW YOUR SPECIAL" },
 ];
+
+/** DOM HUD calls that the in-headset HUD (src/xr/createXRHud.js) mirrors. */
+const XR_MIRRORED_HUD = new Set([
+  "showScreen",
+  "hideScreen",
+  "showBanner",
+  "toast",
+  "setPrompt",
+  "setBoss",
+  "setSlowmo",
+  "flashDamage",
+  "hitMarker",
+  "setVisible",
+]);
+
+/**
+ * The DOM HUD is invisible inside a WebXR session, so every mirrored call is
+ * also forwarded to the VR HUD while one is attached.
+ */
+function mirrorHud(domHud, getXRHud) {
+  return new Proxy(domHud, {
+    get(target, prop) {
+      const value = target[prop];
+      if (typeof value !== "function" || !XR_MIRRORED_HUD.has(prop)) {
+        return value;
+      }
+      return (...args) => {
+        const result = value.apply(target, args);
+        getXRHud()?.[prop]?.(...args);
+        return result;
+      };
+    },
+  });
+}
 
 function vibrate(pattern) {
   try {
@@ -89,7 +123,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const fx = createWeaponFx({ scene, camera });
   const audio = createRunnerAudio();
-  const hud = createRunnerHud({ isTouch });
+  let xrHud = null;
+  const hud = mirrorHud(createRunnerHud({ isTouch }), () => xrHud);
 
   const viewmodel = createViewmodel({ scene, camera });
 
@@ -308,8 +343,21 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
   }
 
-  function useSpecial() {
+  /**
+   * @param {{origin: THREE.Vector3, direction: THREE.Vector3}} [launch]
+   *   VR: thrown from the left controller instead of the animated left hand.
+   */
+  function useSpecial(launch) {
     if (game.state !== "running" || !specials.state.ready) {
+      return;
+    }
+    if (launch?.origin && launch?.direction) {
+      _specialDir.copy(launch.direction).normalize();
+      _specialOrigin.copy(launch.origin).addScaledVector(_specialDir, 0.6);
+      if (specials.activate(_specialOrigin, _specialDir, player)) {
+        onSpecialLaunched();
+        audio.play("slide", { volume: 0.25, detune: 600 });
+      }
       return;
     }
     // Thrown by the left hand: the special launches from the palm at the
@@ -529,7 +577,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     if (game.state !== "paused") {
       return;
     }
-    if (!controls.isPointerLocked() && !isTouch) {
+    if (!controls.isPointerLocked() && !isTouch && !controls.isXR()) {
       controls.requestPointerLock();
       return;
     }
@@ -758,7 +806,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       return;
     }
     game.tutorialTimer = 0;
-    hud.setPrompt(isTouch ? step.touch : step.desktop);
+    hud.setPrompt(controls.isXR() ? step.xr : isTouch ? step.touch : step.desktop);
     const x = controls.state.x + 34;
     if (step.id === "jump") {
       obstacles.spawn("barrier", x, currentLane);
@@ -1452,6 +1500,56 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.update(rawDelta, game.state === "idle" || game.state === "menu" ? null : snapshot());
   }
 
+  /**
+   * VR controller menu actions (the DOM ticket screens are not visible in a
+   * headset). `confirm` = right trigger, `back` = B, `pause` = Y.
+   */
+  function xrAction(kind, data = null) {
+    switch (game.state) {
+      case "menu":
+        if (kind === "confirm") {
+          if (hud.getScreenMode() === "start") {
+            startCountdown();
+          } else {
+            showStart();
+          }
+        } else if (kind === "daily") {
+          game.daily = !game.daily;
+          showStart();
+        }
+        break;
+      case "dead":
+        if (kind === "confirm") {
+          restart();
+        } else if (kind === "back") {
+          enterMenu();
+        }
+        break;
+      case "paused":
+        if (kind === "confirm" || kind === "pause") {
+          resume();
+        } else if (kind === "back") {
+          enterMenu();
+        }
+        break;
+      case "running":
+        if (kind === "pause") {
+          pause();
+        }
+        break;
+      case "upgrade":
+        if (kind === "pick") {
+          const choice = game.upgradeChoices[data];
+          if (choice) {
+            hud.pickCard(choice.id, () => pickUpgrade(choice.id));
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
   /** Place the camera at the run start (used before the intro reveals). */
   function placeAtStart() {
     resetRun();
@@ -1529,5 +1627,19 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     enterMenu,
     placeAtStart,
     getState: () => game.state,
+    viewmodel,
+    player,
+    maxShield,
+    useSpecial,
+    pause,
+    xrAction,
+    /** In-headset HUD (src/xr/createXRHud.js); null outside a VR session. */
+    setXRHud: (value) => {
+      xrHud = value;
+      if (xrHud) {
+        xrHud.setVisible(game.state !== "idle" && game.state !== "menu" && game.state !== "dead");
+        xrHud.syncScreen?.(hud.getScreenMode(), game);
+      }
+    },
   };
 }

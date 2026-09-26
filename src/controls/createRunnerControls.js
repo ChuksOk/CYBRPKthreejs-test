@@ -55,7 +55,15 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     bobPhase: 0,
     trigger: false,
     pointerLocked: false,
+    xr: false,
   };
+
+  /**
+   * WebXR: when set, returns true after posing the camera itself (right
+   * controller aim pose). Bob, shake, roll and FOV kick are skipped — forced
+   * camera motion is a comfort problem in a headset.
+   */
+  let poseOverride = null;
 
   let currentBaseFov = baseFov;
   const euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -189,7 +197,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   }
 
   function requestPointerLock() {
-    if (coarse || state.pointerLocked) {
+    if (coarse || state.xr || state.pointerLocked) {
       return;
     }
     try {
@@ -366,6 +374,10 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   const _shake = new THREE.Vector3();
 
   function applyCamera(delta) {
+    if (poseOverride?.(state, camera)) {
+      camera.updateMatrixWorld();
+      return;
+    }
     const bobActive = state.grounded && state.slideTime <= 0 ? 1 : 0;
     const bobY = Math.abs(Math.sin(state.bobPhase * Math.PI)) * HEAD_BOB_AMOUNT * bobActive;
     const bobRoll = Math.sin(state.bobPhase * Math.PI) * 0.004 * bobActive;
@@ -477,6 +489,11 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
   /** Floating-origin wrap: move the player without any visual change. */
   function shiftX(dx) {
     state.x += dx;
+    if (poseOverride?.(state, camera)) {
+      // VR: re-pose the headset rig from the shifted state in the same frame.
+      camera.updateMatrixWorld();
+      return;
+    }
     camera.position.x += dx;
     camera.updateMatrixWorld();
   }
@@ -512,6 +529,24 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     isActive: () => state.active,
     isPointerLocked: () => state.pointerLocked,
     isTouch: () => coarse,
+    /** Shots get magnetism toward a drone near the aim ray (touch, VR). */
+    isAimAssisted: () => coarse || state.xr,
+    /** WebXR session state + camera pose override (see poseOverride). */
+    setXR: (active, override = null) => {
+      state.xr = Boolean(active);
+      poseOverride = state.xr ? override : null;
+      if (state.xr) {
+        exitPointerLock();
+      }
+    },
+    isXR: () => state.xr,
+    /** Discrete action from a non-DOM source (VR controllers): left / right / jump / slide. */
+    pushAction: queue,
+    requestReload: () => {
+      if (state.active && state.inputEnabled) {
+        emit("reload");
+      }
+    },
     requestPointerLock,
     exitPointerLock,
     setBaseFov: (value) => {
