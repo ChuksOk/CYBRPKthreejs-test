@@ -33,6 +33,9 @@ const SNAPSHOT_CSS = `
 }
 .xr-html .xr-enter-button { display: none !important; }
 .xr-html .is-xr-hover { outline: 3px solid #d9ff3b !important; outline-offset: 2px; }
+.xr-html.xr-transparent, .xr-html.xr-transparent > .xr-body { background: transparent !important; }
+.xr-html.xr-transparent::before, .xr-html.xr-transparent::after,
+.xr-html.xr-transparent > .xr-body::before, .xr-html.xr-transparent > .xr-body::after { display: none !important; }
 `;
 
 const dataUrlCache = new Map();
@@ -357,7 +360,7 @@ export function createDomSnapshotter() {
     const htmlEl = document.documentElement;
     const bodyEl = document.body;
     const wrapper = document.createElementNS(XHTML_NS, "div");
-    wrapper.setAttribute("class", `xr-html ${htmlEl.className}`.trim());
+    wrapper.setAttribute("class", `xr-html ${transparent ? "xr-transparent " : ""}${htmlEl.className}`.trim());
     wrapper.setAttribute(
       "style",
       `${htmlEl.getAttribute("style") ?? ""};position:relative;width:${width}px;height:${height}px;overflow:hidden;` +
