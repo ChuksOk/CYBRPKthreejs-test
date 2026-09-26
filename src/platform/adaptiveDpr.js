@@ -77,11 +77,18 @@ export function createAdaptiveDprController({
     apply({ force: true });
   }
 
+  /** Forget an automatic downgrade (the player picked graphics settings). */
+  function resetForcedLow() {
+    forcedLow = false;
+    consecutiveSlowWindows = 0;
+  }
+
   return {
     apply,
     onResize,
     onFpsSample,
     setEnabled,
+    resetForcedLow,
     getDPR: () => currentDPR,
     isForcedLow: () => forcedLow,
   };

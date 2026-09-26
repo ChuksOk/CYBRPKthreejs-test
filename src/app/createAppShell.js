@@ -75,6 +75,11 @@ export function createAppShell({
   pipeline,
   inspectorSession,
   syncLighting,
+  graphics = null,
+  visualStyle = null,
+  moebiusSettings = null,
+  gameplay = null,
+  audio = null,
 }) {
   const uiState = createAppUiState();
   let finishedIntro = false;
@@ -139,8 +144,19 @@ export function createAppShell({
           pipeline.applyLookPreset(presetId);
           setStoredLookPreset(presetId);
         },
+        graphics,
+        getVisualStyle: () => pipeline.getVisualStyle?.() ?? "neon",
+        onVisualStyleChange: (id) => visualStyle?.set(id),
+        moebius: moebiusSettings,
+        gameplay,
+        audio,
         onRestart: () => {
+          visualStyle?.set("neon");
+          moebiusSettings?.reset();
+          gameplay?.reset();
           clearAllStoredPreferences();
+          graphics?.reset();
+          settingsPanelRef?.syncGraphics();
           inspectorSession.applyDevelopmentMode(false, settingsPanelRef);
           pipeline.applyLookPreset(DEFAULT_LOOK_PRESET);
           settingsPanelRef?.syncLookPreset(DEFAULT_LOOK_PRESET);

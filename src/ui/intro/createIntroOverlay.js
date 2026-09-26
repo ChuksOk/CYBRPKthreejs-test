@@ -1,4 +1,4 @@
-import { AUTHOR_NAME, AUTHOR_URL, GAME_TAGLINE, GAME_TITLE, GAME_TITLE_LINES } from "../../app/credits.js";
+import { AUTHOR_NAME, AUTHOR_URL, GAME_TAGLINE, GAME_TITLE, GAME_TITLE_LINES, STORY } from "../../app/credits.js";
 import "./introOverlay.css";
 import gsap from "gsap";
 
@@ -24,7 +24,7 @@ export function createIntroOverlay({ onStart } = {}) {
   root.setAttribute("aria-hidden", "false");
   root.innerHTML = `
     <div class="intro-stack">
-      <p class="intro-kicker">sector 7 // drone curfew</p>
+      <p class="intro-kicker">${STORY.year} // ${STORY.player} is on a break</p>
       <h1 class="intro-brand" aria-label="${GAME_TITLE}">
         <span class="intro-brand-line">${titleTop}</span>
         <span class="intro-brand-line intro-brand-line--accent">${titleBottom}</span>
@@ -32,7 +32,7 @@ export function createIntroOverlay({ onStart } = {}) {
       <p class="intro-rule" aria-hidden="true"></p>
       <p class="intro-tagline">${GAME_TAGLINE}</p>
       <div class="intro-actions">
-        <button type="button" class="intro-button" disabled>ENTER</button>
+        <button type="button" class="intro-button" disabled>DIVE IN</button>
       </div>
       <p class="intro-credit">A game by <a href="${AUTHOR_URL}" target="_blank" rel="noopener noreferrer" style="color:inherit;pointer-events:auto">${AUTHOR_NAME}</a></p>
     </div>

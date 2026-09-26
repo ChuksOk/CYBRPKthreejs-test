@@ -20,8 +20,13 @@ export const ARMORY = {
   tiers: [
     { id: "armor", name: "ARMOR PLATING", desc: "+10 max shield", max: 5, base: 250 },
     { id: "damage", name: "HOT LOADS", desc: "+6% weapon damage", max: 5, base: 300 },
-    { id: "magnet", name: "SHARD MAGNET", desc: "+pickup range", max: 4, base: 200 },
+    { id: "magnet", name: "ENERGY MAGNET", desc: "+pickup range", max: 4, base: 200 },
     { id: "charge", name: "PRE-CHARGE", desc: "+15% special at start", max: 4, base: 250 },
+    // Sky Run car (Quadra) upgrades — shown under SKY CAR in the Armory.
+    { id: "carHull", group: "car", name: "REINFORCED CHASSIS", desc: "+20% car hull", max: 5, base: 300 },
+    { id: "carGuns", group: "car", name: "CAR CANNONS", desc: "+10% damage while flying", max: 5, base: 300 },
+    { id: "carRepair", group: "car", name: "AUTO-REPAIR", desc: "+3 hull/s when not hit", max: 4, base: 350 },
+    { id: "carPermit", group: "car", name: "SKY PERMIT", desc: "Sky Run appears sooner", max: 3, base: 400 },
   ],
   tracers: [
     { id: "green", name: "NEON GREEN", hex: 0x5dff3a, cost: 0 },
@@ -50,7 +55,7 @@ const MISSION_POOL = [
   { id: "clean", scope: "run", stat: "cleanDistance", text: (n) => `Run ${n} m without taking damage`, base: 400, step: 150 },
   { id: "distance", scope: "run", stat: "distance", text: (n) => `Reach ${n} m in one run`, base: 800, step: 300 },
   { id: "nearmiss", scope: "run", stat: "nearMisses", text: (n) => `Pull off ${n} close calls in one run`, base: 4, step: 2 },
-  { id: "shards", scope: "run", stat: "shards", text: (n) => `Collect ${n} shards in one run`, base: 40, step: 15 },
+  { id: "shards", scope: "run", stat: "shards", text: (n) => `Collect ${n} energy in one run`, base: 40, step: 15 },
   { id: "specials", scope: "total", stat: "specialsUsed", text: (n) => `Use your special ${n} times`, base: 3, step: 2 },
   { id: "boss", scope: "total", stat: "bossKills", text: (n) => `Destroy ${n} carrier${n > 1 ? "s" : ""}`, base: 1, step: 1 },
   { id: "totalkills", scope: "total", stat: "kills", text: (n) => `Down ${n} drones in total`, base: 40, step: 20 },
@@ -61,7 +66,7 @@ function defaults() {
     shards: 0,
     lifetimeShards: 0,
     unlockedWeapons: [0],
-    tiers: { armor: 0, damage: 0, magnet: 0, charge: 0 },
+    tiers: { armor: 0, damage: 0, magnet: 0, charge: 0, carHull: 0, carGuns: 0, carRepair: 0, carPermit: 0 },
     tracers: ["green"],
     tracer: "green",
     blasts: ["fire"],
@@ -129,6 +134,13 @@ export function createProgression() {
     }
   }
 
+  // Refresh stored wording from the templates (copy changes, e.g. shards → energy).
+  for (const mission of data.missions) {
+    const template = MISSION_POOL.find((t) => t.id === mission.id);
+    if (template) {
+      mission.text = template.text(mission.target);
+    }
+  }
   refillMissions();
   save();
 

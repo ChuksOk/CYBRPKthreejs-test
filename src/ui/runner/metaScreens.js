@@ -22,7 +22,7 @@ function shell(title, code, body, { back = "menu" } = {}) {
 }
 
 function shardChip(data) {
-  return `<span class="mt-shards"><i></i><b>${pad(data.shards, 5)}</b><span class="t-meta">SHARDS</span></span>`;
+  return `<span class="mt-shards"><i></i><b>${pad(data.shards, 5)}</b><span class="t-meta">ENERGY</span></span>`;
 }
 
 export function renderArmory(data) {
@@ -36,7 +36,7 @@ export function renderArmory(data) {
       </button>`;
     })
     .join("");
-  const tiers = ARMORY.tiers
+  const tierButtons = (list) => list
     .map((tier) => {
       const level = data.tiers[tier.id] ?? 0;
       const maxed = level >= tier.max;
@@ -48,6 +48,9 @@ export function renderArmory(data) {
       </button>`;
     })
     .join("");
+  const tiers = tierButtons(ARMORY.tiers.filter((tier) => !tier.group));
+  const carTiers = tierButtons(ARMORY.tiers.filter((tier) => tier.group === "car"));
+  const carLevel = ARMORY.tiers.filter((t) => t.group === "car").reduce((sum, t) => sum + (data.tiers[t.id] ?? 0), 0);
   const cosmetic = (kind, list, owned, equipped) =>
     list
       .map((item) => {
@@ -63,16 +66,23 @@ export function renderArmory(data) {
     "ARMORY",
     "REQUISITION //",
     `
-      <div class="mt-row">${shardChip(data)}<span class="t-meta">EARN SHARDS BY RUNNING, SHOOTING &amp; MISSIONS</span></div>
+      <div class="mt-row">${shardChip(data)}<span class="t-meta">EARN ENERGY BY RUNNING, SHOOTING &amp; MISSIONS</span></div>
       <h4 class="mt-h">WEAPONS <span class="t-meta">VX-06 CARBINE ISSUED</span></h4>
       <div class="mt-grid">${weapons}</div>
       <h4 class="mt-h">UPGRADES <span class="t-meta">PERMANENT</span></h4>
       <div class="mt-grid mt-grid--2">${tiers}</div>
+      <h4 class="mt-h">SKY CAR <span class="t-meta">QUADRA MK-${carMark(carLevel)} · FLYING-CAR POWER-UP</span></h4>
+      <div class="mt-grid mt-grid--2">${carTiers}</div>
       <h4 class="mt-h">TRACERS</h4>
       <div class="mt-grid mt-grid--4">${cosmetic("tracer", ARMORY.tracers, data.tracers, data.tracer)}</div>
       <h4 class="mt-h">EXPLOSIONS</h4>
       <div class="mt-grid">${cosmetic("blast", ARMORY.blasts, data.blasts, data.blast)}</div>`,
   );
+}
+
+/** Quadra mark from total car upgrade levels (MK-I … MK-V). */
+export function carMark(level) {
+  return ["I", "II", "III", "IV", "V"][Math.min(4, Math.floor(level / 4))];
 }
 
 function rankBlock(data) {
@@ -102,7 +112,7 @@ export function renderMissions(data, streakMultiplier) {
     `
       ${rankBlock(data)}
       <div class="mt-row">
-        <span class="mt-streak"><b>${data.streak.count || 0}</b><span class="t-meta">DAY STREAK · SHARDS ×${streakMultiplier.toFixed(1)}</span></span>
+        <span class="mt-streak"><b>${data.streak.count || 0}</b><span class="t-meta">DAY STREAK · ENERGY ×${streakMultiplier.toFixed(1)}</span></span>
         <span class="t-meta">RUN ON CONSECUTIVE DAYS TO GROW THE BONUS (MAX ×1.6)</span>
       </div>
       <div class="mt-missions">${missions || '<span class="t-meta">ALL CLEAR</span>'}</div>`,
@@ -151,7 +161,7 @@ export function renderRewards(rewards, data) {
   const missions = rewards.completed.map((m) => `<li>✓ ${m.text}</li>`).join("");
   return `
     <div class="go-rewards">
-      <div><span class="t-meta">SHARDS BANKED</span><b>+${rewards.earned}<em>◆</em></b><span class="t-meta">${rewards.multiplier > 1 ? `STREAK ×${rewards.multiplier.toFixed(1)}` : `TOTAL ${data.shards}`}</span></div>
+      <div><span class="t-meta">ENERGY BANKED</span><b>+${rewards.earned}<em>◆</em></b><span class="t-meta">${rewards.multiplier > 1 ? `STREAK ×${rewards.multiplier.toFixed(1)}` : `TOTAL ${data.shards}`}</span></div>
       <div><span class="t-meta">XP</span><b>+${rewards.xp}</b><span class="t-meta">${rewards.rankUps.length ? `RANK UP → ${rewards.rankUps[rewards.rankUps.length - 1]}` : `RANK ${data.rank}`}</span></div>
       ${missions ? `<ul class="go-missions">${missions}</ul>` : ""}
     </div>`;

@@ -5,9 +5,12 @@ import "@fontsource/jetbrains-mono/latin-700.css";
 import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
 import { SPECIALS } from "../../weapon/createSpecials.js";
-import { GAME_TITLE_LINES } from "../../app/credits.js";
+import { GAME_TITLE_LINES, STORY } from "../../app/credits.js";
+import { NARRATOR } from "../../runner/narrator.js";
 import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
+import { bindMusicControls, createNowPlayingToast, eqBars, renderMiniPlayer, renderMusicScreen } from "./musicPlayerUi.js";
+import { trackLabel } from "../../audio/musicCatalog.js";
 
 const ARROW_COUNT = 8;
 const MAG_TICKS = 32;
@@ -98,18 +101,46 @@ function stagger(root, selector) {
 }
 
 /**
+ * Mission list for the briefing / menu / game-over tickets.
+ * @param {Array<{text:string,value:number,target:number,done:boolean,xp:number,shards:number}>} list
+ */
+function renderOrders(list, { title = "TODAY'S ORDERS", note = "" } = {}) {
+  if (!list?.length) {
+    return "";
+  }
+  const rows = list
+    .map((m) => {
+      const value = Math.min(m.target, Math.floor(m.value ?? 0));
+      const frac = m.target > 0 ? value / m.target : 0;
+      return `<div class="ord-row${m.done ? " is-done" : ""}">
+        <i class="ord-check" aria-hidden="true"></i>
+        <b>${m.text}</b>
+        <span class="t-meta ord-num">${m.done ? "COMPLETE" : `${value} / ${m.target}`}</span>
+        <span class="t-meta ord-reward">+${m.xp} XP · +${m.shards} ◆</span>
+        <span class="ord-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></span>
+      </div>`;
+    })
+    .join("");
+  return `<div class="ord-list">
+    <div class="ord-head"><span class="t-meta">${title}</span>${note ? `<span class="t-meta">${note}</span>` : ""}</div>
+    ${rows}
+  </div>`;
+}
+
+/**
  * DOM HUD + start / pause / game-over screens. Visual language: transit
  * ticket / utility label — acid lime, cobalt, paper, ink, notched tabs,
  * condensed display numerals, mono metadata, barcodes and dot grids.
  * Pure view: the game calls update() with plain numbers each frame.
  */
-export function createRunnerHud({ isTouch = false } = {}) {
+export function createRunnerHud({ isTouch = false, music = null } = {}) {
   document.documentElement.classList.add("runner-mode");
   const root = el("div", "runner-hud", document.body);
   const handlers = {
     start: null,
     restart: null,
     resume: null,
+    pause: null,
     weapon: null,
     special: null,
     fire: null,
@@ -127,7 +158,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
   // ── Score ticket (top-left) ──────────────────────────────────────────────
   const ticket = el("div", "rh-card rh-ticket", root);
   ticket.innerHTML = `
-    <div class="t-strip"><span>RUN PASS</span><span class="rh-sector">SECTOR 01</span><span class="rh-clock">00:00</span></div>
+    <div class="t-strip"><span>${STORY.player.toUpperCase()}</span><span class="rh-sector">SECTOR 01</span><span class="rh-clock">00:00</span></div>
     <div class="t-body">
       <span class="t-meta">SCORE:</span>
       <span class="t-big rh-score-value">000000</span>
@@ -137,7 +168,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         <div class="t-combo"><span class="t-meta">COMBO</span><b class="rh-combo">×1.0</b></div>
       </div>
     </div>
-    <div class="t-stub">${barcode(11, 54, { height: 18 })}<span class="t-code">//VX-RN-<b class="rh-code">0000</b></span></div>`;
+    <div class="t-stub">${barcode(11, 54, { height: 18 })}<span class="t-code">//OE-${STORY.year}-<b class="rh-code">0000</b></span></div>`;
   const scoreValue = ticket.querySelector(".rh-score-value");
   const distValue = ticket.querySelector(".rh-dist");
   const speedValue = ticket.querySelector(".rh-speed");
@@ -150,7 +181,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
   // ── Vitals label (bottom-left) ─────────────────────────────────────────
   const vitals = el("div", "rh-card rh-vitals", root);
   vitals.innerHTML = `
-    <div class="v-head"><span class="t-meta">UNIT // VX-TR9</span><span class="t-meta">SET 2</span></div>
+    <div class="v-head"><span class="t-meta">${STORY.player.toUpperCase()} // SIM LINK</span><span class="t-meta">${STORY.year}</span></div>
     <div class="v-row">
       <span class="v-label">SHIELD</span>
       <div class="v-bar shield"><b class="v-trail"></b><i></i></div>
@@ -226,6 +257,215 @@ export function createRunnerHud({ isTouch = false } = {}) {
     event.stopPropagation();
     handlers.special?.();
   });
+  // Sky Run hull gauge (bottom-centre while flying the car).
+  const flightPanel = el("div", "rh-flight", root, `
+    <div class="fl-head"><span class="t-meta">SKY RUN</span><span class="t-meta fl-mark">QUADRA MK-I</span><b class="fl-mult">×1.5</b><span class="t-meta fl-time">00.0S</span></div>
+    <div class="fl-bar"><b class="fl-trail"></b><i></i></div>
+    <div class="fl-foot"><span class="t-meta">HULL</span><b class="fl-num">100</b></div>`);
+  const flightFill = flightPanel.querySelector(".fl-bar i");
+  const flightTrail = flightPanel.querySelector(".fl-trail");
+  const flightNum = flightPanel.querySelector(".fl-num");
+  const flightTime = flightPanel.querySelector(".fl-time");
+  const flightMark = flightPanel.querySelector(".fl-mark");
+  let flightTrailValue = 1;
+  function setFlight(data) {
+    flightPanel.classList.toggle("is-visible", Boolean(data));
+    if (!data) {
+      flightTrailValue = 1;
+      return;
+    }
+    const hull = Math.max(0, Math.min(1, data.hull));
+    flightFill.style.transform = `scaleX(${hull})`;
+    // Trail catches up to show the chunk just lost.
+    flightTrailValue = Math.max(hull, flightTrailValue - 0.012);
+    flightTrail.style.transform = `scaleX(${flightTrailValue})`;
+    flightNum.textContent = `${Math.ceil(data.hp ?? hull * 100)}${data.max ? ` / ${Math.round(data.max)}` : ""}`;
+    flightMark.textContent = `QUADRA MK-${data.mark ?? "I"}`;
+    flightTime.textContent = `${(data.time ?? 0).toFixed(1).padStart(4, "0")}S`;
+    flightPanel.classList.toggle("is-low", hull < 0.3);
+    if (data.hit) {
+      flightPanel.classList.remove("is-hit");
+      void flightPanel.offsetWidth;
+      flightPanel.classList.add("is-hit");
+    }
+  }
+
+  // ── Orders: live mission tracker (left, under the score ticket) ──────
+  const orders = el("div", "rh-card rh-orders", root, `
+    <div class="o-head"><span class="t-meta">ORDERS //</span><b class="o-count">0/3</b></div>
+    <div class="o-rows"></div>`);
+  const orderRows = orders.querySelector(".o-rows");
+  const orderCount = orders.querySelector(".o-count");
+  const orderState = new Map();
+  // Sits right under the score ticket (touch: under the compact vitals).
+  const orderAnchor = isTouch ? vitals : ticket;
+  const placeOrders = () => {
+    orders.style.top = `${orderAnchor.offsetTop + orderAnchor.offsetHeight + 10}px`;
+  };
+  new ResizeObserver(placeOrders).observe(orderAnchor);
+  window.addEventListener("resize", placeOrders);
+
+  /**
+   * @param {Array<{id:string,text:string,value:number,target:number,done:boolean}>|null} list
+   *   Live mission progress; rows tick / flash as values rise.
+   */
+  function setMissions(list) {
+    orders.classList.toggle("has-missions", Boolean(list?.length));
+    if (!list?.length) {
+      return;
+    }
+    const ids = list.map((m) => m.id).join(",");
+    if (orders.dataset.ids !== ids) {
+      orders.dataset.ids = ids;
+      orderState.clear();
+      orderRows.innerHTML = list
+        .map((m) => `<div class="o-row" data-id="${m.id}">
+          <i class="o-check" aria-hidden="true"></i>
+          <span class="o-text">${m.text}</span>
+          <b class="o-num"></b>
+          <span class="o-bar"><i></i></span>
+        </div>`)
+        .join("");
+    }
+    let done = 0;
+    let focus = null;
+    let focusFrac = -1;
+    for (const m of list) {
+      const row = orderRows.querySelector(`[data-id="${m.id}"]`);
+      if (!row) {
+        continue;
+      }
+      const value = Math.min(m.target, Math.floor(m.value));
+      const frac = m.target > 0 ? value / m.target : 0;
+      const prev = orderState.get(m.id);
+      if (!prev || prev.value !== value || prev.done !== m.done) {
+        row.querySelector(".o-bar i").style.transform = `scaleX(${frac.toFixed(3)})`;
+        row.querySelector(".o-num").textContent = m.done ? "DONE" : `${value}/${m.target}`;
+        row.classList.toggle("is-done", m.done);
+        row.classList.toggle("is-near", !m.done && frac >= 0.75);
+        // Progress ticks flash the row; the first sync is silent.
+        if (prev && value > prev.value && !m.done) {
+          bump(row, "is-tick");
+        }
+        if (prev && m.done && !prev.done) {
+          bump(row, "is-complete");
+        }
+        orderState.set(m.id, { value, done: m.done });
+      }
+      if (m.done) {
+        done += 1;
+      } else if (frac > focusFrac) {
+        focus = row;
+        focusFrac = frac;
+      }
+    }
+    for (const row of orderRows.children) {
+      row.classList.toggle("is-focus", row === focus);
+    }
+    orderCount.textContent = `${done}/${list.length}`;
+    orders.classList.toggle("is-all-done", done === list.length);
+  }
+
+  // Mission complete: big centre stamp (queued if several land at once).
+  const missionStamp = el("div", "rh-mission", root, `
+    <span class="rm-label t-meta">ORDER FILLED</span>
+    <b class="rm-title">MISSION COMPLETE</b>
+    <span class="rm-text"></span>
+    <span class="rm-reward t-meta"></span>`);
+  const stampQueue = [];
+  let stampTimer = 0;
+  function showNextStamp() {
+    const m = stampQueue.shift();
+    if (!m) {
+      missionStamp.classList.remove("is-on");
+      return;
+    }
+    missionStamp.querySelector(".rm-text").textContent = m.text;
+    missionStamp.querySelector(".rm-reward").textContent = `+${m.xp} XP · +${m.shards} ◆ AT RUN END`;
+    bump(missionStamp, "is-on");
+    stampTimer = setTimeout(showNextStamp, 2600);
+  }
+  function missionComplete(mission) {
+    stampQueue.push(mission);
+    if (!missionStamp.classList.contains("is-on")) {
+      clearTimeout(stampTimer);
+      showNextStamp();
+    }
+  }
+
+  // ── Mini music player (top-right): album art + title + progress ─────
+  const miniMusic = music
+    ? el("div", "rh-music", root, `
+      <img class="rmu-cover" alt="" />
+      <span class="rmu-text"><span class="t-meta rmu-status">${eqBars(3)}<span class="rmu-state">NOW PLAYING</span></span><b class="rmu-title"></b></span>
+      <span class="rmu-progress"><i></i></span>`)
+    : null;
+  const miniCover = miniMusic?.querySelector(".rmu-cover");
+  const miniTitle = miniMusic?.querySelector(".rmu-title");
+  const miniState = miniMusic?.querySelector(".rmu-state");
+  const miniProgress = miniMusic?.querySelector(".rmu-progress i");
+  function syncMiniMusic(state = music.getState()) {
+    const { track, playing, settings } = state;
+    const show = settings.source === "soundtrack" && Boolean(track);
+    miniMusic.classList.toggle("is-visible", show);
+    if (!show) {
+      return;
+    }
+    if (miniCover.getAttribute("src") !== track.cover.small) {
+      miniCover.setAttribute("src", track.cover.small);
+      bump(miniMusic, "is-new");
+    }
+    const label = trackLabel(track);
+    if (miniTitle.textContent !== label) {
+      miniTitle.textContent = label;
+      miniTitle.title = `${label} — ${track.artist}`;
+    }
+    miniState.textContent = playing ? "NOW PLAYING" : "PAUSED";
+    miniMusic.classList.toggle("is-paused", !playing);
+  }
+  /**
+   * Desktop: sit in the header row, just left of the ABOUT button (layout
+   * offsets, so the header's slide-in transform doesn't matter). Touch hides
+   * the header during runs, so the CSS spot beside PAUSE is used there.
+   */
+  function placeMiniMusic() {
+    if (!miniMusic || isTouch || !miniMusic.classList.contains("is-visible")) {
+      return;
+    }
+    const actions = document.querySelector(".app-header-actions");
+    const header = actions?.offsetParent;
+    if (!actions || !header || !actions.offsetWidth) {
+      miniMusic.style.removeProperty("top");
+      miniMusic.style.removeProperty("right");
+      return;
+    }
+    const left = header.offsetLeft + actions.offsetLeft;
+    const top = header.offsetTop + actions.offsetTop + (actions.offsetHeight - miniMusic.offsetHeight) / 2;
+    miniMusic.style.right = `${Math.round(window.innerWidth - left + 12)}px`;
+    miniMusic.style.top = `${Math.round(Math.max(8, top))}px`;
+  }
+  if (miniMusic) {
+    music.on("state", (state) => {
+      const wasVisible = miniMusic.classList.contains("is-visible");
+      syncMiniMusic(state);
+      if (!wasVisible) {
+        placeMiniMusic();
+      }
+    });
+    syncMiniMusic();
+    window.addEventListener("resize", placeMiniMusic);
+  }
+
+  // Touch: pause button (top-right). Desktop pauses by releasing the mouse.
+  const pauseButton = el("button", "rh-pause-btn", root, '<i></i><i></i><span class="t-meta">PAUSE</span>');
+  pauseButton.type = "button";
+  pauseButton.setAttribute("aria-label", "Pause");
+  pauseButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handlers.fire?.(false);
+    handlers.pause?.();
+  });
   const magLabel = ammo.querySelector(".rh-mag");
   const weaponName = ammo.querySelector(".rh-weapon-name");
   const weaponCode = ammo.querySelector(".rh-weapon-code");
@@ -265,7 +505,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     '<div class="rb-head"><span class="t-meta">CARRIER // HOSTILE</span><span class="t-meta rb-state">ARMORED</span></div><div class="rb-bar"><i></i></div>');
   const bossFill = bossBar.querySelector(".rb-bar i");
   const bossState = bossBar.querySelector(".rb-state");
-  const prompt = el("div", "rh-prompt", root, '<span class="t-meta">TRAINING</span><b></b>');
+  const prompt = el("div", "rh-prompt", root, '<span class="t-meta">WARM-UP</span><b></b>');
   const promptText = prompt.querySelector("b");
   const slowmo = el("div", "rh-slowmo", root);
   // Speed lines: radial streaks that fade in near top speed (pure CSS layer).
@@ -280,6 +520,10 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   // ── Screens ─────────────────────────────────────────────────────────────
   const screen = el("div", "runner-screen", document.body);
+  // EA FC-style "now playing" card on every new soundtrack track.
+  const nowPlaying = music
+    ? createNowPlayingToast(music, { isSuppressed: () => screen.dataset.mode === "music" })
+    : null;
 
   const controls = isTouch
     ? [
@@ -301,6 +545,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
         ["1–4 / Q", "WEAPON"],
         ["E", "SPECIAL"],
         ["ESC", "PAUSE"],
+        ["T", "AIM ASSIST"],
       ];
   const controlsHtml = controls
     .map(([key, label]) => `<div class="k-row"><kbd>${key}</kbd><span>${label}</span></div>`)
@@ -323,41 +568,45 @@ export function createRunnerHud({ isTouch = false } = {}) {
       </div>`;
   }
 
-  function renderStart(best, special = "ally", meta = null) {
+  function renderStart(best, special = "ally", meta = null, style = "neon", narration = "") {
     const daily = meta?.daily ?? false;
     screen.innerHTML = `
       <div class="ticket ticket--start">
         <div class="tk-main">
           <div class="tk-top">
-            <span class="t-meta">PASS TIER</span>
-            <span class="t-meta">GROUP<br><b>A</b></span>
-            <span class="t-meta">CLEARANCE<br><b>DRONE CURFEW</b></span>
+            <span class="t-meta">PLAYER<br><b>${STORY.player.toUpperCase()}</b></span>
+            <span class="t-meta">YEAR<br><b>${STORY.year}</b></span>
+            <span class="t-meta">SIMULATION<br><b>${STORY.world.toUpperCase()}</b></span>
             <span class="tk-arrow">↗</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag"><span class="t-meta">SECTOR:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
+            <div class="tk-tag"><span class="t-meta">${STORY.player.toUpperCase()} IS ON A BREAK, PLAYING:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
             <div class="tk-side">
-              <span class="tk-ghost">2077</span>
+              <span class="tk-ghost">${STORY.year}</span>
               <div class="tk-keys">${controlsHtml}</div>
             </div>
           </div>
           ${renderSpecialPicker(special)}
+          ${meta?.missions ? renderOrders(meta.missions, { title: "ORDERS // COMPLETE FOR XP + ◆", note: `RANK ${meta.rank}` }) : ""}
           ${meta ? `<div class="tk-nav">
             <button data-action="armory"><b>ARMORY</b><span class="t-meta">${meta.shards} ◆</span></button>
             <button data-action="missions"><b>MISSIONS</b><span class="t-meta">RANK ${meta.rank}${meta.missionsReady ? " · !" : ""}</span></button>
             <button data-action="records"><b>RECORDS</b><span class="t-meta">TOP 10</span></button>
+            <button data-action="music" class="tk-music"><b>MUSIC</b><span class="t-meta">${music ? `♪ ${music.catalog.length} TRACKS` : "OFF"}</span></button>
+            <button data-action="style" class="tk-style${style === "moebius" ? " is-on" : ""}" aria-pressed="${style === "moebius"}"><b>STYLE</b><span class="t-meta">${style === "moebius" ? "MOEBIUS ✎" : "NEON ◐"}</span></button>
           </div>` : ""}
           <div class="tk-foot">
-            <span class="t-meta">JUMP BARRIERS</span><span class="t-meta">SLIDE BEAMS</span><span class="t-meta">DODGE CARS</span><span class="t-meta">DROP DRONES</span>
+            <span class="t-meta">DODGE OBSTACLES</span><span class="t-meta">COLLECT ENERGY</span><span class="t-meta">DROP THE DRONES</span><span class="t-meta">DON'T GET CAUGHT</span>
           </div>
         </div>
         <div class="tk-stub">
-          <div class="tk-stub-head"><span class="t-meta">ONE RUN ONLY</span><span class="t-meta">2B</span></div>
+          <div class="tk-stub-head"><span class="t-meta">HOW FAR CAN SHE GET?</span><span class="t-meta">OE</span></div>
           <div class="tk-best"><span class="t-meta">${daily ? "DAILY BEST" : "BEST SCORE"}</span><b>${pad(daily ? meta.dailyBest : best, 6)}</b></div>
+          ${narration ? `<p class="tk-narr">${narration}</p>` : ""}
           ${meta ? `<button class="tk-daily${daily ? " is-on" : ""}" data-action="daily"><i></i><span><b>DAILY RUN</b><span class="t-meta">SAME SEED FOR EVERYONE TODAY</span></span></button>` : ""}
-          <button class="tk-button" data-action="start"><span>${daily ? "START DAILY" : "START RUN"}</span><span>→</span></button>
+          <button class="tk-button" data-action="start"><span>${daily ? "DAILY DIVE" : "DIVE IN"}</span><span>→</span></button>
           ${barcode(3, 70)}
-          <span class="t-code">/ / V X - R N 7 /</span>
+          <span class="t-code">/ / O L D - E A R T H /</span>
         </div>
       </div>`;
   }
@@ -365,15 +614,156 @@ export function createRunnerHud({ isTouch = false } = {}) {
   function renderPause() {
     screen.innerHTML = `
       <div class="label label--pause">
-        <div class="lb-head"><span class="t-meta">SIGNAL HELD</span><span class="t-meta">⚠</span></div>
+        <div class="lb-head"><span class="t-meta">SIM ON HOLD</span><span class="t-meta">${STORY.year}</span></div>
         <div class="lb-title">PAUSED</div>
         <div class="lb-rule"><i></i><i></i><i></i></div>
         <button class="tk-button" data-action="resume"><span>RESUME</span><span>→</span></button>
-        <div class="t-meta lb-note">CLICK TO RE-LOCK THE MOUSE</div>
+        <p class="lb-narr">${NARRATOR.pause()}</p>
+        <div class="t-meta lb-note">${isTouch ? "TAP RESUME TO CONTINUE" : "CLICK TO RE-LOCK THE MOUSE"}</div>
+        ${music ? renderMiniPlayer(music) : ""}
       </div>`;
   }
 
-  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [] }) {
+  /** Random in-run snapshot (createRunSnapshots) + share / save actions. */
+  function renderPhoto(photo) {
+    if (!photo) {
+      return "";
+    }
+    return `
+      <figure class="go-photo-frame" data-action="photo-view" role="button" tabindex="0" title="View full screen">
+        <img src="${photo.url}" alt="Snapshot from this run" />
+        <span class="go-photo-expand" aria-hidden="true">⛶</span>
+        <figcaption><span class="go-photo-rec">● REC</span><b>${photo.label}</b><span>${pad(photo.distance, 4)}M</span></figcaption>
+      </figure>
+      <div class="go-photo-actions">
+        <button class="tk-button tk-button--ghost" data-action="photo-share"><span>SHARE PIC</span><span>⇪</span></button>
+        <button class="tk-button tk-button--ghost go-photo-icon" data-action="photo-save" aria-label="Save photo" title="Save photo"><span>↓</span></button>
+        ${photo.count > 1 ? '<button class="tk-button tk-button--ghost go-photo-icon" data-action="photo-next" aria-label="Another snapshot" title="Another snapshot"><span>⟳</span></button>' : ""}
+      </div>`;
+  }
+
+  function setPhoto(photo) {
+    currentPhoto = photo;
+    const slot = screen.querySelector("[data-photo]");
+    if (slot) {
+      slot.innerHTML = renderPhoto(photo);
+    }
+    if (viewer.isOpen()) {
+      viewer.show(photo);
+    }
+  }
+
+  // ── Full-screen snapshot viewer (game over) ──────────────────────────
+  let currentPhoto = null;
+  const viewer = (() => {
+    const el = document.createElement("div");
+    el.className = "photo-viewer";
+    el.hidden = true;
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-label", "Snapshot viewer");
+    el.innerHTML = `
+      <img class="pv-img" alt="Snapshot from this run" />
+      <div class="pv-top">
+        <span class="pv-rec">● REC</span>
+        <b class="pv-label"></b>
+        <span class="t-meta pv-meta"></span>
+        <button type="button" class="pv-btn pv-close" data-pv="close" aria-label="Close (Esc)">✕</button>
+      </div>
+      <div class="pv-bar">
+        <button type="button" class="pv-btn" data-pv="another" title="Another snapshot (← / →)">⟳ ANOTHER</button>
+        <button type="button" class="pv-btn" data-pv="save" title="Save photo card">↓ SAVE</button>
+        <button type="button" class="pv-btn pv-btn--main" data-pv="share" title="Share photo card">SHARE PIC ⇪</button>
+      </div>`;
+    document.body.appendChild(el);
+    const img = el.querySelector(".pv-img");
+    const label = el.querySelector(".pv-label");
+    const meta = el.querySelector(".pv-meta");
+    const another = el.querySelector('[data-pv="another"]');
+
+    function show(photo) {
+      if (!photo) {
+        return;
+      }
+      img.src = photo.url;
+      label.textContent = photo.label;
+      meta.textContent = `${pad(photo.distance, 4)} M${photo.count > 1 ? ` · ${photo.count} SHOTS THIS RUN` : ""}`;
+      another.hidden = !(photo.count > 1);
+    }
+
+    function open() {
+      if (!currentPhoto) {
+        return;
+      }
+      show(currentPhoto);
+      el.hidden = false;
+      requestAnimationFrame(() => el.classList.add("is-open"));
+      // PC: real browser fullscreen for the photo.
+      if (!isTouch && el.requestFullscreen && !document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {});
+      }
+    }
+
+    function close() {
+      if (el.hidden) {
+        return;
+      }
+      el.classList.remove("is-open");
+      el.hidden = true;
+      if (document.fullscreenElement === el) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    }
+
+    el.addEventListener("click", (event) => {
+      const cmd = event.target.closest("[data-pv]")?.dataset.pv;
+      if (!cmd) {
+        if (event.target === el) {
+          close();
+        }
+        return;
+      }
+      event.stopPropagation();
+      if (cmd === "close") {
+        close();
+      } else if (cmd === "another") {
+        handlers.action?.("photo-next", {});
+      } else if (cmd === "save") {
+        handlers.action?.("photo-save", {});
+      } else if (cmd === "share") {
+        handlers.action?.("photo-share", {});
+      }
+    });
+    // Browser Esc leaves fullscreen first: close the viewer with it.
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && !el.hidden) {
+        close();
+      }
+    });
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (el.hidden) {
+          return;
+        }
+        if (event.key === "Escape") {
+          close();
+        } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && !another.hidden) {
+          handlers.action?.("photo-next", {});
+        }
+        // While viewing, keys stay here (Enter would restart the run).
+        if (event.key !== "Tab") {
+          event.stopPropagation();
+        }
+      },
+      { capture: true },
+    );
+
+    return { open, close, show, isOpen: () => !el.hidden };
+  })();
+
+  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null, missions = null, narration = null }) {
+    currentPhoto = photo;
+    const story = narration ?? { kicker: "CAUGHT AT", title: ["CAUGHT", `${pad(distance, 4)}M`], log: [], stamp: "" };
     screen.innerHTML = `
       <div class="ticket ticket--over">
         <div class="tk-main">
@@ -384,7 +774,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
             <span class="tk-arrow">↘</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag tk-tag--pink"><span class="t-meta">RESULT:</span><span class="tk-title">SIGNAL<br>LOST</span></div>
+            <div class="tk-tag tk-tag--pink${newBest ? " is-record" : ""}"><span class="t-meta">${story.kicker}</span><span class="tk-title">${story.title.join("<br>")}</span></div>
             <div class="tk-stats">
               <div><span class="t-meta">SCORE</span><b>${pad(score, 6)}</b></div>
               <div><span class="t-meta">DISTANCE</span><b>${pad(distance, 4)}<em>M</em></b></div>
@@ -392,12 +782,18 @@ export function createRunnerHud({ isTouch = false } = {}) {
               <div><span class="t-meta">${newBest ? "NEW BEST ★" : "BEST"}</span><b>${pad(best, 6)}</b></div>
             </div>
           </div>
-          ${renderRewards(rewards, meta ?? { shards: 0, rank: 1 })}
+          ${story.log.length ? `<div class="go-log">
+            <div class="go-log-head"><span class="t-meta">${story.author ?? STORY.player.toUpperCase()} // SESSION LOG</span><span class="t-meta">${story.stamp}</span></div>
+            <p>${story.log.map((line, i) => `<span style="--l:${i}">${line}</span>`).join(" ")}</p>
+          </div>` : ""}
+          ${renderRewards(missions && rewards ? { ...rewards, completed: [] } : rewards, meta ?? { shards: 0, rank: 1 })}
+          ${renderOrders(missions, { title: "ORDERS // THIS RUN", note: missions?.some((m) => m.done) ? "REWARDS BANKED ✓" : "KEEP PUSHING" })}
           ${build.length ? `<div class="go-build"><span class="t-meta">BUILD</span>${build.map((b) => `<em>${b}</em>`).join("")}</div>` : ""}
         </div>
         <div class="tk-stub">
-          <div class="tk-stub-head"><span class="t-meta">RE-ENTRY</span><span class="t-meta">${newBest ? "★" : "N1"}</span></div>
-          <button class="tk-button" data-action="restart"><span>RUN AGAIN</span><span>↻</span></button>
+          <div class="tk-stub-head"><span class="t-meta">STILL ON BREAK</span><span class="t-meta">${newBest ? "★" : "N1"}</span></div>
+          <button class="tk-button" data-action="restart"><span>ONE MORE RUN</span><span>↻</span></button>
+          <div class="go-photo" data-photo>${renderPhoto(photo)}</div>
           <div class="tk-row2">
             <button class="tk-button tk-button--ghost" data-action="share"><span>SHARE</span><span>⇪</span></button>
             <button class="tk-button tk-button--ghost" data-action="menu"><span>MENU</span><span>≡</span></button>
@@ -409,6 +805,10 @@ export function createRunnerHud({ isTouch = false } = {}) {
   }
 
   screen.addEventListener("click", (event) => {
+    // Soundtrack controls are handled by bindMusicControls.
+    if (event.target?.closest?.("[data-music]")) {
+      return;
+    }
     const specialOption = event.target?.closest?.("[data-special]")?.dataset.special;
     if (specialOption) {
       event.stopPropagation();
@@ -416,6 +816,11 @@ export function createRunnerHud({ isTouch = false } = {}) {
       return;
     }
     const action = event.target?.closest?.("[data-action]")?.dataset.action;
+    if (action === "photo-view") {
+      event.stopPropagation();
+      viewer.open();
+      return;
+    }
     if (action && handlers[action]) {
       event.stopPropagation();
       handlers[action]();
@@ -431,15 +836,19 @@ export function createRunnerHud({ isTouch = false } = {}) {
   });
 
   let hideTimer = 0;
+  let unbindMusic = null;
   function showScreen(mode, data = {}) {
     clearTimeout(hideTimer);
+    unbindMusic?.();
+    unbindMusic = null;
     screen.classList.remove("is-leaving");
     const changed = screen.dataset.mode !== mode;
     screen.dataset.mode = mode;
     screen.classList.remove("is-countdown");
     screen.classList.toggle("is-meta", ["armory", "missions", "records", "upgrade"].includes(mode));
+    screen.classList.toggle("is-music", mode === "music");
     if (mode === "start") {
-      renderStart(data.best ?? 0, data.special, data.meta ?? null);
+      renderStart(data.best ?? 0, data.special, data.meta ?? null, data.style ?? "neon", data.narration ?? "");
     } else if (mode === "armory") {
       screen.innerHTML = renderArmory(data.meta);
     } else if (mode === "missions") {
@@ -448,21 +857,43 @@ export function createRunnerHud({ isTouch = false } = {}) {
       screen.innerHTML = renderRecords(data.meta, data.dailyBest ?? 0);
     } else if (mode === "upgrade") {
       screen.innerHTML = renderUpgradePicker(data);
+    } else if (mode === "music" && music) {
+      // The full player shows the same info; no card on top of it.
+      nowPlaying?.hide();
+      const renderMusic = () => {
+        unbindMusic?.();
+        screen.innerHTML = renderMusicScreen(music, { back: data.back ?? "menu" });
+        unbindMusic = bindMusicControls(screen, music, { onRerender: renderMusic });
+      };
+      renderMusic();
     } else if (mode === "pause") {
       renderPause();
+      if (music) {
+        unbindMusic = bindMusicControls(screen, music, {
+          onRerender: () => showScreen("pause"),
+        });
+      }
     } else if (mode === "gameover") {
       renderGameOver(data);
     } else if (mode === "countdown") {
       screen.classList.add("is-countdown");
-      screen.innerHTML = `
-        <div class="countdown">
-          <span class="t-meta">BOARDING IN</span>
-          <b>${data.text ?? ""}</b>
-          <span class="t-meta">//VX-TR9 — HOLD LANE</span>
-        </div>`;
+      const digit = changed ? null : screen.querySelector(".countdown > b");
+      if (digit) {
+        // Keep the briefing up; only the digit changes.
+        digit.textContent = data.text ?? "";
+        bump(digit, "is-count");
+      } else {
+        screen.innerHTML = `
+          <div class="countdown">
+            <span class="t-meta">DIVING IN</span>
+            <b>${data.text ?? ""}</b>
+            <span class="t-meta">// ${STORY.player.toUpperCase()} — SYNCING TO ${STORY.world.toUpperCase()}</span>
+            ${data.missions ? `<div class="countdown-orders">${renderOrders(data.missions, { title: "MISSION BRIEFING", note: "TRACKED ON YOUR HUD" })}</div>` : ""}
+          </div>`;
+      }
     }
     // Entrance choreography: staggered rise for list-like children.
-    stagger(screen, ".tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *");
+    stagger(screen, ".ord-row, .tk-nav > *, .tk-stats > div, .go-rewards > *, .tk-row2 > *, .mt-grid > *, .mt-missions > *, .mt-recs > *, .mt-stats > *, .tk-special-options > *, .mu-rows > *");
     screen.classList.toggle("is-fresh", changed);
     if (mode === "gameover") {
       countUp(screen.querySelectorAll(".tk-stats b, .go-rewards b"));
@@ -472,6 +903,8 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
   /** Fade + drop the current screen, then clear it. */
   function hideScreen() {
+    unbindMusic?.();
+    unbindMusic = null;
     if (!screen.classList.contains("is-visible") || screen.dataset.mode === "countdown") {
       screen.dataset.mode = "";
       screen.classList.remove("is-visible", "is-leaving");
@@ -590,6 +1023,11 @@ export function createRunnerHud({ isTouch = false } = {}) {
 
     if (!s) {
       return;
+    }
+
+    if (miniMusic?.classList.contains("is-visible")) {
+      const { time, duration } = music.getState();
+      miniProgress.style.transform = `scaleX(${duration > 0 ? Math.min(1, time / duration).toFixed(3) : 0})`;
     }
 
     if (s.clock && s.clock !== last.clock) {
@@ -771,6 +1209,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     // Cards slide in from their edges each time the HUD comes up.
     if (visible && !root.classList.contains("is-visible")) {
       bump(root, "is-entering");
+      placeMiniMusic();
     }
     root.classList.toggle("is-visible", visible);
   }
@@ -785,7 +1224,11 @@ export function createRunnerHud({ isTouch = false } = {}) {
     showBanner,
     popup,
     toast,
+    setMissions,
+    missionComplete,
     setBoss,
+    setPhoto,
+    setFlight,
     setPrompt,
     setSlowmo,
     setWeaponLocks,
@@ -796,6 +1239,7 @@ export function createRunnerHud({ isTouch = false } = {}) {
     onStart: (fn) => { handlers.start = fn; },
     onRestart: (fn) => { handlers.restart = fn; },
     onResume: (fn) => { handlers.resume = fn; },
+    onPause: (fn) => { handlers.pause = fn; },
     onWeapon: (fn) => { handlers.weapon = fn; },
     onSpecial: (fn) => { handlers.special = fn; },
     onFire: (fn) => { handlers.fire = fn; },

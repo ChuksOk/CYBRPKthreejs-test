@@ -1,4 +1,4 @@
-import { getAudioVolume, subscribe } from "./audioState.js";
+import { getSfxVolume, subscribe } from "./audioState.js";
 import { createAdaptiveMusic } from "./createAdaptiveMusic.js";
 
 /** CC0 Kenney "Starter Kit FPS" sounds (see public/audio/runner/CREDITS.md). */
@@ -160,7 +160,11 @@ export async function renderExplosion(sampleRate, seed) {
 
 export function createRunnerAudio() {
   let context = null;
+  // `master` = sound-effects bus (SFX volume); the synth score has its own
+  // bus that follows the music volume.
   let master = null;
+  let musicBus = null;
+  let musicVolume = 0.7;
   let humGain = null;
   let humOsc = null;
   let music = null;
@@ -169,12 +173,15 @@ export function createRunnerAudio() {
   const buffers = new Map();
   let explosionVariants = null;
   let loading = null;
-  let volume = getAudioVolume();
+  // 0.85 = the original master level at default volume.
+  const SFX_LEVEL = 0.85;
+  const MUSIC_LEVEL = 0.85 / 0.7;
+  let sfx = getSfxVolume();
 
-  const unsubscribe = subscribe(({ audioVolume }) => {
-    volume = audioVolume;
+  const unsubscribe = subscribe(({ sfxVolume }) => {
+    sfx = sfxVolume;
     if (master) {
-      master.gain.value = 0.35 + volume;
+      master.gain.setTargetAtTime(SFX_LEVEL * sfx, context.currentTime, 0.03);
     }
   });
 
@@ -191,8 +198,11 @@ export function createRunnerAudio() {
     }
     context = new AudioContextClass();
     master = context.createGain();
-    master.gain.value = 0.35 + volume;
+    master.gain.value = SFX_LEVEL * sfx;
     master.connect(context.destination);
+    musicBus = context.createGain();
+    musicBus.gain.value = MUSIC_LEVEL * musicVolume;
+    musicBus.connect(context.destination);
 
     // Procedural drone hum: detuned saws through a lowpass, gain follows the
     // nearest drone distance.
@@ -213,7 +223,7 @@ export function createRunnerAudio() {
     filter.connect(humGain);
     humGain.connect(master);
 
-    music = createAdaptiveMusic(context, master);
+    music = createAdaptiveMusic(context, musicBus);
     music.setIntensity(musicIntensity);
     if (wantMusic) {
       music.start();
@@ -341,6 +351,13 @@ export function createRunnerAudio() {
     stopMusic() {
       wantMusic = false;
       music?.stop();
+    },
+    /** 0..1 — the synth score follows the soundtrack's music volume. */
+    setMusicVolume(value) {
+      musicVolume = Math.max(0, Math.min(1, value));
+      if (musicBus) {
+        musicBus.gain.setTargetAtTime(MUSIC_LEVEL * musicVolume, context.currentTime, 0.05);
+      }
     },
     setMusicIntensity(value) {
       if (Math.abs(value - musicIntensity) < 0.02) {

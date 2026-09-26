@@ -31,7 +31,7 @@ export const UPGRADES = [
   { id: "hands", name: "QUICK HANDS", desc: "Reload 35% faster", max: 2, apply: (m) => { m.reload *= 1.35; } },
   { id: "capacitor", name: "CAPACITOR", desc: "Shield regenerates 2× faster", max: 2, apply: (m) => { m.shieldRegen *= 2; } },
   { id: "wind", name: "SECOND WIND", desc: "Survive one fatal hit", max: 1, apply: (m) => { m.secondWind += 1; } },
-  { id: "magnet", name: "SHARD MAGNET", desc: "Pull shards in from every lane", max: 1, apply: (m) => { m.magnet = true; } },
+  { id: "magnet", name: "ENERGY MAGNET", desc: "Pull energy in from every lane", max: 1, apply: (m) => { m.magnet = true; } },
   { id: "battery", name: "SPECIAL BATTERY", desc: "Special charges 30% faster", max: 2, apply: (m) => { m.chargeRate *= 1.3; } },
   { id: "double", name: "DOUBLE CHARGE", desc: "Hold two specials at once", max: 1, apply: (m) => { m.maxCharges = 2; } },
   { id: "twin", name: "TWIN GUNS", desc: "Ally drone fires twice as fast", max: 1, apply: (m) => { m.allyTwin = true; }, requires: (ctx) => ctx.special === "ally" },

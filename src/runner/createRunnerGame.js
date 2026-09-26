@@ -10,8 +10,17 @@ import { createObstacles } from "./createObstacles.js";
 import { createPickups } from "./createPickups.js";
 import { createLaneLights } from "./createLaneLights.js";
 import { createRunnerHud } from "../ui/runner/createRunnerHud.js";
-import { shareRun } from "../ui/runner/shareCard.js";
+import { savePhoto, sharePhoto, shareRun } from "../ui/runner/shareCard.js";
+import { createRunSnapshots } from "./createRunSnapshots.js";
+import { createFlightMode } from "./createFlightMode.js";
+import { carMark } from "../ui/runner/metaScreens.js";
 import { createRunnerAudio } from "../audio/createRunnerAudio.js";
+import { createMusicPlayer } from "../audio/createMusicPlayer.js";
+import {
+  getGameplaySettings,
+  onGameplaySettingsChange,
+  setGameplaySetting,
+} from "../platform/gameplaySettings.js";
 import { performanceProfile } from "../platform/performanceProfile.js";
 import {
   getStoredRunnerBest,
@@ -22,6 +31,7 @@ import {
 import { createSpecials } from "../weapon/createSpecials.js";
 import { WEAPONS } from "../weapon/weaponTypes.js";
 import { RUNNER } from "./runnerConfig.js";
+import { NARRATOR, narrateGameOver, narrateStart } from "./narrator.js";
 import { createProgression } from "./progression.js";
 import { createRunMods, rollUpgradeChoices, UPGRADES } from "./upgrades.js";
 import { rr, rrDrone, rrPick, rrRange, rrShuffle, rrWeighted, setRunSeed, todayKey } from "./rng.js";
@@ -37,6 +47,9 @@ const COMBO_MAX = 4;
 const COMBO_DECAY_DELAY = 4;
 const DEATH_SLOWMO = 0.22;
 const DEATH_DURATION = 1.25;
+// Sky Run crash cinematic: real seconds of the push-in and world time scale.
+const CRASH_CAM_TIME = 1.7;
+const CRASH_TIME_SCALE = 0.3;
 const MAX_FRAME_DELTA = 1 / 20;
 // Last-chance slow-mo: when a lethal hit is imminent, time drops to 35% for
 // ~0.45 s of real time so the player can react (8 s cooldown).
@@ -120,13 +133,22 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     baseFov,
   });
   const isTouch = controls.isTouch();
+  // PC aim assist (Settings → Gameplay, or T in-run); touch always auto-aims.
+  let gameplayPrefs = getGameplaySettings();
+  onGameplaySettingsChange((prefs) => {
+    gameplayPrefs = prefs;
+  });
 
   const fx = createWeaponFx({ scene, camera });
   const audio = createRunnerAudio();
+  // Soundtrack catalog (menus + runs); the synth score is the alternative.
+  const music = createMusicPlayer();
   let xrHud = null;
-  const hud = mirrorHud(createRunnerHud({ isTouch }), () => xrHud);
+  const hud = mirrorHud(createRunnerHud({ isTouch, music }), () => xrHud);
 
   const viewmodel = createViewmodel({ scene, camera });
+  // Random in-run photos; the render loop does the capture.
+  const snapshots = createRunSnapshots();
 
   const projectiles = createEnemyProjectiles({ scene, fx });
 
@@ -163,6 +185,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     build: [],
     sector: 1,
     lastRewards: null,
+    // Sky Run: next distance the flying-car pickup may appear.
+    nextFlightAt: 380,
+    flightPromptTimer: 0,
+    crashTimer: 0,
     missionTimer: 0,
   };
   const runStats = {};
@@ -298,6 +324,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
 
   const pickups = createPickups({ scene });
+  // Sky Run: flying-car power-up (Star Fox-style rail shooter mode).
+  const flight = createFlightMode({ scene, fx, pickups, carModel: world.car ?? null });
   const laneLights = performanceProfile.runnerLaneLights === false ? null : createLaneLights({ scene });
 
   const weapon = viewmodel
@@ -311,7 +339,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         audio,
         getWorldColliders: () => track?.colliders ?? [],
         getMods: () => runMods,
-        getMetaDamage: () => 1 + 0.06 * (meta.tiers.damage ?? 0),
+        // Armory: Hot Loads always; Car Cannons while flying the Sky Run car.
+        getMetaDamage: () =>
+          (1 + 0.06 * (meta.tiers.damage ?? 0)) * (flight.isActive() ? 1 + 0.1 * (meta.tiers.carGuns ?? 0) : 1),
         isUnlocked: (index) => progression.isWeaponUnlocked(index),
         onLocked: (index) => {
           hud.showBanner(`${WEAPONS[index]?.code ?? "GUN"} LOCKED — ARMORY`, 1.4);
@@ -349,6 +379,16 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
    */
   function useSpecial(launch) {
     if (game.state !== "running" || !specials.state.ready) {
+      return;
+    }
+    // Flying: launched straight from the car's nose (no hand throw).
+    if (flight.isActive()) {
+      flight.getMuzzle(_specialOrigin);
+      camera.getWorldDirection(_specialDir);
+      _specialOrigin.addScaledVector(_specialDir, 1.5);
+      if (specials.activate(_specialOrigin, _specialDir, player)) {
+        onSpecialLaunched();
+      }
       return;
     }
     if (launch?.origin && launch?.direction) {
@@ -404,6 +444,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     tutorialAction("jump");
   });
   controls.on("land", () => audio.play("land", { volume: 0.35 }));
+  controls.on("climb", () => audio.play("slide", { volume: 0.25, detune: 500 }));
+  controls.on("roll", () => {
+    audio.play("nearMiss", { volume: 0.35, detune: -300 });
+    controls.shake(0.04, 0.3);
+  });
   controls.on("slide", () => {
     actions.slide = game.clock;
     audio.play("slide", { volume: 0.3 });
@@ -413,6 +458,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     actions.laneLeft[currentLane] = game.clock;
     currentLane = lane;
     tutorialAction("lane");
+    if (flight.isActive()) {
+      audio.play("slide", { volume: 0.2, detune: 900 });
+    }
   });
   controls.on("lockChange", (locked) => {
     if (!locked && game.state === "running" && !isTouch) {
@@ -424,6 +472,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   // ── Sector themes (colour grade per sector) ─────────────────────────────
   let pipeline = null;
+  let visualStyle = null;
   let basePreset = null;
   function applySectorTheme(sector) {
     if (!pipeline?.applyLookPreset) {
@@ -465,6 +514,14 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.taken = {};
     game.build = [];
     controls.reset();
+    controls.setShakeEnabled(true);
+    flight.reset();
+    hud.setFlight(null);
+    weapon?.setMuzzleProvider?.(null);
+    weapon?.setVehicleMode?.(null);
+    viewmodel?.setVisible(true);
+    viewmodel?.setDeathProgress(-1);
+    snapshots.reset();
     weapon?.reset();
     weapon?.refreshMods?.();
     specials.reset(0.15 * (meta.tiers.charge ?? 0));
@@ -494,12 +551,28 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.slowmoCooldown = 0;
     game.invuln = 0;
     game.sector = 1;
+    game.nextFlightAt = firstFlightDistance();
+    game.flightPromptTimer = 0;
+    game.crashTimer = 0;
     game.deathDetail = "";
     currentLane = 1;
     cleanRun = 0;
     resetStats();
     syncMeta();
     track?.followGround(controls.state.x);
+  }
+
+  /** Mission rows for the HUD / briefing / tickets (live values mid-run). */
+  function missionView() {
+    return meta.missions.map((m) => ({
+      id: m.id,
+      text: m.text,
+      target: m.target,
+      value: m.done ? m.target : m.live ?? m.progress ?? 0,
+      done: Boolean(m.done),
+      xp: m.xp,
+      shards: m.shards,
+    }));
   }
 
   function metaSummary() {
@@ -509,16 +582,44 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       daily: game.daily,
       dailyBest: progression.todayDailyBest(),
       missionsReady: meta.missions.some((m) => m.done),
+      missions: missionView(),
     };
   }
 
   function showStart() {
-    hud.showScreen("start", { best: game.best, special: specials.state.type, meta: metaSummary() });
+    hud.showScreen("start", {
+      best: game.best,
+      special: specials.state.type,
+      meta: metaSummary(),
+      style: visualStyle?.get() ?? "neon",
+      narration: narrateStart({
+        runs: meta.runs,
+        best: Math.floor(game.best),
+        bestDistance: meta.records.reduce((max, r) => Math.max(max, r.distance ?? 0), 0),
+      }),
+    });
   }
+
+  /** Procedural score runs only when the soundtrack hands runs to it. */
+  function syncSynthScore() {
+    const inRun = game.state === "running" || game.state === "paused" || game.state === "upgrade";
+    if (inRun && music.wantsSynthInRuns()) {
+      audio.startMusic();
+    } else {
+      audio.stopMusic();
+    }
+  }
+  music.on("state", (state) => {
+    syncSynthScore();
+    // Synth score follows the music volume too.
+    audio.setMusicVolume(state.settings.volume);
+  });
+  audio.setMusicVolume(music.getState().settings.volume);
 
   function enterMenu() {
     restoreTheme();
     audio.stopMusic();
+    music.setContext("menu");
     resetRun();
     controls.setActive(true);
     controls.setInputEnabled(false);
@@ -536,6 +637,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     setRunSeed(game.daily ? todayKey() : null);
     game.nextObstacleX = controls.state.x + FIRST_OBSTACLE_DISTANCE;
     progression.beginRun();
+    hud.setMissions(missionView());
     weather?.randomize();
     applySectorTheme(1);
     game.tutorial = !meta.tutorialDone && !game.daily ? 0 : -1;
@@ -547,18 +649,19 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.hideScreen();
     hud.setVisible(true);
     game.countdown = 3;
-    hud.showScreen("countdown", { text: "3" });
+    hud.showScreen("countdown", { text: "3", missions: missionView() });
     audio.play("countdown");
     setState("countdown");
   }
 
-  function beginRun(label = "RUN") {
+  function beginRun(label = NARRATOR.dive()) {
     hud.hideScreen();
     hud.showBanner(label, 1.1);
     audio.play("go");
-    audio.startMusic();
     controls.setInputEnabled(true);
     setState("running");
+    music.setContext("run");
+    syncSynthScore();
     if (game.tutorial >= 0) {
       startTutorialStep();
     }
@@ -571,6 +674,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     controls.setInputEnabled(false);
     hud.showScreen("pause");
     setState("paused");
+    music.setContext("paused");
   }
 
   function resume() {
@@ -584,6 +688,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.hideScreen();
     controls.setInputEnabled(true);
     setState("running");
+    music.setContext("run");
   }
 
   /** Second wind (upgrade): survive one fatal hit. */
@@ -608,7 +713,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.deathCause = cause;
     game.deathDetail = detail;
     controls.setInputEnabled(false);
-    controls.shake(0.18, 0.6);
+    // One death jolt (~0.6 s real time under the death slow-mo), then no
+    // more shakes until the next run.
+    controls.shake(0.18, 0.6 * DEATH_SLOWMO);
+    controls.setShakeEnabled(false, { clear: false });
     hud.flashDamage(1);
     hud.setSlowmo(false);
     audio.play("crash", { volume: 0.6 });
@@ -616,10 +724,50 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     if (isTouch) {
       vibrate([80, 50, 160]);
     }
+    // Short run with no photo yet: keep the fatal frame.
+    if (!snapshots.count() && !snapshots.wantsCapture()) {
+      snapshots.request({ ...photoMoment(), label: "CAUGHT" });
+    }
+    // Hands let go of the gun; animated over DEATH_DURATION (real time).
+    viewmodel?.setDeathProgress(0);
     setState("dying");
+    music.setContext("dead");
+  }
+
+  const MOMENT_LABELS = ["MID-RUN", "FULL SEND", "NEON RUSH", "STREET LEVEL", "NO BRAKES"];
+
+  /** Caption data for a snapshot, read at capture time. */
+  function photoMoment() {
+    let label = MOMENT_LABELS[Math.floor(Math.random() * MOMENT_LABELS.length)];
+    if (drones.getBoss()) {
+      label = "BOSS FIGHT";
+    } else if (game.slowmo > 0) {
+      label = "LAST CHANCE";
+    } else if (game.combo >= 2.5) {
+      label = "ON A STREAK";
+    }
+    return {
+      label,
+      distance: game.distance,
+      sector: game.sector,
+      combo: game.combo,
+      kills: game.kills,
+      speed: controls.state.speed * 3.6,
+      weather: weather?.getLabel?.() ?? null,
+    };
+  }
+
+  function finalStats() {
+    // Whole points only (score accrues fractionally with distance).
+    return { score: Math.floor(game.score), distance: Math.floor(game.distance), kills: game.kills, daily: game.daily };
+  }
+
+  function photoView(shot) {
+    return shot ? { url: shot.canvas.toDataURL("image/jpeg", 0.82), label: shot.moment?.label ?? "MID-RUN", distance: shot.moment?.distance ?? 0, count: snapshots.count() } : null;
   }
 
   function showGameOver() {
+    const previousBest = Math.floor(game.daily ? meta.daily.best ?? 0 : game.best);
     const newBest = game.score > game.best;
     if (newBest) {
       game.best = game.score;
@@ -627,6 +775,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
     runStats.distance = game.distance;
     runStats.cleanDistance = Math.max(runStats.cleanDistance, cleanRun);
+    // Orders as they stood this run (endRun swaps finished ones for new).
+    progression.trackRun(runStats);
+    const missions = missionView();
     const rewards = progression.endRun({
       ...runStats,
       score: game.score,
@@ -636,10 +787,33 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     });
     game.lastRewards = rewards;
     controls.exitPointerLock();
+    controls.setShakeEnabled(false);
     hud.setVisible(false);
     hud.setBoss(null);
     hud.setPrompt(null);
+    const narration = narrateGameOver({
+      distance: game.distance,
+      score: Math.floor(game.score),
+      kills: game.kills,
+      cause: game.deathCause,
+      detail: game.deathDetail,
+      sector: game.sector,
+      time: game.clock,
+      nearMisses: runStats.nearMisses,
+      cleanDistance: runStats.cleanDistance,
+      energy: runStats.shards,
+      flights: runStats.flights ?? 0,
+      bossKills: runStats.bossKills,
+      missionsDone: rewards.completed.length,
+      newBest: game.daily ? rewards.dailyBest : newBest,
+      best: previousBest,
+      runs: meta.runs,
+      daily: game.daily,
+      weather: weather?.getLabel?.() ?? null,
+      dayLabel: dayNight?.getLabel?.() ?? null,
+    });
     hud.showScreen("gameover", {
+      narration,
       score: game.score,
       distance: game.distance,
       kills: game.kills,
@@ -651,6 +825,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       meta,
       daily: game.daily,
       build: game.build,
+      photo: photoView(snapshots.pickRandom()),
+      missions,
     });
     setState("dead");
   }
@@ -662,12 +838,19 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.setVisible(true);
     prepareRun();
     controls.requestPointerLock();
-    beginRun("GO");
+    beginRun(NARRATOR.again());
   }
 
   hud.onStart(startCountdown);
   hud.onRestart(restart);
   hud.onResume(resume);
+  hud.onPause(pause);
+  // Backgrounding the tab / app mid-run pauses instead of running blind.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      pause();
+    }
+  });
   hud.onWeapon((index) => {
     if (game.state === "running") {
       weapon?.selectWeapon(index);
@@ -689,6 +872,16 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       case "daily":
         game.daily = !game.daily;
         showStart();
+        break;
+      case "music":
+        hud.showScreen("music", { back: game.state === "paused" ? "music-back" : "menu" });
+        break;
+      case "music-back":
+        if (game.state === "paused") {
+          hud.showScreen("pause");
+        } else {
+          showStart();
+        }
         break;
       case "menu":
         if (game.state === "dead") {
@@ -718,7 +911,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       }
       case "share":
         shareRun({
-          score: game.score,
+          score: Math.floor(game.score),
           distance: game.distance,
           kills: game.kills,
           cause: game.deathCause,
@@ -730,12 +923,41 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       case "upgrade":
         hud.pickCard(data.id, () => pickUpgrade(data.id));
         break;
+      case "style":
+        visualStyle?.set(visualStyle.get() === "moebius" ? "neon" : "moebius");
+        audio.ensureContext();
+        audio.play("pickup", { volume: 0.4 });
+        break;
+      case "photo-share":
+        if (snapshots.getChosen()) {
+          sharePhoto(snapshots.getChosen(), finalStats());
+        }
+        break;
+      case "photo-save":
+        if (snapshots.getChosen()) {
+          savePhoto(snapshots.getChosen(), finalStats());
+        }
+        break;
+      case "photo-next":
+        hud.setPhoto(photoView(snapshots.pickRandom()));
+        break;
       default:
         break;
     }
   });
 
   document.addEventListener("keydown", (event) => {
+    // T: toggle PC aim assist mid-run.
+    if (event.code === "KeyT" && !event.repeat && !isTouch && (game.state === "running" || game.state === "paused")) {
+      setGameplaySetting("aimAssist", !gameplayPrefs.aimAssist);
+      hud.showBanner(gameplayPrefs.aimAssist ? "AIM ASSIST ON" : "AIM ASSIST OFF", 1.1);
+      return;
+    }
+    // N: skip to the next soundtrack track (menus and runs).
+    if (event.code === "KeyN" && !event.repeat && music.getState().settings.source === "soundtrack") {
+      music.next();
+      return;
+    }
     if (game.state === "upgrade") {
       const index = ["Digit1", "Digit2", "Digit3", "Numpad1", "Numpad2", "Numpad3"].indexOf(event.code) % 3;
       if (index >= 0 && game.upgradeChoices[index]) {
@@ -836,7 +1058,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function finishTutorial() {
     game.tutorial = -1;
     hud.setPrompt(null);
-    hud.showBanner("TRAINING COMPLETE", 1.8);
+    hud.showBanner(NARRATOR.warmedUp(), 1.8);
     progression.setTutorialDone();
     game.nextObstacleX = controls.state.x + 40;
     game.droneTimer = 2;
@@ -864,9 +1086,117 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
   }
 
+  // ── Sky Run (flying car) ────────────────────────────────────────────────
+  function carUpgradeLevel() {
+    return ["carHull", "carGuns", "carRepair", "carPermit"].reduce((sum, id) => sum + (meta.tiers[id] ?? 0), 0);
+  }
+
+  function flightHud() {
+    return {
+      hull: flight.getHullFraction(),
+      hp: flight.state.hull,
+      max: flight.state.maxHull,
+      time: flight.state.time,
+      mark: carMark(carUpgradeLevel()),
+    };
+  }
+
+  /** Armory Sky Permit: first appearance and spacing shrink per level. */
+  function firstFlightDistance() {
+    return 380 - 80 * (meta.tiers.carPermit ?? 0);
+  }
+
+  function startFlight() {
+    if (flight.isActive() || game.state !== "running") {
+      return;
+    }
+    flight.enter(controls.state.x, { maxHull: RUNNER.flightHull * (1 + 0.2 * (meta.tiers.carHull ?? 0)) });
+    controls.setFlight(true);
+    // Chase cam: the rifle / hands hide; tracers leave from the car's cannons.
+    viewmodel?.setVisible(false);
+    weapon?.setMuzzleProvider?.((target) => flight.getMuzzle(target));
+    // Car cannons: no ammo / reloads; rays start level with the car.
+    weapon?.setVehicleMode?.({ rayOffset: RUNNER.chaseDistance - 1 });
+    // Ground obstacles don't matter up here.
+    obstacles.clear();
+    runStats.flights = (runStats.flights ?? 0) + 1;
+    hud.showBanner("SKY RUN", 1.8);
+    hud.setPrompt(isTouch ? "SWIPE ↑↓ CLIMB / DIVE · ←→ STRAFE" : "W / S  CLIMB · DIVE   —   A / D  STRAFE");
+    game.flightPromptTimer = 3.2;
+    hud.setFlight(flightHud());
+    audio.play("upgrade", { volume: 0.7 });
+    audio.play("go", { volume: 0.5, detune: -300 });
+    controls.shake(0.08, 0.5);
+    if (isTouch) {
+      vibrate([40, 30, 80]);
+    }
+  }
+
+  /** Car destroyed: explode, drop the runner back to the street. */
+  /**
+   * Car destroyed: explosion + crash cinematic (camera pushes in on the
+   * wreck in slow motion), then finishCrash() drops the runner back to the
+   * street in first person.
+   */
+  function endFlight() {
+    if (!flight.isActive()) {
+      return;
+    }
+    flight.destroy(controls.state.speed);
+    weapon?.setMuzzleProvider?.(null);
+    weapon?.setVehicleMode?.(null);
+    controls.setTrigger(false);
+    controls.setInputEnabled(false);
+    controls.startCrashCam((target) => flight.getCarPosition(target), CRASH_CAM_TIME);
+    game.crashTimer = CRASH_CAM_TIME;
+    game.invuln = Math.max(game.invuln, 99);
+    // The spawner cursor is stale since take-off: restart it ahead.
+    game.nextObstacleX = controls.state.x + 70;
+    hud.setFlight(null);
+    hud.setPrompt(null);
+    hud.showBanner("CAR DOWN", 1.4);
+    audio.play("explosion", { volume: 0.9 });
+    audio.play("crash", { volume: 0.5 });
+    controls.shake(0.18, 0.9);
+    hud.flashDamage(0.6);
+    if (isTouch) {
+      vibrate([120, 60, 180]);
+    }
+  }
+
+  function finishCrash() {
+    game.crashTimer = 0;
+    controls.stopCrashCam();
+    controls.setFlight(false);
+    controls.setInputEnabled(true);
+    viewmodel?.setVisible(true);
+    hud.showBanner("BACK ON FOOT", 1.6);
+    // A breather: invulnerable landing, a slow-mo beat, a clear street.
+    game.invuln = 2.6;
+    game.slowmo = 0.5;
+    game.nextObstacleX = controls.state.x + 70;
+  }
+
+  function damageCar(amount) {
+    game.sinceDamage = 0;
+    game.combo = 1;
+    hud.flashDamage(0.3);
+    audio.play("damage", { volume: 0.45, detune: -400 });
+    controls.shake(0.06, 0.25);
+    hud.setFlight({ ...flightHud(), hit: true });
+    if (flight.damage(amount)) {
+      endFlight();
+    }
+  }
+
   // ── Combat ─────────────────────────────────────────────────────────────
   function damagePlayer(amount, cause = "SHOT DOWN", detail = "") {
     if (game.state !== "running" || game.invuln > 0) {
+      return;
+    }
+    // Flying: the car's hull takes every hit instead of the runner.
+    if (flight.isActive()) {
+      damageCar(amount);
       return;
     }
     const absorbed = Math.min(game.shield, amount);
@@ -919,6 +1249,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   function spawnRewardLine(x, freeLanes, lanes) {
     const d = difficulty();
+    // Sky Run power-up: rare, never during the tutorial, spaced out.
+    if (game.tutorial < 0 && game.distance >= game.nextFlightAt && freeLanes.length && rr() < 0.22) {
+      pickups.spawn("flycar", x - 8, rrPick(freeLanes), 1.2);
+      game.nextFlightAt = game.distance + rrRange(900, 1400) * (1 - 0.18 * (meta.tiers.carPermit ?? 0));
+      return;
+    }
     if (rr() < 0.09 + d * 0.04) {
       const lane = freeLanes.length ? rrPick(freeLanes) : lanes[0];
       const id = rrWeighted([
@@ -1078,7 +1414,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   function spawnSectorWave() {
-    hud.showBanner(`SECTOR ${game.sector}`, 1.8);
+    hud.showBanner(`SECTOR ${game.sector} — THE GAME ADAPTS`, 1.8);
     applySectorTheme(game.sector);
     const waveSize = Math.min(3, 1 + Math.floor(difficulty() * 3));
     for (let i = 0; i < waveSize; i++) {
@@ -1092,7 +1428,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     }
     const boss = drones.spawn("carrier", player, { force: true });
     if (boss) {
-      hud.showBanner("CARRIER INBOUND", 2.2);
+      hud.showBanner("THE GAME SENDS A CARRIER", 2.2);
       audio.play("boss", { volume: 0.7 });
       if (isTouch) {
         vibrate([100, 60, 100]);
@@ -1107,6 +1443,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     player.z = s.z;
     player.eyeY = s.feetY + s.eyeHeight;
     player.speed = s.speed;
+    // Flying: drones hover relative to a virtual floor below the car, so
+    // the dogfight happens at the car's altitude.
+    player.floorY = flight.isActive() ? s.flightY - 4.5 : RUNNER.floorY;
     controls.getPlayerBox(playerBox);
   }
 
@@ -1122,6 +1461,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     pickups.shiftX(shift);
     fx.shiftX(shift);
     specials.shiftX(shift);
+    flight.shiftX(shift);
     game.nextObstacleX += shift;
   }
 
@@ -1288,8 +1628,12 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function simulateWorld(delta, { running }) {
     syncPlayer();
 
+    const flying = flight.isActive();
     if (running) {
-      updateObstacleSpawner();
+      // No ground obstacles while flying or during the crash cinematic.
+      if (!flying && game.crashTimer <= 0) {
+        updateObstacleSpawner();
+      }
       updateDroneSpawner(delta);
       if (game.distance >= game.nextBoss && game.tutorial < 0) {
         spawnBoss();
@@ -1313,9 +1657,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       onHitAlly: (damage) => specials.damageAlly(damage),
     });
 
+    // Sky Run: car pose, shard lines, wreck animation (runs after a crash too).
+    flight.update(delta, controls.state);
+
     if (running) {
-      checkObstacleArrivals();
-      const hit = obstacles.update(playerBox, player.x);
+      const hit = flying ? null : (checkObstacleArrivals(), obstacles.update(playerBox, player.x));
       if (hit && game.tutorial < 0 && game.invuln <= 0) {
         const cause = hit.kind === "car" ? "HIT A PARKED CAR" : hit.kind === "beam" ? "CLOTHESLINED" : "TRIPPED A BARRIER";
         const detail = `${hit.kind.toUpperCase()} · LANE ${hit.lane + 1} · ${Math.round(controls.state.speed * 3.6)} KM/H`;
@@ -1336,6 +1682,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
         } else if (pickup.id === "health") {
           game.health = Math.min(RUNNER.maxHealth, game.health + 35);
           hud.showBanner("INTEGRITY +35", 1.2);
+        } else if (pickup.id === "flycar") {
+          startFlight();
         } else if (pickup.id === "overclock") {
           weapon?.addOverclock(6);
           hud.showBanner("OVERCLOCK", 1.4);
@@ -1345,6 +1693,13 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
     if (running && isTouch) {
       controls.autoAim(pickAutoAimTarget(), delta);
+    } else if (running && gameplayPrefs.aimAssist) {
+      // Mouse: soft magnetism toward a real target only, never re-centres.
+      controls.autoAim(pickAutoAimTarget(), delta, {
+        recenter: false,
+        speed: 1 + gameplayPrefs.aimAssistStrength * 5,
+        holdMs: 260,
+      });
     }
     specials.update(delta, player);
     weapon?.update(delta, { canFire: running });
@@ -1368,7 +1723,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       return;
     }
     game.slowmoCooldown -= realDelta;
-    if (game.slowmo <= 0 && game.slowmoCooldown <= 0 && game.tutorial < 0 && lethalHitImminent()) {
+    if (game.slowmo <= 0 && game.slowmoCooldown <= 0 && game.tutorial < 0 && !flight.isActive() && lethalHitImminent()) {
       game.slowmo = LAST_CHANCE_TIME;
       game.slowmoCooldown = LAST_CHANCE_COOLDOWN;
       audio.play("nearMiss", { volume: 0.3, detune: -1200 });
@@ -1378,19 +1733,44 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       game.slowmo -= realDelta;
       delta *= LAST_CHANCE_SCALE;
     }
-    hud.setSlowmo(game.slowmo > 0);
+    // Crash cinematic: heavy slow-mo on real time, then back on foot.
+    if (game.crashTimer > 0) {
+      game.crashTimer -= realDelta;
+      delta *= CRASH_TIME_SCALE;
+      if (game.crashTimer <= 0) {
+        finishCrash();
+      }
+    }
+    hud.setSlowmo(game.slowmo > 0 || game.crashTimer > 0);
     game.clock += delta;
     game.invuln = Math.max(0, game.invuln - delta);
 
     const d = difficulty();
     const eased = 1 - Math.pow(1 - d, 1.6);
-    controls.setSpeed(THREE.MathUtils.lerp(RUNNER.startSpeed, RUNNER.maxSpeed, eased));
+    const boost = flight.isActive() ? RUNNER.flightSpeedBoost : 1;
+    controls.setSpeed(THREE.MathUtils.lerp(RUNNER.startSpeed, RUNNER.maxSpeed, eased) * boost);
     controls.update(delta);
     applyWrap();
     track?.followGround(controls.state.x);
     const step = controls.state.speed * delta;
     game.distance += step;
     cleanRun += step;
+    if (game.flightPromptTimer > 0) {
+      game.flightPromptTimer -= delta;
+      if (game.flightPromptTimer <= 0 && game.tutorial < 0) {
+        hud.setPrompt(null);
+      }
+    }
+    if (flight.isActive()) {
+      // Sky Run pays ×1.5 on distance.
+      game.bonus += step * 0.5;
+      // Armory Auto-Repair: hull regenerates after 2 s without a hit.
+      const repair = meta.tiers.carRepair ?? 0;
+      if (repair > 0 && game.sinceDamage > 2) {
+        flight.repair(3 * repair * delta);
+      }
+      hud.setFlight(flightHud());
+    }
     dayNight?.update(delta);
     weather?.update(delta);
 
@@ -1410,6 +1790,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
     simulateWorld(delta, { running: true });
     game.score = Math.floor(game.distance) + game.bonus;
+    snapshots.update(delta, photoMoment);
     if (game.state !== "running") {
       return;
     }
@@ -1427,9 +1808,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       runStats.distance = game.distance;
       runStats.cleanDistance = Math.max(runStats.cleanDistance, cleanRun);
       for (const mission of progression.trackRun(runStats)) {
-        hud.toast("MISSION COMPLETE", mission.text);
-        audio.play("mission", { volume: 0.5 });
+        hud.missionComplete(mission);
+        audio.play("mission", { volume: 0.7 });
       }
+      hud.setMissions(missionView());
     }
 
     // Sector gate → upgrade picker.
@@ -1480,6 +1862,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       }
       case "dying": {
         const slow = delta * DEATH_SLOWMO;
+        viewmodel?.setDeathProgress(game.stateTime / DEATH_DURATION);
         controls.update(slow, { simulateMovement: false });
         simulateWorld(slow, { running: false });
         if (game.stateTime >= DEATH_DURATION) {
@@ -1570,6 +1953,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       projectiles.setWarmupVisible(true, _warmPos);
       obstacles.setWarmupVisible(true, _warmPos);
       pickups.setWarmupVisible(true, _warmPos);
+      flight.setWarmupVisible(true, _warmPos);
       viewmodel?.setWarmupVisible(true);
     },
     end() {
@@ -1579,6 +1963,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       projectiles.setWarmupVisible(false);
       obstacles.setWarmupVisible(false);
       pickups.setWarmupVisible(false);
+      flight.setWarmupVisible(false);
       viewmodel?.setWarmupVisible(false);
     },
   };
@@ -1589,6 +1974,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     drones.group,
     projectiles.group,
     pickups.group,
+    flight.group,
     ...(laneLights ? [laneLights.mesh] : []),
     ...fx.hideObjects,
     ...(viewmodel ? [viewmodel.rig] : []),
@@ -1605,6 +1991,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     pickups,
     fx,
     audio,
+    music,
+    snapshots,
     game,
     progression,
     runStats,
@@ -1624,8 +2012,21 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     setPipeline: (value) => {
       pipeline = value;
     },
+    /** { get(), set(id) } visual style controller (menu STYLE button). */
+    setVisualStyle: (value) => {
+      visualStyle = value;
+      // Keep the start ticket's STYLE chip in sync with Settings.
+      visualStyle?.onChange?.(() => {
+        if (game.state === "menu" && hud.getScreenMode() === "start") {
+          showStart();
+        }
+      });
+    },
     enterMenu,
     placeAtStart,
+    flight,
+    /** Dev / debug: start a Sky Run now (__app.runner.startFlight()). */
+    startFlight,
     getState: () => game.state,
     viewmodel,
     player,

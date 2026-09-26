@@ -40,6 +40,9 @@ export const performanceProfile = {
 
   lensflareBlurRadius: 4,
 
+  /** Moebius style: 8-tap luminance Sobel for interior ink lines (off on mobile). */
+  moebiusColorEdges: true,
+
   smokeEnabled: true,
   exhaustCount: 50,
   ambientCount: 40,
@@ -92,6 +95,7 @@ export function applyDevicePerformanceDefaults() {
   performanceProfile.runnerTracerCount = 12;
   performanceProfile.runnerWeaponLight = false;
   performanceProfile.runnerSunShadowInterval = 0;
+  performanceProfile.moebiusColorEdges = false;
 
   if (isAppleMobile() || isSafari()) {
     performanceProfile.maxPixelRatio = 1.25;

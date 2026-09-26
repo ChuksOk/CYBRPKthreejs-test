@@ -73,6 +73,7 @@ export function createViewmodel({ scene, camera }) {
   let recoil = 0;
   let recoilVelocity = 0;
   let reloadT = -1;
+  let deathT = -1;
   let visible = true;
   let xrMode = false;
   let onKick = null;
@@ -100,6 +101,22 @@ export function createViewmodel({ scene, camera }) {
 
   function setReloadProgress(t) {
     reloadT = t;
+  }
+
+  /**
+   * Death animation progress: 0..1 while dying (hands let go, gun tumbles
+   * out of frame), −1 to put everything back on the gun.
+   */
+  function setDeathProgress(t) {
+    if (t >= 0 && deathT < 0) {
+      hands.release();
+      flash.mesh.visible = false;
+    } else if (t < 0 && deathT >= 0) {
+      hands.restore();
+      recoil = 0;
+      recoilVelocity = 0;
+    }
+    deathT = t < 0 ? -1 : Math.min(1, t);
   }
 
   function setVisible(value) {
@@ -180,10 +197,26 @@ export function createViewmodel({ scene, camera }) {
       THREE.MathUtils.clamp(-motion.laneVelocity * 0.02, -0.25, 0.25) + reloadRoll * 0.6,
     );
 
+    if (deathT >= 0) {
+      // Jolt on impact, then the gun drops away rolling out of the right hand.
+      const jolt = Math.sin(Math.min(1, deathT / 0.16) * Math.PI);
+      const fall = Math.max(0, deathT - 0.1);
+      pivot.position.x += 0.12 * fall;
+      pivot.position.y += 0.04 * jolt - 1.7 * fall * fall;
+      pivot.position.z += 0.02 * jolt + 0.12 * fall;
+      pivot.rotation.x += -0.25 * jolt + 1.5 * fall;
+      pivot.rotation.y += 0.9 * fall;
+      pivot.rotation.z += -0.3 * jolt - 2.8 * fall * fall;
+    }
+
     rig.position.copy(camera.position);
     rig.quaternion.copy(camera.quaternion);
     // After the rig pose: throws release at a world position.
-    hands.update(delta, reloadT);
+    if (deathT >= 0) {
+      hands.updateDeath(deathT, delta);
+    } else {
+      hands.update(delta, reloadT);
+    }
     hands.aimForearms();
     rig.updateMatrixWorld(true);
   }
@@ -200,6 +233,7 @@ export function createViewmodel({ scene, camera }) {
     kick,
     update,
     setReloadProgress,
+    setDeathProgress,
     /** Left hand throws the special; onRelease(worldPos) at the snap. */
     throwSpecial: (type, onRelease) => hands.throwItem(type, onRelease),
     isThrowing: () => hands.isThrowing(),

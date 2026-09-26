@@ -35,6 +35,22 @@ export const RUNNER = {
   /** Ground texture tile — segmentLength must be an integer multiple. */
   groundTile: 212 / 8,
 
+  // Sky Run (flying car power-up): wider lanes, three altitude tiers above
+  // the street floor, chase camera offsets.
+  // Measured against the city + billboard models (rays along each tier,
+  // ±1.8 m): cables / signs cross the street at 7–13 m above the floor, a
+  // left-side sign reaches z 17 at the top tier, and the right facades start
+  // at z 36. Lanes keep the whole car (±1.2 m + roll) inside z 17.5–35.5.
+  flightLaneZ: [20, 26.5, 33],
+  flightAltitudes: [16, 20.5, 25],
+  chaseDistance: 9.6,
+  chaseHeight: 2.9,
+  /** Steering springs: lateral glides with a hint of overshoot, vertical floatier. */
+  flightSpring: { lateralHz: 1.05, lateralDamping: 0.72, verticalHz: 0.85, verticalDamping: 0.8 },
+  flightRollDuration: 0.62,
+  flightSpeedBoost: 1.3,
+  flightHull: 300,
+
   maxHealth: 100,
   maxShield: 60,
   shieldRechargeDelay: 3.5,

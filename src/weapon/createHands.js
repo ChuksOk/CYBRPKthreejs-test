@@ -9,7 +9,7 @@ import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
  * Anatomy: tapered palm with thenar / hypothenar pads, four fingers of three
  * lathed segments (tapered, knuckle bulge, rounded tips), a two-segment thumb
  * on a metacarpal. Tactical glove with fabric sheen and weave, cut-off index
- * and thumb tips (skin + nails), off-white knuckle armour with neon trim, a
+ * and thumb tips (skin + nails), graphite knuckle armour with neon trim, a
  * wrist strap, a strip of skin and a techwear sleeve aimed at the elbow.
  *
  * Hands mount on anchors inside each gun (createGunModels `anchors`) so they
@@ -17,7 +17,9 @@ import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
  * on each shot, left hand to the magazine on reload, idle finger motion, and
  * a throw: the left hand leaves the gun holding the special (grenade / drone
  * orb), winds back, snaps forward and releases it (onRelease callback gets
- * the world position of the item).
+ * the world position of the item). On death both hands let go of the gun
+ * (release / updateDeath / restore): they flinch up into a bracing pose,
+ * fingers splayed, then slump out of frame while the gun tumbles away.
  */
 
 // Finger segment lengths (proximal, middle, distal) and base radius, metres.
@@ -332,6 +334,16 @@ const THROW_KEYS = [
   throwKey(0.7, [-0.15, -0.25, -0.52], [0.2, -0.6, -1], [0, 1, -0.5], 0.3),
 ];
 
+// Death: bracing pose (camera space) the hands flinch into after letting go.
+function deathKey(position, fingers, back) {
+  const { position: p, quaternion } = throwKey(0, position, fingers, back, 0);
+  return { position: p, quaternion };
+}
+const DEATH_BRACE = {
+  right: deathKey([0.13, -0.1, -0.34], [0.35, 1, -0.15], [0.1, -0.1, 1]),
+  left: deathKey([-0.15, -0.09, -0.35], [-0.35, 1, -0.15], [-0.1, -0.1, 1]),
+};
+
 /** @param {{ rig: THREE.Object3D }} options  camera-aligned viewmodel rig */
 export function createHands({ rig }) {
   const right = buildHand(-1);
@@ -353,9 +365,22 @@ export function createHands({ rig }) {
   const _scale = new THREE.Vector3();
   const _parentInv = new THREE.Matrix4();
   const _world = new THREE.Vector3();
+  const _axisX = new THREE.Vector3(1, 0, 0);
+  // Death: hands let go of the gun and are animated in rig (camera) space.
+  const death = {
+    active: false,
+    from: {
+      right: { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() },
+      left: { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() },
+    },
+  };
 
   function attach(gunModel) {
     gun = gunModel;
+    if (death.active) {
+      // Re-parented on restore().
+      return;
+    }
     gunModel.anchors.right.add(right.root);
     gunModel.anchors.right.parent.add(leftMount);
     leftMount.layers.set(VIEWMODEL_LAYER);
@@ -473,6 +498,77 @@ export function createHands({ rig }) {
     left.forearm.lookAt(rig.localToWorld(_elbow.copy(ELBOW_LEFT)));
   }
 
+  /** Let go of the gun: both hands move into rig space for the death pose. */
+  function release() {
+    if (death.active) {
+      return;
+    }
+    throwState.t = -1;
+    throwState.onRelease = null;
+    left.showHeld(null);
+    rig.updateMatrixWorld(true);
+    rig.attach(right.root);
+    rig.attach(left.root);
+    death.from.right.position.copy(right.root.position);
+    death.from.right.quaternion.copy(right.root.quaternion);
+    death.from.left.position.copy(left.root.position);
+    death.from.left.quaternion.copy(left.root.quaternion);
+    death.active = true;
+  }
+
+  /**
+   * Death animation: flinch into a bracing pose (fingers splayed, a short
+   * tremor), then go limp and slump out of the bottom of the frame.
+   * @param {number} t      0..1 progress
+   * @param {number} delta  real-time delta (tremor / idle motion)
+   */
+  function updateDeath(t, delta) {
+    if (!death.active) {
+      return;
+    }
+    time += delta;
+    const flinch = THREE.MathUtils.smoothstep(t, 0, 0.22);
+    const slump = THREE.MathUtils.smoothstep(t, 0.38, 1);
+    const tremor = Math.sin(time * 58) * 0.004 * flinch * (1 - slump);
+    const hands = [
+      [right, death.from.right, DEATH_BRACE.right, 1],
+      [left, death.from.left, DEATH_BRACE.left, -1],
+    ];
+    for (const [hand, from, brace, dir] of hands) {
+      hand.root.position.lerpVectors(from.position, brace.position, flinch);
+      hand.root.position.x += dir * (0.07 * slump + tremor);
+      hand.root.position.y += tremor * dir - 0.36 * slump * slump;
+      hand.root.position.z += 0.06 * slump;
+      hand.root.quaternion.slerpQuaternions(from.quaternion, brace.quaternion, flinch);
+      // Wrists go limp: fingers pitch forward and droop as the arms fall.
+      hand.root.quaternion.premultiply(_q.setFromAxisAngle(_axisX, -0.9 * slump));
+      const open = THREE.MathUtils.lerp(1, 0.06, flinch);
+      hand.pose({
+        curl: THREE.MathUtils.lerp(open, 0.55, slump),
+        thumb: THREE.MathUtils.lerp(1, 0.15, flinch) + 0.4 * slump,
+        spread: 0.3 * flinch * (1 - slump * 0.6),
+        time: time * (1 - slump),
+      });
+    }
+  }
+
+  /** Back on the gun (new run). */
+  function restore() {
+    if (!death.active) {
+      return;
+    }
+    death.active = false;
+    for (const hand of [right, left]) {
+      hand.root.position.set(0, 0, 0);
+      hand.root.quaternion.identity();
+      hand.root.scale.set(1, 1, 1);
+    }
+    leftMount.add(left.root);
+    if (gun) {
+      attach(gun);
+    }
+  }
+
   function setVisible(value) {
     right.root.visible = value;
     left.root.visible = value;
@@ -485,6 +581,10 @@ export function createHands({ rig }) {
     fire,
     throwItem,
     isThrowing: () => throwState.t >= 0,
+    release,
+    updateDeath,
+    restore,
+    isReleased: () => death.active,
     setVisible,
   };
 }

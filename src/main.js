@@ -47,7 +47,20 @@ import {
   applyDevicePerformanceDefaults,
   shouldCompileBeforeRenderLoop,
 } from "./platform/performanceProfile.js";
-import { getStoredLookPreset, isDevelopmentModeEnabled } from "./platform/userPreferences.js";
+import {
+  getStoredLookPreset,
+  getStoredVisualStyle,
+  isDevelopmentModeEnabled,
+  setStoredVisualStyle,
+} from "./platform/userPreferences.js";
+import { createGraphicsSettings } from "./platform/graphicsSettings.js";
+import { createMoebiusSettings } from "./post/moebiusSettings.js";
+import { getSfxVolume, setSfxVolume } from "./audio/audioState.js";
+import {
+  getGameplaySettings,
+  resetGameplaySettings,
+  setGameplaySetting,
+} from "./platform/gameplaySettings.js";
 import {
   applyXRPerformanceDefaults,
   wantsWebGPUXR,
@@ -148,6 +161,24 @@ async function init(loaderOverlay) {
     lensflare: pipeline.lensflare,
   });
 
+  // Visual style (neon grade / Moebius cel shading), toggled from the
+  // runner menu and Settings; persisted per browser.
+  const visualStyleListeners = new Set();
+  const visualStyle = {
+    get: () => pipeline.getVisualStyle(),
+    set(id) {
+      pipeline.setVisualStyle(id);
+      setStoredVisualStyle(pipeline.getVisualStyle());
+      document.documentElement.classList.toggle("style-moebius", pipeline.getVisualStyle() === "moebius");
+      visualStyleListeners.forEach((listener) => listener(pipeline.getVisualStyle()));
+    },
+    onChange: (listener) => visualStyleListeners.add(listener),
+  };
+  visualStyle.set(getStoredVisualStyle());
+  // Comic-style tuning / presets (live uniform edits, persisted).
+  const moebiusSettings = createMoebiusSettings({ moebius: pipeline.moebius });
+  moebiusSettings.applyStored();
+
   const adaptiveDpr = createAdaptiveDprController({
     renderer,
     pipeline,
@@ -198,6 +229,7 @@ async function init(loaderOverlay) {
     });
     world.collisionHideExtra = runnerGame.collisionHideObjects;
     runnerGame.setPipeline(pipeline);
+    runnerGame.setVisualStyle(visualStyle);
     const dayNight = createDayNightCycle({
       sceneResult,
       sky: world.sky,
@@ -230,6 +262,16 @@ async function init(loaderOverlay) {
     world.collisionHideExtra = [...world.collisionHideExtra, xrMode.rig];
   }
 
+  // Player graphics settings (Settings → Graphics), applied over device defaults.
+  const graphics = createGraphicsSettings({
+    pipeline,
+    ground: world.ground,
+    adaptiveDpr,
+    rain: world.rain,
+    getWeather: () => world.weather ?? null,
+  });
+  graphics.applyStored();
+
   const cameraLayout = createCameraLayoutSync({
     camera,
     getWalkControls: () => cameraDirector.walkControls,
@@ -259,6 +301,23 @@ async function init(loaderOverlay) {
     pipeline,
     inspectorSession,
     syncLighting: lighting.syncLighting,
+    graphics,
+    visualStyle,
+    moebiusSettings,
+    // Settings → Audio: soundtrack / synth volume + sound effects.
+    audio: {
+      getMusic: () => runnerGame?.music.getState().settings.volume ?? 0.7,
+      setMusic: (value) => runnerGame?.music.setVolume(value),
+      getSfx: getSfxVolume,
+      setSfx: setSfxVolume,
+    },
+    gameplay: {
+      get: getGameplaySettings,
+      set: setGameplaySetting,
+      reset: resetGameplaySettings,
+      // Touch always auto-aims; the toggle is for mouse players.
+      showAimAssist: Boolean(runnerGame) && !runnerGame.controls.isTouch(),
+    },
   });
 
   walkModeBridge.onChange = appShell.onWalkModeChange;
@@ -277,6 +336,9 @@ async function init(loaderOverlay) {
     devApp.world = world;
   }
   attachDevPerf(devApp, performanceTools.perfApi);
+  if (devApp) {
+    devApp.graphics = graphics;
+  }
 
   const { carEngineAudio, planeEngineAudio, wetFootstepAudio } =
     await appShell.initAudio();

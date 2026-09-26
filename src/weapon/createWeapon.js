@@ -126,6 +126,11 @@ export function createWeapon({
   function fireShot(assistTarget) {
     _origin.copy(camera.position);
     aimDirection(_direction);
+    // Vehicle (Sky Run chase cam): start the ray level with the car so
+    // geometry between the camera and the car can't swallow shots.
+    if (vehicle) {
+      _origin.addScaledVector(_direction, vehicle.rayOffset);
+    }
 
     if (assistTarget) {
       _toTarget.copy(assistTarget).sub(_origin).normalize();
@@ -179,8 +184,12 @@ export function createWeapon({
 
     _hitPoint.copy(_origin).addScaledVector(_direction, nearest);
 
-    viewmodel.getMuzzleWorldPosition(_muzzle);
-    fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xff4f74 : getTracerHex?.() ?? def.tracer);
+    if (muzzleProvider) {
+      muzzleProvider(_muzzle);
+    } else {
+      viewmodel.getMuzzleWorldPosition(_muzzle);
+    }
+    fx.tracer(_muzzle, _hitPoint, state.overclock > 0 ? 0xff4f74 : getTracerHex?.() ?? def.tracer, vehicle ? vehicle.tracerWidth : 1);
     fx.muzzleLight(_muzzle);
     viewmodel.kick(Math.min(2, def.recoil));
     controls.addRecoil((0.011 + Math.random() * 0.004) * def.recoil, (Math.random() - 0.5) * 0.006 * def.recoil);
@@ -264,20 +273,22 @@ export function createWeapon({
       return;
     }
 
-    const rate = (state.overclock > 0 ? def.overclockRate : def.fireRate) * mod("fireRate", 1);
+    const rate = (state.overclock > 0 ? def.overclockRate : def.fireRate) * mod("fireRate", 1) * (vehicle ? vehicle.rateScale : 1);
+    // Vehicle cannons never run dry (no hidden reloads while flying).
+    const infinite = state.overclock > 0 || Boolean(vehicle);
     while (state.cooldown <= 0) {
-      if (state.ammo <= 0 && state.overclock <= 0) {
+      if (state.ammo <= 0 && !infinite) {
         startReload();
         break;
       }
       fireShot(assistTarget);
-      if (state.overclock <= 0) {
+      if (!infinite) {
         state.ammo -= 1;
       }
       state.cooldown += 1 / rate;
     }
 
-    if (state.ammo <= 0 && state.overclock <= 0) {
+    if (state.ammo <= 0 && !infinite) {
       startReload();
     }
   }
@@ -315,10 +326,32 @@ export function createWeapon({
     viewmodel.setOverclock(false);
   }
 
+  /** Where tracers leave from (Sky Run: the car's cannons); null = rifle. */
+  let muzzleProvider = null;
+  /** Sky Run vehicle mode: { rayOffset, tracerWidth, rateScale } or null. */
+  let vehicle = null;
+
   return {
     state,
     update,
     reset,
+    setMuzzleProvider: (fn) => {
+      muzzleProvider = fn;
+    },
+    /**
+     * Car cannons: unlimited ammo (any reload is cancelled), ray starts
+     * `rayOffset` m ahead of the chase camera, thicker tracers, faster rate.
+     */
+    setVehicleMode(options) {
+      vehicle = options ? { rayOffset: 0, tracerWidth: 3.5, rateScale: 1.15, ...options } : null;
+      if (vehicle) {
+        state.reloading = false;
+        state.reloadTimer = 0;
+        state.ammo = magOf(def);
+        state.switchTimer = 0;
+        viewmodel.setReloadProgress(-1);
+      }
+    },
     startReload,
     addOverclock,
     selectWeapon,
