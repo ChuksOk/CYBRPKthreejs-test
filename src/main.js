@@ -273,6 +273,7 @@ async function init(loaderOverlay) {
     devApp.runner = runnerGame;
     devApp.xr = xrMode;
     devApp.camera = camera;
+    devApp.renderer = renderer;
   }
   attachDevPerf(devApp, performanceTools.perfApi);
 
