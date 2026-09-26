@@ -39,8 +39,11 @@ export const RUNNER = {
   // the street floor, chase camera offsets.
   flightLaneZ: [14.5, 22.5, 30.5],
   flightAltitudes: [4.5, 8.5, 12.5],
-  chaseDistance: 7.2,
-  chaseHeight: 2.3,
+  chaseDistance: 9.6,
+  chaseHeight: 2.9,
+  /** Steering springs: lateral glides with a hint of overshoot, vertical floatier. */
+  flightSpring: { lateralHz: 1.05, lateralDamping: 0.72, verticalHz: 0.85, verticalDamping: 0.8 },
+  flightRollDuration: 0.62,
   flightSpeedBoost: 1.3,
   flightHull: 100,
 

@@ -4,11 +4,86 @@ import { createPartKit } from "./modelKit.js";
 import { chrome, emissive, glass, gunFinish, gunmetal, rubber } from "./materials.js";
 
 /**
- * Hover car for the Sky Run power-up: a low wedge body with a bubble
- * canopy, four swivelling thruster pods, twin nose cannons and neon trim.
- * Built along +X (nose), +Y up, ~3.4 m long; two muzzle anchors sit at the
- * cannon tips so weapon tracers leave from the car.
+ * Hover car for the Sky Run power-up. Uses the project's Quadra (world.car,
+ * the same model as the alley hero car and the parked-car obstacles) fitted
+ * with flight hardware: hover pads under the wheel wells, twin rear jets and
+ * side cannon pods whose tips are the tracer muzzles. Without the Quadra
+ * (car feature off) a procedural wedge car stands in.
+ * Nose points +X, +Y up; `inner` is centred on the car so banking /
+ * barrel rolls pivot around its middle.
  */
+
+/** Quadra: GLB long axis is model +Z (headlights at +Z). */
+const QUADRA_YAW = Math.PI / 2;
+
+function cloneMovable(source) {
+  // The scene car has frozen static transforms: clones must update again.
+  const copy = source.clone(true);
+  copy.traverse((child) => {
+    child.matrixAutoUpdate = true;
+  });
+  return copy;
+}
+
+function buildQuadraCar(carModel) {
+  const m = getMaterials();
+  const inner = new THREE.Group();
+  inner.name = "sky-car";
+  const quadra = cloneMovable(carModel);
+  quadra.position.set(0, 0, 0);
+  quadra.rotation.set(0, QUADRA_YAW, 0);
+  quadra.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(quadra, true);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  quadra.position.sub(center);
+  inner.add(quadra);
+
+  const halfL = size.x / 2;
+  const halfW = size.z / 2;
+  const bottom = -size.y / 2;
+  const kit = createPartKit();
+  // Hover pads where the wheels meet the road: dark ring + downward glow.
+  for (const x of [halfL * 0.62, -halfL * 0.62]) {
+    for (const side of [-1, 1]) {
+      const z = side * (halfW - 0.28);
+      kit.tube("dark", 0.36, 0.08, "y", { position: [x, bottom + 0.1, z], radial: 24 });
+      kit.torus("chrome", 0.34, 0.025, { position: [x, bottom + 0.06, z], rotation: [Math.PI / 2, 0, 0], tubular: 28 });
+      kit.circle("thrust", 0.3, { position: [x, bottom + 0.05, z], rotation: [Math.PI / 2, 0, 0], segments: 28 });
+    }
+  }
+  // Twin rear jets under the bumper.
+  for (const side of [-1, 1]) {
+    const z = side * halfW * 0.45;
+    kit.tube("metal", 0.16, 0.34, "x", { position: [-halfL + 0.05, bottom + 0.32, z], radial: 20 });
+    kit.torus("chrome", 0.16, 0.022, { position: [-halfL - 0.12, bottom + 0.32, z], rotation: [0, Math.PI / 2, 0], tubular: 24 });
+    kit.circle("thrust", 0.13, { position: [-halfL - 0.13, bottom + 0.32, z], rotation: [0, -Math.PI / 2, 0], segments: 24 });
+  }
+  // Side cannon pods low on the flanks.
+  const podY = bottom + 0.42;
+  const podZ = halfW + 0.12;
+  for (const side of [-1, 1]) {
+    kit.box("metal", [1.2, 0.16, 0.16], { position: [halfL * 0.35, podY, side * podZ], radius: 0.05 });
+    kit.box("dark", [0.3, 0.12, 0.22], { position: [halfL * 0.1, podY, side * (podZ - 0.1)], radius: 0.04 });
+    kit.tube("metal", 0.05, 0.6, "x", { position: [halfL * 0.35 + 0.85, podY, side * podZ], radial: 12 });
+    kit.tube("chrome", 0.062, 0.1, "x", { position: [halfL * 0.35 + 1.18, podY, side * podZ], radial: 12 });
+    kit.box("neon", [0.9, 0.025, 0.02], { position: [halfL * 0.35, podY + 0.09, side * (podZ + 0.08)], radius: 0.008, segments: 1 });
+  }
+  const hardware = kit.build(m, { name: "sky-car-hardware" });
+  inner.add(hardware);
+
+  const muzzles = [-1, 1].map((side) => {
+    const muzzle = new THREE.Object3D();
+    muzzle.position.set(halfL * 0.35 + 1.24, podY, side * podZ);
+    inner.add(muzzle);
+    return muzzle;
+  });
+
+  const root = new THREE.Group();
+  root.name = "sky-car-root";
+  root.add(inner);
+  return { root, inner, muzzles, length: size.x };
+}
 
 const BODY = 0xd8dde3;
 const ACCENT = 0xff2f8a;
@@ -35,7 +110,15 @@ function getMaterials() {
   return materials;
 }
 
-export function createFlyingCarModel() {
+/** @param {{ carModel?: THREE.Object3D|null }} [options] */
+export function createFlyingCarModel({ carModel = null } = {}) {
+  if (carModel) {
+    return buildQuadraCar(carModel);
+  }
+  return buildProceduralCar();
+}
+
+function buildProceduralCar() {
   const kit = createPartKit();
   const L = 3.4;
 

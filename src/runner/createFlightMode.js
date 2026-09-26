@@ -71,12 +71,12 @@ function buildPylon() {
   return { mesh: kit.build(getHazardMaterials(), { name: "sky-pylon" }), half: new THREE.Vector3(0.45, height / 2, 1) };
 }
 
-export function createFlightMode({ scene, fx, pickups }) {
+export function createFlightMode({ scene, fx, pickups, carModel = null }) {
   const group = new THREE.Group();
   group.name = "sky-run";
   scene.add(group);
 
-  const car = createFlyingCarModel();
+  const car = createFlyingCarModel({ carModel });
   car.root.visible = false;
   group.add(car.root);
 
@@ -100,6 +100,8 @@ export function createFlightMode({ scene, fx, pickups }) {
     muzzleIndex: 0,
   };
   const _pos = new THREE.Vector3();
+  // Smoothed car attitude (radians) so the visual never snaps.
+  const attitude = { bank: 0, heading: 0, pitch: 0 };
 
   function hazardY(tier) {
     return RUNNER.floorY + RUNNER.flightAltitudes[tier];
@@ -185,6 +187,9 @@ export function createFlightMode({ scene, fx, pickups }) {
     state.wreck = null;
     car.root.visible = true;
     car.root.rotation.set(0, 0, 0);
+    attitude.bank = 0;
+    attitude.heading = 0;
+    attitude.pitch = 0;
   }
 
   /** Hull hit; returns true when the car is destroyed. */
@@ -267,18 +272,37 @@ export function createFlightMode({ scene, fx, pickups }) {
 
     // Car pose: follows the controls, banks with lateral speed, pitches with
     // climbs, noses slightly toward the aim.
-    const bob = Math.sin(state.time * 3.1) * 0.05;
+    // Hover float: two detuned sines so it never looks like a loop.
+    const bob = Math.sin(state.time * 2.3) * 0.06 + Math.sin(state.time * 3.7 + 1.3) * 0.025;
     // Lift-off: the car swoops in ahead of and below the runner while the
     // camera pulls back to the chase position (never inside the hull).
     const arrive = 1 - THREE.MathUtils.smootherstep(s.flightBlend, 0, 1);
-    car.root.position.set(s.x + arrive * 7, s.flightY + bob - arrive * 2.2, s.z);
-    car.root.rotation.set(
-      // +Z is screen-right: moving right dips the right (+Z) side.
-      THREE.MathUtils.clamp(s.laneVelocity * 0.055, -0.55, 0.55),
-      THREE.MathUtils.clamp(s.yaw * 0.25, -0.25, 0.25),
-      THREE.MathUtils.clamp(s.flightVy * 0.05 + s.pitch * 0.15, -0.35, 0.35),
-      "XYZ",
-    );
+    car.root.position.set(s.x + arrive * 9, s.flightY + bob - arrive * 2.4, s.z);
+
+    // Attitude targets. +Z is screen-right: moving right dips the right
+    // side (positive roll about the nose). Acceleration leads the bank so
+    // the car leans in as the move starts and counter-leans as it settles.
+    const speed = Math.max(4, s.speed);
+    const bankTarget = THREE.MathUtils.clamp(s.flightVz * 0.055 + s.flightAz * 0.008, -0.7, 0.7);
+    const headingTarget = -Math.atan2(s.flightVz, speed) * 1.1 + THREE.MathUtils.clamp(s.yaw * 0.18, -0.2, 0.2);
+    const pitchTarget = THREE.MathUtils.clamp(Math.atan2(s.flightVy, speed) * 1.2 + s.flightAy * 0.004, -0.4, 0.4);
+    const k = 1 - Math.exp(-delta * 11);
+    attitude.bank += (bankTarget - attitude.bank) * k;
+    attitude.heading += (headingTarget - attitude.heading) * k;
+    attitude.pitch += (pitchTarget - attitude.pitch) * k;
+
+    // Barrel roll: a full turn with ease-in-out, plus a little hop.
+    let roll = 0;
+    let hop = 0;
+    if (s.rollTime > 0) {
+      const t = 1 - s.rollTime / RUNNER.flightRollDuration;
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      roll = s.rollDir * eased * Math.PI * 2;
+      hop = Math.sin(t * Math.PI) * 0.35;
+    }
+    car.root.position.y += hop;
+    // Heading (Y) → pitch (Z, nose up) → bank (X, about the nose).
+    car.root.rotation.set(attitude.bank + roll, attitude.heading, attitude.pitch, "YZX");
     car.root.visible = true;
 
     // Spawner: patterns ahead, faster as the flight goes on.

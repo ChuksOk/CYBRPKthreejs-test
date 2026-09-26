@@ -284,7 +284,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
   const pickups = createPickups({ scene });
   // Sky Run: flying-car power-up (Star Fox-style rail shooter mode).
-  const flight = createFlightMode({ scene, fx, pickups });
+  const flight = createFlightMode({ scene, fx, pickups, carModel: world.car ?? null });
   const laneLights = performanceProfile.runnerLaneLights === false ? null : createLaneLights({ scene });
 
   const weapon = viewmodel
@@ -389,6 +389,10 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   });
   controls.on("land", () => audio.play("land", { volume: 0.35 }));
   controls.on("climb", () => audio.play("slide", { volume: 0.25, detune: 500 }));
+  controls.on("roll", () => {
+    audio.play("nearMiss", { volume: 0.35, detune: -300 });
+    controls.shake(0.04, 0.3);
+  });
   controls.on("slide", () => {
     actions.slide = game.clock;
     audio.play("slide", { volume: 0.3 });
@@ -398,6 +402,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     actions.laneLeft[currentLane] = game.clock;
     currentLane = lane;
     tutorialAction("lane");
+    if (flight.isActive()) {
+      audio.play("slide", { volume: 0.2, detune: 900 });
+    }
   });
   controls.on("lockChange", (locked) => {
     if (!locked && game.state === "running" && !isTouch) {
