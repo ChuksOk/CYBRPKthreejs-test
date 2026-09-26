@@ -160,14 +160,15 @@ function createTracers(scene, capacity) {
   }
   let cursor = 0;
 
-  function spawn(from, to, hex = 0x7df9ff) {
+  /** @param {number} [width]  thickness multiplier (Sky Run car cannons: thicker, longer-lived). */
+  function spawn(from, to, hex = 0x7df9ff, width = 1) {
     const tracer = tracers[cursor];
     cursor = (cursor + 1) % capacity;
-    tracer.life = 0.07;
+    tracer.life = width > 1 ? 0.1 : 0.07;
     tracer.mesh.visible = true;
     tracer.mesh.position.copy(from);
     tracer.mesh.lookAt(to);
-    tracer.mesh.scale.set(1, 1, Math.max(0.01, from.distanceTo(to)));
+    tracer.mesh.scale.set(width, width, Math.max(0.01, from.distanceTo(to)));
     tracer.uColor.value.set(hex);
     tracer.uOpacity.value = 1;
   }

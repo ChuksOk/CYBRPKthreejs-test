@@ -107,6 +107,11 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
     return RUNNER.floorY + RUNNER.flightAltitudes[tier];
   }
 
+  /** Pylons (18 m tall) span every flight tier: base 4 m under the lowest. */
+  function pylonBase() {
+    return hazardY(0) - 4;
+  }
+
   function takeHazard(kind) {
     return hazards.find((h) => !h.active && h.kind === kind) ?? null;
   }
@@ -152,7 +157,7 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
       for (const lane of lanes) {
         if (lane !== openLane && rr() < 0.5 + difficulty * 0.4) {
           const pylon = takeHazard("pylon");
-          if (pylon) placeHazard(pylon, x + 1.5, RUNNER.floorY, RUNNER.flightLaneZ[lane], "gate");
+          if (pylon) placeHazard(pylon, x + 1.5, pylonBase(), RUNNER.flightLaneZ[lane], "gate");
           break;
         }
       }
@@ -170,7 +175,7 @@ export function createFlightMode({ scene, fx, pickups, carModel = null }) {
       const order = [...lanes].sort(() => rr() - 0.5);
       for (let i = 0; i < blocked; i++) {
         const pylon = takeHazard("pylon");
-        if (pylon) placeHazard(pylon, x + i * 0.2, RUNNER.floorY, RUNNER.flightLaneZ[order[i]]);
+        if (pylon) placeHazard(pylon, x + i * 0.2, pylonBase(), RUNNER.flightLaneZ[order[i]]);
       }
       const free = order[blocked];
       const from = rrPick(tiers);

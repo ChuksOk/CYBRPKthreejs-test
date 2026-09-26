@@ -452,6 +452,11 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
 
   const _shake = new THREE.Vector3();
   const _chase = new THREE.Vector3();
+  const _crashTarget = new THREE.Vector3();
+  const _crashPos = new THREE.Vector3();
+  const _crashOffset = new THREE.Vector3(-5.2, 1.9, 3.4);
+  // Crash cinematic (Sky Run car destroyed): pushes in on the wreck.
+  let crashCam = null;
 
   function applyCamera(delta) {
     const bobActive = state.grounded && state.slideTime <= 0 ? 1 : 0;
@@ -501,6 +506,11 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       0,
       1,
     );
+    if (crashCam) {
+      applyCrashCam();
+      return;
+    }
+
     // Flight: wider view plus a small punch on fast strafes / dives.
     const strafePunch = state.flying ? Math.min(4, Math.hypot(state.flightVz, state.flightVy) * 0.35) : 0;
     const targetFov = currentBaseFov + 4 + speedT * 10 + state.flightBlend * 8 + strafePunch;
@@ -510,6 +520,46 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
       camera.updateProjectionMatrix();
     }
     camera.updateMatrixWorld();
+  }
+
+  /**
+   * Zoom into the exploding car: from wherever the camera is, ease to a
+   * three-quarter close-up of the wreck, look at it, narrow the FOV.
+   * Real-time driven so the game's slow-mo doesn't stretch it.
+   */
+  function applyCrashCam() {
+    const t = Math.min(1, (performance.now() - crashCam.start) / (crashCam.duration * 1000));
+    const push = THREE.MathUtils.smootherstep(Math.min(1, t * 1.5), 0, 1);
+    crashCam.getTarget(_crashTarget);
+    // Slow orbit around the wreck while pushing in.
+    _crashOffset.set(-6.4 + t * 1.0, 2.4 - t * 0.3, 4.2 - t * 1.2);
+    _crashPos.copy(_crashTarget).add(_crashOffset);
+    camera.position.lerpVectors(crashCam.from, _crashPos, push);
+    const shake = state.shakeTime > 0 ? state.shakeStrength * 0.5 : 0;
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake;
+    camera.lookAt(_crashTarget);
+    const fov = THREE.MathUtils.lerp(crashCam.fromFov, 45, push);
+    if (Math.abs(fov - camera.fov) > 0.01) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    camera.updateMatrixWorld();
+  }
+
+  /** @param {(target: THREE.Vector3) => THREE.Vector3} getTarget */
+  function startCrashCam(getTarget, duration = 1.6) {
+    crashCam = {
+      getTarget,
+      duration,
+      start: performance.now(),
+      from: camera.position.clone(),
+      fromFov: camera.fov,
+    };
+  }
+
+  function stopCrashCam() {
+    crashCam = null;
   }
 
   function update(delta, { simulateMovement = true } = {}) {
@@ -552,6 +602,7 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     state.camY = state.flightY;
     state.camZ = state.z;
     state.rollTime = 0;
+    crashCam = null;
     actionQueue.length = 0;
     applyCamera(1);
   }
@@ -690,6 +741,8 @@ export function createRunnerControls({ camera, domElement, baseFov = 70 }) {
     shiftX,
     setFlight,
     isFlying: () => state.flying,
+    startCrashCam,
+    stopCrashCam,
     getPlayerBox,
     dispose,
   };

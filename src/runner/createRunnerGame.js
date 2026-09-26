@@ -46,6 +46,9 @@ const COMBO_MAX = 4;
 const COMBO_DECAY_DELAY = 4;
 const DEATH_SLOWMO = 0.22;
 const DEATH_DURATION = 1.25;
+// Sky Run crash cinematic: real seconds of the push-in and world time scale.
+const CRASH_CAM_TIME = 1.7;
+const CRASH_TIME_SCALE = 0.3;
 const MAX_FRAME_DELTA = 1 / 20;
 // Last-chance slow-mo: when a lethal hit is imminent, time drops to 35% for
 // ~0.45 s of real time so the player can react (8 s cooldown).
@@ -149,6 +152,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     // Sky Run: next distance the flying-car pickup may appear.
     nextFlightAt: 380,
     flightPromptTimer: 0,
+    crashTimer: 0,
     missionTimer: 0,
   };
   const runStats = {};
@@ -464,6 +468,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     flight.reset();
     hud.setFlight(null);
     weapon?.setMuzzleProvider?.(null);
+    weapon?.setVehicleMode?.(null);
     viewmodel?.setVisible(true);
     viewmodel?.setDeathProgress(-1);
     snapshots.reset();
@@ -498,6 +503,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     game.sector = 1;
     game.nextFlightAt = firstFlightDistance();
     game.flightPromptTimer = 0;
+    game.crashTimer = 0;
     game.deathDetail = "";
     currentLane = 1;
     cleanRun = 0;
@@ -1007,6 +1013,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     // Chase cam: the rifle / hands hide; tracers leave from the car's cannons.
     viewmodel?.setVisible(false);
     weapon?.setMuzzleProvider?.((target) => flight.getMuzzle(target));
+    // Car cannons: no ammo / reloads; rays start level with the car.
+    weapon?.setVehicleMode?.({ rayOffset: RUNNER.chaseDistance - 1 });
     // Ground obstacles don't matter up here.
     obstacles.clear();
     runStats.flights = (runStats.flights ?? 0) + 1;
@@ -1023,28 +1031,48 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   /** Car destroyed: explode, drop the runner back to the street. */
+  /**
+   * Car destroyed: explosion + crash cinematic (camera pushes in on the
+   * wreck in slow motion), then finishCrash() drops the runner back to the
+   * street in first person.
+   */
   function endFlight() {
     if (!flight.isActive()) {
       return;
     }
     flight.destroy(controls.state.speed);
-    controls.setFlight(false);
     weapon?.setMuzzleProvider?.(null);
-    viewmodel?.setVisible(true);
+    weapon?.setVehicleMode?.(null);
+    controls.setTrigger(false);
+    controls.setInputEnabled(false);
+    controls.startCrashCam((target) => flight.getCarPosition(target), CRASH_CAM_TIME);
+    game.crashTimer = CRASH_CAM_TIME;
+    game.invuln = Math.max(game.invuln, 99);
+    // The spawner cursor is stale since take-off: restart it ahead.
+    game.nextObstacleX = controls.state.x + 70;
     hud.setFlight(null);
     hud.setPrompt(null);
-    hud.showBanner("CAR DOWN — BACK ON FOOT", 2);
-    audio.play("explosion", { volume: 0.8 });
+    hud.showBanner("CAR DOWN", 1.4);
+    audio.play("explosion", { volume: 0.9 });
     audio.play("crash", { volume: 0.5 });
-    controls.shake(0.22, 0.7);
+    controls.shake(0.18, 0.9);
     hud.flashDamage(0.6);
-    // A breather: invulnerable landing, slow-mo, and a clear street ahead.
-    game.invuln = 2.6;
-    game.slowmo = 0.5;
-    game.nextObstacleX = controls.state.x + 70;
     if (isTouch) {
       vibrate([120, 60, 180]);
     }
+  }
+
+  function finishCrash() {
+    game.crashTimer = 0;
+    controls.stopCrashCam();
+    controls.setFlight(false);
+    controls.setInputEnabled(true);
+    viewmodel?.setVisible(true);
+    hud.showBanner("BACK ON FOOT", 1.6);
+    // A breather: invulnerable landing, a slow-mo beat, a clear street.
+    game.invuln = 2.6;
+    game.slowmo = 0.5;
+    game.nextObstacleX = controls.state.x + 70;
   }
 
   function damageCar(amount) {
@@ -1513,7 +1541,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
 
     const flying = flight.isActive();
     if (running) {
-      if (!flying) {
+      // No ground obstacles while flying or during the crash cinematic.
+      if (!flying && game.crashTimer <= 0) {
         updateObstacleSpawner();
       }
       updateDroneSpawner(delta);
@@ -1615,7 +1644,15 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       game.slowmo -= realDelta;
       delta *= LAST_CHANCE_SCALE;
     }
-    hud.setSlowmo(game.slowmo > 0);
+    // Crash cinematic: heavy slow-mo on real time, then back on foot.
+    if (game.crashTimer > 0) {
+      game.crashTimer -= realDelta;
+      delta *= CRASH_TIME_SCALE;
+      if (game.crashTimer <= 0) {
+        finishCrash();
+      }
+    }
+    hud.setSlowmo(game.slowmo > 0 || game.crashTimer > 0);
     game.clock += delta;
     game.invuln = Math.max(0, game.invuln - delta);
 
