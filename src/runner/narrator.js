@@ -1,11 +1,10 @@
 import { STORY } from "../app/credits.js";
 
 /**
- * The narrator: LOW GAMMA itself, watching its one player. The person at the
- * keyboard plays *as* Anaiis, and Anaiis is playing LOW GAMMA on a break in
- * 2223, so the game always speaks about her in the third person: dry,
- * observant, a little proud of its drones, and quietly aware that the "Old
- * Earth" it renders is a costume.
+ * The narrator. The person at the keyboard plays *as* Anaiis, and Anaiis is
+ * playing LOW GAMMA on a break in 2223. The game's own lines (start ticket,
+ * banners, pause) speak about her in the third person; the game-over
+ * session log is Anaiis herself, first person, roasting her own run.
  *
  * Pure text builders: no DOM, no game state beyond the numbers passed in.
  * Lines are picked from pools keyed to what actually happened in the run,
@@ -44,105 +43,110 @@ function formatDuration(seconds) {
   return rest ? `${minutes} min ${rest} s` : plural(minutes, "minute");
 }
 
-/** How the run ended, as a clause that completes "… before ___". */
+/*
+ * Session log: Anaiis's own first-person post-mortem, self-deprecating.
+ * Everything else the game says about her stays third person.
+ */
+
+/** How the run ended, as a clause that completes "… before ___" / "Then ___". */
 function causeClause(cause, detail) {
   switch (cause) {
     case "KAMIKAZE IMPACT":
       return pick("cause-kamikaze", [
-        "a kamikaze drone traded itself for her run",
-        "one of its drones stopped shooting and simply arrived",
-        "a kamikaze drone decided the fastest route to her was through her",
+        "a kamikaze drone hugged me. Aggressively",
+        "a drone gave up on shooting me and just came over in person",
+        "a kamikaze drone made me its entire personality",
       ]);
     case "HIT A PARKED CAR":
       return pick("cause-car", [
-        "a parked car, faithfully rendered down to the rust, refused to move",
-        "she met a parked car at full sprint. The car won on seniority",
-        "Old Earth's love of parking on the street finally caught up with her",
+        "I ran face-first into a parked car. It was parked. It had been parked the whole time",
+        "I lost a fight with a car that was not moving",
+        "I discovered Old Earth cars are very solid, using my face",
       ]);
     case "CLOTHESLINED":
       return pick("cause-beam", [
-        "a steel beam arrived at exactly neck height",
-        "she chose not to slide, and the beam chose not to negotiate",
-        "a hanging beam taught her the S key the hard way",
+        "I forgot sliding exists. The beam did not",
+        "a beam met my neck. I had one job, and the job was pressing S",
+        "I tried to limbo a steel beam standing upright",
       ]);
     case "TRIPPED A BARRIER":
       return pick("cause-barrier", [
-        "a barrier caught her trailing foot",
-        "she misjudged one barrier by a few centimetres. The sim measures in centimetres",
-        "a concrete barrier ended the conversation",
+        "I tripped over a barrier. The one thing in this game that doesn't move",
+        "I jumped a little too late, which is also how I do everything else",
+        "a knee-high barrier humbled me in front of nobody",
       ]);
     default: {
       const source = (detail ?? "").split(" · ")[0];
       const gunship = /GUNSHIP|CARRIER/i.test(source);
       return pick("cause-shot", [
-        gunship ? "a gunship finally found the range" : "a drone bolt found the one gap in her footwork",
-        "its drones finally agreed on where she was going to be",
-        "one bolt too many landed",
-        gunship ? "the heavy drones stopped being polite" : "the swarm closed the last open lane",
+        "I stood exactly where the bolt was going. Great instincts",
+        "the drones figured out I only ever dodge left",
+        gunship ? "a gunship shot me like it had somewhere better to be" : "I tanked one bolt too many, like a champion of standing still",
+        "I tried dodging with confidence instead of skill",
       ]);
     }
   }
 }
 
-/** One observation about how she played, from the most notable stat. */
+/** One line about how she played, from the most notable stat. */
 function observation(run) {
   const notes = [];
   if (run.bossKills > 0) {
     notes.push([5, pick("obs-boss", [
-      `She brought down ${run.bossKills > 1 ? `${run.bossKills} carriers` : "a carrier"}, the heaviest argument the game knows how to make.`,
-      "She dropped a carrier out of the sky. The game has filed that away.",
+      `I did take down ${run.bossKills > 1 ? `${run.bossKills} carriers` : "a carrier"}, which I'll be mentioning at every opportunity.`,
+      "Dropped a whole carrier. Then immediately forgot how legs work.",
     ])]);
   }
   if (run.flights > 0) {
     notes.push([4, pick("obs-flight", [
-      "At one point she commandeered a hover car and took the fight to the rooftops. The game allowed it, briefly.",
-      "She even stole a Quadra and flew it through the canyon. Somewhere a physics engineer smiled.",
+      "Got handed a flying car and drove it like a shopping trolley.",
+      "I stole a hover car and crashed it, because I'm nothing if not consistent.",
     ])]);
   }
   if (run.kills >= 20) {
     notes.push([4, pick("obs-kills-high", [
-      `${run.kills} of its drones went down along the way. The game is starting to send them in pairs.`,
-      `She dropped ${run.kills} drones. The game is taking notes, and it takes very good notes.`,
+      `${run.kills} drones down. The game's probably just letting me win, right?`,
+      `Shot ${run.kills} drones. Missed roughly all the others.`,
     ])]);
   } else if (run.kills >= 6) {
     notes.push([2, pick("obs-kills", [
-      `She downed ${run.kills} drones on the way, each one a small, satisfying objection.`,
-      `${run.kills} drones down. Not a massacre. A statement.`,
+      `${run.kills} drones down. Mostly on purpose.`,
+      `Got ${run.kills} drones. The rest were just being polite.`,
     ])]);
   } else if (run.kills === 0 && run.distance > 150) {
     notes.push([3, pick("obs-pacifist", [
-      "She never fired at a single drone. Pacifism, or a very focused break.",
-      "Not one drone shot down. She came here to run, apparently.",
+      "Didn't shoot a single drone. I'm calling it a pacifist run. It was not a pacifist run.",
+      "Zero drones down. I was holding the gun mostly as a fashion choice.",
     ])]);
   }
   if (run.nearMisses >= 5) {
     notes.push([3, pick("obs-near", [
-      `${plural(run.nearMisses, "close call")}. She treats the edge of a lane as a suggestion.`,
-      `She shaved past danger ${run.nearMisses} times. The game counted every one.`,
+      `${plural(run.nearMisses, "close call")}. That's not skill, that's panic with good timing.`,
+      `I nearly died ${run.nearMisses} times before actually committing to it.`,
     ])]);
   }
   if (run.cleanDistance >= 500) {
-    notes.push([3, `For ${m(run.cleanDistance)} straight, nothing so much as grazed her.`]);
+    notes.push([3, `${m(run.cleanDistance)} without a scratch. Then I remembered I'm me.`]);
   }
   if (run.energy >= 60) {
     notes.push([2, pick("obs-energy", [
-      `She pocketed ${run.energy} energy on the way, and has plans for it.`,
-      `${run.energy} energy collected. The Armory will be hearing from her.`,
+      `Grabbed ${run.energy} energy. I'll spend it on something I regret.`,
+      `${run.energy} energy collected, which is more than I have in real life.`,
     ])]);
   }
   if (run.missionsDone > 0) {
-    notes.push([3, `She also closed out ${plural(run.missionsDone, "order")} the game had left lying around for her.`]);
+    notes.push([3, `Somehow closed out ${plural(run.missionsDone, "order")} along the way. Someone be proud of me.`]);
   }
   if (run.distance < 150) {
     notes.push([6, pick("obs-short", [
-      "It was over before the first song found its chorus.",
-      "The sim had barely finished loading the street.",
+      "That run was shorter than my attention span, which is saying something.",
+      "The music hadn't even started. Neither had I, apparently.",
     ])]);
   }
   if (!notes.length) {
     notes.push([1, pick("obs-plain", [
-      `${formatDuration(run.time)} of ${run.weather ? run.weather.toLowerCase() : "neon"} and concrete, and she kept her feet for most of it.`,
-      `She ran ${formatDuration(run.time)} through a city nobody alive has ever walked.`,
+      `${formatDuration(run.time)} of ${run.weather ? run.weather.toLowerCase() : "neon"} and concrete. I'd generously call it a jog.`,
+      `I ran ${formatDuration(run.time)} through a city nobody alive has walked, and mostly looked at my feet.`,
     ])]);
   }
   notes.sort((a, b) => b[0] - a[0]);
@@ -151,75 +155,68 @@ function observation(run) {
   return notes[index][1];
 }
 
-/** How this run sits in her history, plus the frame around the frame. */
+/** How this run sits in her history, plus the break around the game. */
 function closer(run) {
   const hour = new Date().getHours();
   const lines = [];
   if (run.newBest) {
     lines.push(pick("close-best", [
-      "That is further than she has ever gone. The game quietly adjusts its difficulty curve.",
-      `A new personal best. Somewhere in ${STORY.year}, a short break is getting longer.`,
-      "New record. The game will remember that she can do this.",
+      "New personal best! Nobody tell work how long this break has been.",
+      "Furthest I've ever gone. Peak me. It's all downhill from here.",
+      "A new record, which mostly proves how bad the old one was.",
     ]));
   } else if (run.best > 0 && run.score >= run.best * 0.85) {
     lines.push(pick("close-near", [
-      `${Math.max(1, run.best - run.score)} points short of her best. She knows exactly where it slipped.`,
-      "Close to her record. Close enough to make the next run inevitable.",
+      `${Math.max(1, run.best - run.score)} points off my best. So close I can taste the disappointment.`,
+      "Almost my record. Almost is kind of my brand.",
     ]));
   } else if (run.best > 0) {
     lines.push(pick("close-far", [
-      `Her best still stands at ${run.best}. The game likes its odds.`,
-      "Not her best. The game has seen her best, and it is keeping an eye out for it.",
+      `My best is ${run.best}. Whoever did that was much cooler than me.`,
+      "Nowhere near my best. Past me is embarrassed for present me.",
     ]));
   }
   if (hour >= 0 && hour < 5 && Math.random() < 0.6) {
     lines.push(pick("close-late", [
-      `It is past midnight in ${STORY.year}. She will say this is the last one.`,
-      "It is very late. The break has quietly become the evening.",
+      `It's past midnight in ${STORY.year}. This is the last one. (It is not the last one.)`,
+      "It's very late. I'm fine. My eyes are fine. One more.",
     ]));
   } else if (run.runs >= 12) {
     lines.push(pick("close-runs", [
-      `That was run ${run.runs}. The break has stopped being a break.`,
-      `Run ${run.runs}. She is learning the game, and it is learning her.`,
+      `Run ${run.runs}. This break has become a lifestyle.`,
+      `That was run ${run.runs}. I'm learning the game. Slowly. Painfully.`,
     ]));
   } else if (lines.length < 1 || Math.random() < 0.5) {
     lines.push(pick("close-generic", [
-      "The game resets the street and waits. It is good at waiting.",
-      `Old Earth folds back into its loop. ${NAME} is already reaching for restart.`,
-      "The sim holds her place at the start line.",
+      "One more. Just one. I have said this before.",
+      "I can hear the game laughing at me.",
+      "Fine. Again. But this time with dignity.",
     ]));
   }
   return lines.join(" ");
 }
 
 /**
- * Game-over narration.
+ * Game-over narration: headline + Anaiis's first-person session log.
  * @param {object} run  { distance, score, kills, cause, detail, sector, time,
  *   nearMisses, cleanDistance, energy, flights, bossKills, missionsDone,
  *   newBest, best, runs, daily, weather, dayLabel }
- * @returns {{ kicker: string, title: string[], log: string[], stamp: string }}
+ * @returns {{ kicker: string, title: string[], log: string[], stamp: string, author: string }}
  */
 export function narrateGameOver(input) {
   const run = { ...input, score: Math.floor(input.score ?? 0), best: Math.floor(input.best ?? 0), distance: Math.floor(input.distance ?? 0) };
   const clause = causeClause(run.cause, run.detail);
   const where = run.sector > 1 ? ` in sector ${run.sector}` : "";
   const opener = pick("open", [
-    `${NAME} made it ${m(run.distance)} into Old Earth${where} before ${clause}.`,
-    `${m(run.distance)}. That is how far ${NAME} got${where} before ${clause}.`,
-    `${run.sector > 1 ? `Sector ${run.sector}, ` : ""}${formatDuration(run.time)} in: ${clause}. ${NAME} logged ${m(run.distance)}.`,
+    `Made it ${m(run.distance)} into Old Earth${where} before ${clause}.`,
+    `${cap(m(run.distance))}${where}. Then ${clause}.`,
+    `${formatDuration(run.time)} in, ${clause}. Final tally: ${m(run.distance)}.`,
   ]);
-  const title = run.newBest
-    ? ["RECORD", `${String(Math.floor(run.distance)).padStart(4, "0")}M`]
-    : [pick("title", ["CAUGHT", "CAUGHT", "TAGGED", "FOUND HER"]), `${String(Math.floor(run.distance)).padStart(4, "0")}M`];
-  const kicker = run.newBest
-    ? `THE GAME CAUGHT ${NAME.toUpperCase()}, EVENTUALLY`
-    : pick("kicker", [
-        `THE GAME CAUGHT ${NAME.toUpperCase()} AT`,
-        `${NAME.toUpperCase()} WAS CAUGHT AT`,
-        `LOW GAMMA CAUGHT UP WITH HER AT`,
-      ]);
+  const distance = `${String(run.distance).padStart(4, "0")}M`;
+  const title = run.newBest ? ["RECORD", distance] : [pick("title", ["CAUGHT", "CAUGHT", "TAGGED", "FOUND HER"]), distance];
+  const kicker = pick("kicker", ["IT'S OVER", "GAME OVER!", "YOU LOST"]);
   const stamp = `${run.daily ? "DAILY · " : ""}RUN ${String(run.runs).padStart(3, "0")} · ${(run.dayLabel ?? "NIGHT").toUpperCase()}${run.weather ? ` · ${run.weather.toUpperCase()}` : ""}`;
-  return { kicker, title, log: [opener, observation(run), closer(run)].filter(Boolean), stamp };
+  return { kicker, title, log: [cap(opener), observation(run), closer(run)].filter(Boolean), stamp, author: NAME.toUpperCase() };
 }
 
 /** Start ticket: one line about where she stands before the next dive. */

@@ -783,7 +783,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             </div>
           </div>
           ${story.log.length ? `<div class="go-log">
-            <div class="go-log-head"><span class="t-meta">LOW GAMMA // SESSION LOG</span><span class="t-meta">${story.stamp}</span></div>
+            <div class="go-log-head"><span class="t-meta">${story.author ?? STORY.player.toUpperCase()} // SESSION LOG</span><span class="t-meta">${story.stamp}</span></div>
             <p>${story.log.map((line, i) => `<span style="--l:${i}">${line}</span>`).join(" ")}</p>
           </div>` : ""}
           ${renderRewards(missions && rewards ? { ...rewards, completed: [] } : rewards, meta ?? { shards: 0, rank: 1 })}

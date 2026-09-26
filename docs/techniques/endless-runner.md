@@ -13,7 +13,7 @@
 | Death | **CAUGHT** at N m (**RECORD** on a new best). The game-over ticket carries a **session log** from `narrateGameOver` |
 | Retry / menu | "ONE MORE RUN" / "STILL ON BREAK", start button "DIVE IN", pause "SIM ON HOLD" |
 
-**Narrator** (`src/runner/narrator.js`): the player plays *as* Anaiis, and Anaiis is playing LOW GAMMA, so the game always speaks about her in the **third person**. It never says "you" and never quotes her. Its voice is dry, observant and a little proud of its drones, aware that its "Old Earth" is a costume.
+**Narrator** (`src/runner/narrator.js`): the player plays *as* Anaiis, and Anaiis is playing LOW GAMMA. The game's own lines (start ticket, banners, pause) speak about her in the **third person**. The game-over **session log** is Anaiis herself, in the first person, roasting her own run with self-deprecating humour. The game-over kicker is "IT'S OVER" / "GAME OVER!" / "YOU LOST".
 
 - `narrateGameOver(run)` builds the kicker, title and a three-part session log:
   - an opener (distance, sector, time, and a cause clause per death type),
