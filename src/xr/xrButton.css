@@ -81,10 +81,25 @@ html.xr-presenting .np-toast {
   display: none !important;
 }
 
-/* Tickets zoom to fit the headset's page viewport (fitRunnerScreen in
-   createXRHud.js); the VR panel scales back up so the size is unchanged. */
+/* Tickets scale to fit the headset's page viewport (fitRunnerScreen in
+   createXRHud.js); the VR panel scales back up so the size is unchanged.
+   A transform, not CSS zoom: hit testing (the laser's elementsFromPoint) and
+   the snapshot agree on transforms, but not on zoom — the click targets
+   drifted off the drawn buttons, worst towards the right. */
 html.xr-presenting .runner-screen > * {
-  zoom: var(--xr-fit, 1);
+  transform: scale(var(--xr-fit, 1));
+  transform-origin: top center;
+}
+
+/* Live scrollbars take layout width the snapshot may not (or draw one the
+   headset should not show); the thumbstick scrolls instead. */
+html.xr-presenting,
+html.xr-presenting * {
+  scrollbar-width: none;
+}
+
+html.xr-presenting ::-webkit-scrollbar {
+  display: none;
 }
 
 /* The flat page stops producing frames while the headset presents, so CSS

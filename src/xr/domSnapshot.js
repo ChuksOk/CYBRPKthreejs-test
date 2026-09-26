@@ -179,7 +179,9 @@ function parseRule(rule, base, urls, out) {
     for (const child of Array.from(rule.cssRules)) {
       parseRule(child, base, urls, items);
     }
-    out.push({ head: rule.cssText.slice(0, rule.cssText.indexOf("{")), items });
+    // @media is resolved against the live page at build time (see buildCss).
+    const media = rule.media && rule.constructor?.name === "CSSMediaRule" ? rule.media.mediaText : null;
+    out.push({ head: rule.cssText.slice(0, rule.cssText.indexOf("{")), media, items });
     return;
   }
   out.push({ text: resolve(rule.cssText), alternatives: [null] });
@@ -212,6 +214,16 @@ function buildCss(items, classes, families) {
   let text = "";
   for (const item of items) {
     if (item.items) {
+      // An SVG image has no pointer, so (hover) / (pointer) queries differ
+      // from the live page (the wider PC tickets were lost, and the laser's
+      // click targets drifted off the drawn buttons). Size queries match
+      // anyway (same viewport): inline what matches live, drop the rest.
+      if (item.media !== null && item.media !== undefined) {
+        if (window.matchMedia(item.media).matches) {
+          text += buildCss(item.items, classes, families);
+        }
+        continue;
+      }
       const inner = buildCss(item.items, classes, families);
       if (inner) {
         text += `${item.head}{${inner}}`;

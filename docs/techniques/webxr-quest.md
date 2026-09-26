@@ -92,10 +92,12 @@ DOM overlays are invisible in an immersive session. The headset keeps the flat g
   - `html` / `body` / `:root` selectors are retargeted.
   - Fonts and images are inlined, woff2 only.
   - Each snapshot keeps only the rules whose classes exist in it, plus the fonts it uses.
+  - `@media` blocks are resolved against the live page (`matchMedia`) when the snapshot CSS is built: an SVG image has no pointer, so `(hover)` / `(pointer)` queries would otherwise differ and the snapshot layout would drift from the live layout the laser clicks.
   - Chromium renders foreignObject with full CSS.
   - It must be a **data:** URL: a blob URL taints the canvas, and WebGL then refuses it.
 - While presenting, `html.xr-presenting` rules (`xrButton.css`) drop the full-screen backdrops, top-align tall tickets and hide the flat now-playing toast. The snapshot is transparent and cropped to the visible UI, so the tickets float in the street about 2.2 m ahead.
 - The flat page gets no animation frames while the headset presents, so CSS animations / transitions (and rAF count-ups) would stall at their first frame — screens stuck at `opacity: 0` then drop out of the crop. `html.xr-presenting` disables them and `finishAnimations` jumps any in-flight ones to their end state before measuring. The intro title and loader are in the skip list so they never set the crop.
+- Tall tickets are fitted with `transform: scale(var(--xr-fit))`, not CSS `zoom` (hit testing and the snapshot agree on transforms), inside the screen's padding; scrollbars are hidden while presenting (the thumbstick scrolls).
 - A `MutationObserver` re-snapshots quickly on structural changes (new nodes, class / data changes). Inline-style and text ticks (progress bars, clocks) refresh at most every 1.5 s.
 - The laser drives the real page:
   - `elementsFromPoint` hit-tests, and synthetic `pointermove` / `pointerdown` / `pointerup` + `click` keep the idle and hover logic working.

@@ -110,25 +110,30 @@ function finishAnimations(skip) {
 
 /**
  * Tickets are laid out for a desktop window; the headset's page viewport is
- * often shorter, which clips the bottom. Zoom the runner screen's content
- * (live DOM and snapshot alike) until it fits; the panel is scaled back up
- * in metres so its physical size stays the same. Returns the zoom.
+ * often shorter, which clips the bottom. Scale the runner screen's content
+ * (live DOM and snapshot alike, xrButton.css) until it fits inside the
+ * screen's padding; the panel is scaled back up in metres so its physical
+ * size stays the same. Returns the scale.
  */
 function fitRunnerScreen(screen) {
   const content = screen?.firstElementChild;
   if (!content || !screen.dataset.mode) {
     return 1;
   }
-  screen.style.setProperty("--xr-fit", "1");
-  // Layout sizes (not transformed rects): unaffected by entry animations.
+  // Layout sizes (not transformed rects): unaffected by the scale itself.
   const width = content.offsetWidth;
   const height = content.offsetHeight;
   if (!width || !height) {
     return 1;
   }
-  const zoom = Math.min(1, (window.innerHeight - 24) / height, (window.innerWidth - 24) / width);
+  const style = getComputedStyle(screen);
+  const availableWidth = screen.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 4;
+  const availableHeight = screen.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - 4;
+  const zoom = Math.min(1, availableHeight / height, availableWidth / width);
   const fit = Math.max(0.45, Math.floor(zoom * 100) / 100);
-  screen.style.setProperty("--xr-fit", String(fit));
+  if (screen.style.getPropertyValue("--xr-fit") !== String(fit)) {
+    screen.style.setProperty("--xr-fit", String(fit));
+  }
   return fit;
 }
 
