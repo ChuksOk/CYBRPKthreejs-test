@@ -51,6 +51,9 @@ export async function createRenderer({ xr = false, xrWebGPU = false } = {}) {
     renderer.xr.setReferenceSpaceType("local-floor");
     // Fixed foveation: cheap on Quest, invisible at the lens edges.
     renderer.xr.setFoveation(1);
+    // Standalone headset budget: 90% eye buffers, and plain PCF shadows
+    // (the soft filter is sampled per pixel in both eyes).
+    renderer.xr.setFramebufferScaleFactor(0.9);
     // r185: XRManager's frame callback passes `_getFrameBufferTarget()`
     // straight to foveateBoundTexture, which is null whenever a render
     // target is still bound at frame start (e.g. a pass threw mid-frame).
@@ -62,7 +65,7 @@ export async function createRenderer({ xr = false, xrWebGPU = false } = {}) {
   renderer.setPixelRatio(getStaticPixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = xr ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
 

@@ -303,13 +303,10 @@ export function createXRMode({
       if (menus) {
         hud.pointAt(aimRay(right));
       }
-      const trigger = edge(right, BTN_TRIGGER);
-      if (trigger && menus) {
-        // Off the panel entirely: trigger still starts / resumes / restarts.
-        if (!hud.press() && !hud.isPointing()) {
-          runnerGame.xrAction("confirm");
-        }
-      }
+      // Menu clicks happen in the session's selectstart handler (a real
+      // user gesture — music, share, fullscreen need one); keep the edge
+      // state in sync here.
+      edge(right, BTN_TRIGGER);
       if (!held(right, BTN_TRIGGER)) {
         hud.release();
       }
@@ -395,12 +392,42 @@ export function createXRMode({
   }
 
   // ── Session lifecycle ──────────────────────────────────────────────────
+  /**
+   * WebXR select / squeeze events are user activation: resume audio (the
+   * soundtrack's <audio> decks and the SFX context) and run menu clicks
+   * inside the gesture.
+   */
+  function onSelectStart(event) {
+    runnerGame.music?.resumeFromGesture?.();
+    runnerGame.audio?.ensureContext?.();
+    if (event.type !== "selectstart" || event.inputSource?.handedness === "left") {
+      return;
+    }
+    const state = runnerGame.getState();
+    if (state === "running" || state === "dying") {
+      return;
+    }
+    // Off the panel entirely: the trigger still starts / resumes / restarts.
+    if (!hud.press() && !hud.isPointing()) {
+      runnerGame.xrAction("confirm");
+    }
+  }
+
+  function onSelectEnd(event) {
+    if (event.inputSource?.handedness !== "left") {
+      hud.release();
+    }
+  }
+
   function onSessionStart() {
     active = true;
     framesPresented = 0;
     recenterPending = true;
     session = renderer.xr.getSession();
     session?.addEventListener("visibilitychange", onVisibilityChange);
+    session?.addEventListener("selectstart", onSelectStart);
+    session?.addEventListener("squeezestart", onSelectStart);
+    session?.addEventListener("selectend", onSelectEnd);
     xrCamera.far = camera.far;
     rig.visible = true;
     controls.setXR(true, applyPose);
@@ -419,6 +446,9 @@ export function createXRMode({
   function onSessionEnd() {
     active = false;
     session?.removeEventListener("visibilitychange", onVisibilityChange);
+    session?.removeEventListener("selectstart", onSelectStart);
+    session?.removeEventListener("squeezestart", onSelectStart);
+    session?.removeEventListener("selectend", onSelectEnd);
     session = null;
     if (runnerGame.getState() === "running") {
       runnerGame.pause();

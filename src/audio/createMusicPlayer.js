@@ -162,6 +162,22 @@ export function createMusicPlayer({ catalog = MUSIC_CATALOG } = {}) {
     document.addEventListener(type, unlock, { once: true, capture: true });
   }
 
+  /**
+   * Call from inside a real user gesture (e.g. a WebXR controller
+   * `selectstart`, which counts as user activation): resumes the audio graph
+   * and (re)starts whatever the current context wants to play.
+   */
+  function resumeFromGesture() {
+    unlocked = true;
+    ensureGraph();
+    for (const deck of decks) {
+      if (deck.element.src && deck.element.paused && playing) {
+        deck.element.play().catch(() => {});
+      }
+    }
+    applyContext();
+  }
+
   // ── Queue ───────────────────────────────────────────────────────────────
   function enabledTracks() {
     const list = catalog.filter((track) => !settings.disabled.includes(track.id));
@@ -470,6 +486,7 @@ export function createMusicPlayer({ catalog = MUSIC_CATALOG } = {}) {
 
   return {
     catalog,
+    resumeFromGesture,
     play,
     pause,
     toggle,

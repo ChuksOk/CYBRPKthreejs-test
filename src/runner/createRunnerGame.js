@@ -840,7 +840,9 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   hud.onPause(pause);
   // Backgrounding the tab / app mid-run pauses instead of running blind.
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
+    // In a VR session the flat page can report hidden while the headset is
+    // live; the XR session's own visibility pauses instead (createXRMode).
+    if (document.hidden && !controls.isXR()) {
       pause();
     }
   });

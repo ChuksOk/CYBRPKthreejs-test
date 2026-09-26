@@ -1,50 +1,28 @@
 import * as THREE from "three/webgpu";
 import { VIEWMODEL_LAYER } from "../runner/runnerConfig.js";
 import { createDomSnapshotter } from "./domSnapshot.js";
+import { createXRHudCards } from "./createXRHudCards.js";
 
-/**
- * In-run HUD cards cropped out of the flat HUD snapshot. Each becomes its own
- * quad, laid out exactly where it sits on the flat screen (projected onto a
- * gentle curve in front of the player). Crosshair, target brackets, threat
- * arrows and score pop-ups are screen-projected in the flat game, so VR
- * leaves them out (the laser + haptics cover them).
- */
-const HUD_CARDS = [
-  ".rh-ticket",
-  ".rh-vitals",
-  ".rh-ammo",
-  ".rh-weapons",
-  ".rh-flight",
-  ".rh-orders",
-  ".rh-boss",
-  ".rh-banner",
-  ".rh-prompt",
-  ".rh-toasts",
-  ".rh-mission",
-  ".rh-music",
-  ".rh-slowmo",
-];
+/** Menu panel: metres per CSS px, and where it floats (player space). */
+const SCREEN_METRES_PER_PX = 0.0021;
+const SCREEN_DISTANCE = 2.2;
+const SCREEN_EYE_Y = 1.5;
+/** Left out of the page snapshot: the scene, the in-run HUD, dev tooling. */
+const SCREEN_SKIP =
+  "canvas, video, iframe, .runner-hud, .xr-enter-button, .intro-overlay, .loader-overlay, #inspector, .inspector, [data-xr-skip]";
+/** Page elements that never count towards the panel crop. */
+const CROP_IGNORE = new Set(["CANVAS", "SCRIPT", "STYLE", "LINK", "NOSCRIPT"]);
+const CROP_MARGIN = 14;
 
-/** Flat HUD → VR: the viewport maps onto an arc this wide / far (player space). */
-const HUD_ARC_WIDTH = 2.3;
-const HUD_DISTANCE = 1.75;
-const HUD_EYE_DROP = 0.08;
-/**
- * Menus: the *whole* flat page (header, runner ticket screens, settings,
- * about, soundtrack player …) minus the 3D canvas, on a virtual screen this
- * wide, floating ahead of the player.
- */
-const SCREEN_WIDTH = 2.9;
-const SCREEN_POSITION = new THREE.Vector3(0, 1.55, -2.35);
-/** Left out of the page snapshot (the scene itself, dev tooling). */
-const SCREEN_SKIP = "canvas, video, iframe, .xr-enter-button, #inspector, .inspector, [data-xr-skip]";
-
-const HUD_SNAPSHOT_INTERVAL = 0.25; // s — the ticket's numbers tick at 4 Hz
-const SCREEN_SNAPSHOT_INTERVAL = 0.15;
+/** Structural change → re-snapshot quickly; ticking bars / clocks → rarely. */
+const MAJOR_DELAY = 0.08;
+const MINOR_INTERVAL = 1.5;
 const SNAPSHOT_SCALE = 1.5;
 
 const CLICKABLE =
   "button, a[href], input, label, select, summary, [data-action], [data-special], [role='button'], [role='tab'], [role='switch'], [onclick], [tabindex]:not([tabindex='-1'])";
+
+const _local = new THREE.Vector3();
 
 function makeTexture(canvas) {
   const texture = new THREE.CanvasTexture(canvas);
@@ -52,58 +30,12 @@ function makeTexture(canvas) {
   texture.generateMipmaps = false;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 4;
   return texture;
 }
 
-function createCanvasTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 2;
-  canvas.height = 2;
-  return { canvas, texture: makeTexture(canvas), width: 2, height: 2 };
-}
-
-/**
- * GPU texture storage is allocated once at its first upload, so a canvas that
- * changes size needs a brand-new texture. Returns true when it was rebuilt.
- */
-function syncSurface(surface) {
-  const { canvas } = surface;
-  if (canvas.width === surface.width && canvas.height === surface.height) {
-    surface.texture.needsUpdate = true;
-    return false;
-  }
-  surface.texture.dispose();
-  surface.texture = makeTexture(canvas);
-  surface.width = canvas.width;
-  surface.height = canvas.height;
-  return true;
-}
-
-function setMap(mesh, texture) {
-  mesh.material.map = texture;
-  mesh.material.needsUpdate = true;
-}
-
-function createQuad(texture, name, renderOrder = 1000) {
-  const material = new THREE.MeshBasicNodeMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-    fog: false,
-  });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-  mesh.name = name;
-  mesh.renderOrder = renderOrder;
-  mesh.frustumCulled = false;
-  mesh.layers.set(VIEWMODEL_LAYER);
-  mesh.visible = false;
-  return mesh;
-}
-
 function isShown(element) {
-  if (!element?.isConnected) {
+  if (!element?.isConnected || CROP_IGNORE.has(element.tagName)) {
     return false;
   }
   if (element.checkVisibility && !element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) {
@@ -114,16 +46,52 @@ function isShown(element) {
 }
 
 /**
- * Crop a shared snapshot texture (flipY) to a CSS-px rect of the viewport via
- * the quad's UVs, so every card samples one texture uploaded once.
+ * Bounding box of the visible UI (CSS px). Full-viewport containers (the
+ * runner screen, overlays) contribute their children, so the panel hugs the
+ * ticket instead of the whole viewport.
  */
-function cropQuad(mesh, rect, viewportWidth, viewportHeight) {
-  const u0 = rect.left / viewportWidth;
-  const u1 = rect.right / viewportWidth;
-  const v0 = 1 - rect.bottom / viewportHeight;
-  const v1 = 1 - rect.top / viewportHeight;
+function visibleUiRect(skip) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  const addRect = (element, depth) => {
+    if (element.matches(skip) || !isShown(element)) {
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    const fullScreen = rect.width >= vw * 0.95 && rect.height >= vh * 0.95;
+    if (fullScreen && depth < 3 && element.children.length) {
+      for (const child of element.children) {
+        addRect(child, depth + 1);
+      }
+      return;
+    }
+    box.left = Math.min(box.left, rect.left);
+    box.top = Math.min(box.top, rect.top);
+    box.right = Math.max(box.right, rect.right);
+    box.bottom = Math.max(box.bottom, rect.bottom);
+  };
+  for (const child of document.body.children) {
+    addRect(child, 0);
+  }
+  if (!Number.isFinite(box.left)) {
+    return null;
+  }
+  return {
+    left: Math.max(0, box.left - CROP_MARGIN),
+    top: Math.max(0, box.top - CROP_MARGIN),
+    right: Math.min(vw, box.right + CROP_MARGIN),
+    bottom: Math.min(vh, box.bottom + CROP_MARGIN),
+  };
+}
+
+/** PlaneGeometry(1,1) UVs → a CSS-px rect of a viewport-sized snapshot. */
+function cropQuad(mesh, rect, width, height) {
+  const u0 = rect.left / width;
+  const u1 = rect.right / width;
+  const v0 = 1 - rect.bottom / height;
+  const v1 = 1 - rect.top / height;
   const uv = mesh.geometry.attributes.uv;
-  // PlaneGeometry(1, 1) vertex order: top-left, top-right, bottom-left, bottom-right.
   uv.setXY(0, u0, v1);
   uv.setXY(1, u1, v1);
   uv.setXY(2, u0, v0);
@@ -132,16 +100,17 @@ function cropQuad(mesh, rect, viewportWidth, viewportHeight) {
 }
 
 /**
- * VR HUD made of *pictures of the flat UI* (see domSnapshot.js), so the
- * headset matches the flat game exactly and keeps all of its functionality:
+ * VR HUD, adapted from the flat UI so the headset keeps its look and all of
+ * its functionality:
  *
  * - Menus (start ticket, pause, game over, upgrades, armory, missions,
- *   records, soundtrack, countdown — plus the header, Settings, About and the
- *   music player): the whole page minus the 3D canvas is snapshotted when it
- *   changes and shown on a virtual screen. The laser drives the real page:
+ *   records, soundtrack, style, countdown, settings, about): the page is
+ *   snapshotted without its backdrops (domSnapshot.js + the
+ *   `html.xr-presenting` rules in xrButton.css) and cropped to the visible UI,
+ *   so the tickets float in the street. The laser drives the real page —
  *   clicks, slider drags, dropdowns (cycled) and scrolling.
- * - Runs: the flat HUD is snapshotted at 4 Hz and cut into per-card quads,
- *   laid out where they sit on the flat screen.
+ * - Runs: native canvas cards painted from the live flat HUD values
+ *   (createXRHudCards.js) — cheap enough for a standalone headset.
  *
  * DOM HUD calls still arrive through mirrorHud (createRunnerGame.js); only
  * flashDamage / hitMarker need VR-side work (red shell + haptics).
@@ -151,39 +120,49 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
   group.name = "xr-hud";
   const snapshotter = createDomSnapshotter();
 
-  // ── Menu screen panel ──────────────────────────────────────────────────
-  const screenSurface = createCanvasTexture();
-  const screenMesh = createQuad(screenSurface.texture, "xr-hud-screen", 1002);
-  screenMesh.position.copy(SCREEN_POSITION);
+  // ── Menu panel ─────────────────────────────────────────────────────────
+  const screenCanvas = document.createElement("canvas");
+  const screenMaterial = new THREE.MeshBasicNodeMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+    fog: false,
+  });
+  const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), screenMaterial);
+  screenMesh.name = "xr-hud-screen";
+  screenMesh.renderOrder = 1002;
+  screenMesh.frustumCulled = false;
+  screenMesh.layers.set(VIEWMODEL_LAYER);
+  screenMesh.visible = false;
   group.add(screenMesh);
+  let screenTexture = null;
+  let textureSize = { width: 0, height: 0 };
+
   const screenState = {
-    dirty: true,
-    busy: false,
-    wait: 0,
     shown: false, // menus: the page panel is wanted
-    rect: null, // viewport rect (CSS px) the panel shows
+    busy: false,
+    majorAt: -1, // time a structural change is due (−1 = none)
+    minorDirty: false,
+    lastSnapshot: -Infinity,
+    rect: null, // CSS px crop of the viewport shown on the panel
   };
+  let clock = 0;
 
   // Pointer cursor on the panel.
   const cursor = new THREE.Mesh(
-    new THREE.RingGeometry(0.008, 0.014, 24),
+    new THREE.RingGeometry(0.4, 0.75, 24),
     new THREE.MeshBasicNodeMaterial({ color: 0xd9ff3b, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, fog: false }),
   );
   cursor.name = "xr-hud-cursor";
   cursor.renderOrder = 1003;
   cursor.layers.set(VIEWMODEL_LAYER);
   cursor.visible = false;
-  cursor.position.z = 0.002;
-  screenMesh.add(cursor);
+  group.add(cursor);
 
-  // ── Running HUD cards ──────────────────────────────────────────────────
-  const hudSurface = createCanvasTexture();
-  const cards = HUD_CARDS.map((selector) => {
-    const mesh = createQuad(hudSurface.texture, `xr-hud${selector.replace(".", "-")}`);
-    group.add(mesh);
-    return { selector, mesh };
-  });
-  const hudState = { dirty: true, busy: false, wait: 0 };
+  // ── In-run cards ───────────────────────────────────────────────────────
+  const cards = createXRHudCards({ domHud });
+  group.add(cards.group);
 
   // ── Damage: red shell around the head (parented to the XR camera) ──────
   const damageMaterial = new THREE.MeshBasicNodeMaterial({
@@ -204,71 +183,123 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
   damageMesh.visible = false;
   let damage = 0;
 
+  // ── Laser pointer state ────────────────────────────────────────────────
+  const _hits = [];
+  let hover = null;
+  let pointer = null; // { x, y } in CSS px of the live viewport
+  let dragging = null; // range input being dragged with the trigger held
+  let lastMove = null;
+
   // ── DOM change tracking ────────────────────────────────────────────────
   let active = false;
-  const observerOptions = { subtree: true, childList: true, attributes: true, characterData: true };
-  const screenObserver = new MutationObserver(() => {
-    screenState.dirty = true;
-  });
-  const hudObserver = new MutationObserver(() => {
-    hudState.dirty = true;
+  const observer = new MutationObserver((mutations) => {
+    if (!screenState.shown) {
+      return;
+    }
+    for (const mutation of mutations) {
+      const target = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
+      if (!target || target.closest?.(SCREEN_SKIP)) {
+        continue;
+      }
+      // New content or state classes → soon. Inline styles (progress bars)
+      // and text ticks (clocks, timers) → at most every MINOR_INTERVAL.
+      const major =
+        mutation.type === "childList" || (mutation.type === "attributes" && mutation.attributeName !== "style");
+      if (major) {
+        if (screenState.majorAt < 0) {
+          screenState.majorAt = clock + MAJOR_DELAY;
+        }
+      } else {
+        screenState.minorDirty = true;
+      }
+    }
   });
 
   function setActive(value) {
     active = Boolean(value);
-    screenObserver.disconnect();
-    hudObserver.disconnect();
+    observer.disconnect();
     if (active) {
-      screenObserver.observe(document.body, observerOptions);
-      if (domHud?.root) {
-        hudObserver.observe(domHud.root, observerOptions);
-      }
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+      screenState.majorAt = 0;
       dragging = null;
-      screenState.dirty = true;
-      hudState.dirty = true;
       // Styles can change between sessions (settings, Moebius, music CSS).
       snapshotter.prepare({ force: true }).catch((error) => console.warn("[xr] HUD styles:", error));
     } else {
       screenMesh.visible = false;
-      for (const card of cards) {
-        card.mesh.visible = false;
-      }
+      cards.group.visible = false;
+      cursor.visible = false;
       setHover(null);
     }
   }
 
   // ── Snapshots ──────────────────────────────────────────────────────────
   async function refreshScreen() {
-    if (!screenState.shown) {
+    const rect = visibleUiRect(SCREEN_SKIP);
+    if (!rect) {
       screenMesh.visible = false;
+      screenState.rect = null;
       return;
     }
-    const size = await snapshotter.snapshot(document.body, screenSurface.canvas, {
+    const size = await snapshotter.snapshot(document.body, screenCanvas, {
       scale: SNAPSHOT_SCALE,
       skip: SCREEN_SKIP,
+      transparent: true,
     });
     if (!active || !screenState.shown) {
       return;
     }
-    screenState.rect = { left: 0, top: 0, right: size.width, bottom: size.height };
-    if (syncSurface(screenSurface)) {
-      setMap(screenMesh, screenSurface.texture);
+    // GPU storage is allocated at the first upload: a new size needs a new
+    // texture (the material only gets built once it has one).
+    if (!screenTexture || screenCanvas.width !== textureSize.width || screenCanvas.height !== textureSize.height) {
+      screenTexture?.dispose();
+      screenTexture = makeTexture(screenCanvas);
+      textureSize = { width: screenCanvas.width, height: screenCanvas.height };
+      screenMaterial.map = screenTexture;
+      screenMaterial.needsUpdate = true;
+    } else {
+      screenTexture.needsUpdate = true;
     }
-    screenMesh.scale.set(SCREEN_WIDTH, (SCREEN_WIDTH * size.height) / size.width, 1);
+    screenState.rect = rect;
+    cropQuad(screenMesh, rect, size.width, size.height);
+    screenMesh.scale.set((rect.right - rect.left) * SCREEN_METRES_PER_PX, (rect.bottom - rect.top) * SCREEN_METRES_PER_PX, 1);
+    // Keep a hint of the page layout, but centre the UI on the eyes.
+    const cx = ((rect.left + rect.right) / 2 - size.width / 2) * SCREEN_METRES_PER_PX;
+    const cy = (size.height / 2 - (rect.top + rect.bottom) / 2) * SCREEN_METRES_PER_PX;
+    screenMesh.position.set(cx * 0.35, SCREEN_EYE_Y + cy * 0.35, -SCREEN_DISTANCE);
+    screenMesh.updateMatrixWorld();
     screenMesh.visible = true;
   }
 
-  /** Menus show the full page panel; runs show the HUD cards. */
+  function pumpScreen() {
+    if (!screenState.shown || screenState.busy) {
+      return;
+    }
+    const majorDue = screenState.majorAt >= 0 && clock >= screenState.majorAt;
+    const minorDue = screenState.minorDirty && clock - screenState.lastSnapshot >= MINOR_INTERVAL;
+    if (!majorDue && !minorDue) {
+      return;
+    }
+    screenState.majorAt = -1;
+    screenState.minorDirty = false;
+    screenState.lastSnapshot = clock;
+    screenState.busy = true;
+    refreshScreen()
+      .catch((error) => console.warn("[xr] menu snapshot failed:", error))
+      .finally(() => {
+        screenState.busy = false;
+      });
+  }
+
+  /** Menus show the page panel; runs show the native cards. */
   function setMenuMode(value) {
     const shown = Boolean(value);
     if (shown === screenState.shown) {
       return;
     }
     screenState.shown = shown;
-    screenState.dirty = true;
-    screenState.wait = 0;
-    hudState.dirty = true;
-    if (!shown) {
+    if (shown) {
+      screenState.majorAt = clock;
+    } else {
       screenMesh.visible = false;
       pointer = null;
       cursor.visible = false;
@@ -277,85 +308,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     }
   }
 
-  const _placement = new THREE.Vector3();
-  function placeCard(mesh, rect, viewportWidth, viewportHeight) {
-    const metresPerPx = HUD_ARC_WIDTH / viewportWidth;
-    const cx = (rect.left + rect.right) / 2;
-    const cy = (rect.top + rect.bottom) / 2;
-    const x = (cx / viewportWidth - 0.5) * HUD_ARC_WIDTH;
-    const y = (0.5 - cy / viewportHeight) * viewportHeight * metresPerPx;
-    // Wrap x onto a circle around the head so every card faces the eyes.
-    const angle = x / HUD_DISTANCE;
-    _placement.set(Math.sin(angle) * HUD_DISTANCE, 0, -Math.cos(angle) * HUD_DISTANCE);
-    mesh.position.set(_placement.x, 1.55 - HUD_EYE_DROP + y, _placement.z);
-    mesh.rotation.set(0, -angle, 0);
-    mesh.scale.set((rect.right - rect.left) * metresPerPx, (rect.bottom - rect.top) * metresPerPx, 1);
-  }
-
-  async function refreshHud() {
-    const root = domHud?.root;
-    if (!root || screenState.shown) {
-      for (const card of cards) {
-        card.mesh.visible = false;
-      }
-      return;
-    }
-    // Rects are read before the snapshot so crops and layout agree.
-    const rects = cards.map((card) => {
-      const element = root.querySelector(card.selector);
-      if (!isShown(element)) {
-        return null;
-      }
-      const r = element.getBoundingClientRect();
-      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-    });
-    if (!rects.some(Boolean)) {
-      for (const card of cards) {
-        card.mesh.visible = false;
-      }
-      return;
-    }
-    const size = await snapshotter.snapshot(root, hudSurface.canvas, { scale: 1.25, transparent: true });
-    if (!active || screenState.shown) {
-      return;
-    }
-    if (syncSurface(hudSurface)) {
-      for (const card of cards) {
-        setMap(card.mesh, hudSurface.texture);
-      }
-    }
-    cards.forEach((card, index) => {
-      const rect = rects[index];
-      card.mesh.visible = Boolean(rect);
-      if (!rect) {
-        return;
-      }
-      cropQuad(card.mesh, rect, size.width, size.height);
-      placeCard(card.mesh, rect, size.width, size.height);
-    });
-  }
-
-  function pump(state, interval, refresh, delta) {
-    state.wait -= delta;
-    if (!state.dirty || state.busy || state.wait > 0) {
-      return;
-    }
-    state.dirty = false;
-    state.busy = true;
-    state.wait = interval;
-    refresh()
-      .catch((error) => console.warn("[xr] HUD snapshot failed:", error))
-      .finally(() => {
-        state.busy = false;
-      });
-  }
-
   // ── Laser pointer on the page panel ────────────────────────────────────
-  const _hits = [];
-  let hover = null;
-  let pointer = null; // { x, y } in CSS px of the live viewport
-  let dragging = null; // range input being dragged with the trigger held
-
   function setHover(element) {
     if (hover === element) {
       return;
@@ -365,18 +318,22 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     hover?.classList.add("is-xr-hover");
   }
 
-  /** Topmost page element under a viewport point (never the 3D canvas). */
+  /** Topmost page element under a viewport point (never the scene / HUD). */
   function elementAt(x, y) {
     for (const element of document.elementsFromPoint(x, y)) {
       if (element === document.documentElement || element === document.body) {
         continue;
       }
-      if (element.matches(SCREEN_SKIP) || element.closest(SCREEN_SKIP)) {
+      if (element.closest(SCREEN_SKIP)) {
         continue;
       }
       return element;
     }
     return null;
+  }
+
+  function clickableAt(x, y) {
+    return elementAt(x, y)?.closest(CLICKABLE) ?? null;
   }
 
   /** Synthetic pointer events keep the flat UI's idle / hover logic alive. */
@@ -392,15 +349,9 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
         pointerType: "mouse",
         isPrimary: true,
         button: type === "pointermove" ? -1 : 0,
-        buttons: type === "pointerdown" || type === "pointermove" && dragging ? 1 : 0,
+        buttons: type === "pointerdown" || (type === "pointermove" && dragging) ? 1 : 0,
       }),
     );
-  }
-
-  let lastMove = null;
-
-  function clickableAt(x, y) {
-    return elementAt(x, y)?.closest(CLICKABLE) ?? null;
   }
 
   /** @returns {boolean} true while the ray is on the page panel */
@@ -415,19 +366,22 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     _hits.length = 0;
     raycaster.intersectObject(screenMesh, false, _hits);
     const hit = _hits[0];
-    if (!hit?.uv) {
+    if (!hit) {
       setHover(null);
       return false;
     }
-    const x = rect.left + hit.uv.x * (rect.right - rect.left);
-    const y = rect.top + (1 - hit.uv.y) * (rect.bottom - rect.top);
+    // The quad's UVs are cropped: map the hit through its local position.
+    screenMesh.worldToLocal(_local.copy(hit.point));
+    const x = rect.left + (_local.x + 0.5) * (rect.right - rect.left);
+    const y = rect.top + (0.5 - _local.y) * (rect.bottom - rect.top);
     pointer = { x, y };
     if (!lastMove || Math.abs(lastMove.x - x) + Math.abs(lastMove.y - y) > 2) {
       lastMove = { x, y };
       dispatchPointer("pointermove", elementAt(x, y) ?? document.body, x, y);
     }
-    cursor.position.set(hit.uv.x - 0.5, hit.uv.y - 0.5, 0.002);
-    cursor.scale.set(1 / screenMesh.scale.x, 1 / screenMesh.scale.y, 1);
+    cursor.position.copy(hit.point);
+    cursor.quaternion.copy(screenMesh.quaternion);
+    cursor.scale.setScalar(0.018);
     cursor.visible = true;
     if (dragging) {
       setRangeFromPointer(dragging);
@@ -455,7 +409,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
 
   /**
    * Trigger pressed: click what the laser points at (sliders start a drag,
-   * dropdowns cycle their options). Returns true when something was hit.
+   * dropdowns cycle their options). Returns true when a control was hit.
    */
   function press() {
     if (!pointer) {
@@ -466,7 +420,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     dispatchPointer("pointerup", under ?? document.body, pointer.x, pointer.y);
     const target = under?.closest(CLICKABLE) ?? null;
     if (!target) {
-      // Plain click on the backdrop (closes overlays like Settings).
+      // Plain click on a backdrop (closes overlays like Settings).
       under?.click();
       return false;
     }
@@ -504,7 +458,7 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
       const style = getComputedStyle(element);
       if (/(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 1) {
         element.scrollBy({ top: amount });
-        screenState.dirty = true;
+        screenState.majorAt = clock + MAJOR_DELAY;
         return;
       }
       element = element.parentElement;
@@ -525,8 +479,9 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
     if (!active) {
       return;
     }
-    pump(screenState, SCREEN_SNAPSHOT_INTERVAL, refreshScreen, delta);
-    pump(hudState, HUD_SNAPSHOT_INTERVAL, refreshHud, delta);
+    clock += delta;
+    pumpScreen();
+    cards.update(delta, !screenState.shown);
     if (damage > 0) {
       damage = Math.max(0, damage - delta * 2.2);
       damageMaterial.opacity = damage * 0.45;
@@ -541,9 +496,9 @@ export function createXRHud({ domHud, onHit = null, onDamage = null } = {}) {
 
   function dispose() {
     setActive(false);
-    screenSurface.texture.dispose();
-    hudSurface.texture.dispose();
-    for (const mesh of [screenMesh, cursor, damageMesh, ...cards.map((card) => card.mesh)]) {
+    screenTexture?.dispose();
+    cards.dispose();
+    for (const mesh of [screenMesh, cursor, damageMesh]) {
       mesh.geometry.dispose();
       mesh.material.dispose();
     }

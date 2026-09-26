@@ -41,3 +41,42 @@ html body .xr-enter-button:disabled {
 html.runner-playing body .xr-enter-button {
   display: none;
 }
+
+/*
+ * VR session: the flat page is invisible in the headset, which shows
+ * snapshots of it (src/xr/createXRHud.js). Drop the full-screen backdrops so
+ * the tickets float in the street instead of on a dark wall.
+ */
+html.xr-presenting body,
+html.xr-presenting .runner-screen,
+html.xr-presenting .runner-screen.is-visible,
+html.xr-presenting .about-overlay,
+html.xr-presenting .settings-overlay {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.xr-presenting body::before,
+html.xr-presenting body::after,
+html.xr-presenting .runner-screen::before,
+html.xr-presenting .runner-screen::after {
+  display: none !important;
+}
+
+/* Hover target of the VR laser (snapshots only — the page is not visible). */
+html.xr-presenting .is-xr-hover {
+  outline: 3px solid #d9ff3b !important;
+  outline-offset: 2px;
+}
+
+/* Tall tickets (game over) start at the top; the thumbstick scrolls the rest. */
+html.xr-presenting .runner-screen {
+  align-items: flex-start;
+}
+
+/* The headset has its own now-playing card (createXRHudCards); the flat
+   corner toast would sit on top of the ticket panel. */
+html.xr-presenting .np-toast {
+  display: none !important;
+}
