@@ -6,6 +6,7 @@ import "./runnerHud.css";
 import { WEAPONS } from "../../weapon/weaponTypes.js";
 import { SPECIALS } from "../../weapon/createSpecials.js";
 import { GAME_TITLE_LINES, STORY } from "../../app/credits.js";
+import { NARRATOR } from "../../runner/narrator.js";
 import { RUNNER } from "../../runner/runnerConfig.js";
 import { renderArmory, renderMissions, renderRecords, renderRewards, renderUpgradePicker } from "./metaScreens.js";
 import { bindMusicControls, createNowPlayingToast, eqBars, renderMiniPlayer, renderMusicScreen } from "./musicPlayerUi.js";
@@ -567,7 +568,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
       </div>`;
   }
 
-  function renderStart(best, special = "ally", meta = null, style = "neon") {
+  function renderStart(best, special = "ally", meta = null, style = "neon", narration = "") {
     const daily = meta?.daily ?? false;
     screen.innerHTML = `
       <div class="ticket ticket--start">
@@ -579,7 +580,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             <span class="tk-arrow">↗</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag"><span class="t-meta">ON A BREAK, PLAYING:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
+            <div class="tk-tag"><span class="t-meta">${STORY.player.toUpperCase()} IS ON A BREAK, PLAYING:</span><span class="tk-title tk-title--brand">${GAME_TITLE_LINES.join("<br>")}</span></div>
             <div class="tk-side">
               <span class="tk-ghost">${STORY.year}</span>
               <div class="tk-keys">${controlsHtml}</div>
@@ -601,6 +602,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
         <div class="tk-stub">
           <div class="tk-stub-head"><span class="t-meta">HOW FAR CAN SHE GET?</span><span class="t-meta">OE</span></div>
           <div class="tk-best"><span class="t-meta">${daily ? "DAILY BEST" : "BEST SCORE"}</span><b>${pad(daily ? meta.dailyBest : best, 6)}</b></div>
+          ${narration ? `<p class="tk-narr">${narration}</p>` : ""}
           ${meta ? `<button class="tk-daily${daily ? " is-on" : ""}" data-action="daily"><i></i><span><b>DAILY RUN</b><span class="t-meta">SAME SEED FOR EVERYONE TODAY</span></span></button>` : ""}
           <button class="tk-button" data-action="start"><span>${daily ? "DAILY DIVE" : "DIVE IN"}</span><span>→</span></button>
           ${barcode(3, 70)}
@@ -616,6 +618,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
         <div class="lb-title">PAUSED</div>
         <div class="lb-rule"><i></i><i></i><i></i></div>
         <button class="tk-button" data-action="resume"><span>RESUME</span><span>→</span></button>
+        <p class="lb-narr">${NARRATOR.pause()}</p>
         <div class="t-meta lb-note">${isTouch ? "TAP RESUME TO CONTINUE" : "CLICK TO RE-LOCK THE MOUSE"}</div>
         ${music ? renderMiniPlayer(music) : ""}
       </div>`;
@@ -758,9 +761,9 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     return { open, close, show, isOpen: () => !el.hidden };
   })();
 
-  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null, missions = null }) {
+  function renderGameOver({ score, distance, kills, best, newBest, cause, detail = "", rewards = null, meta = null, daily = false, build = [], photo = null, missions = null, narration = null }) {
     currentPhoto = photo;
-    const quip = STORY.quips[Math.floor(Math.random() * STORY.quips.length)];
+    const story = narration ?? { kicker: "CAUGHT AT", title: ["CAUGHT", `${pad(distance, 4)}M`], log: [], stamp: "" };
     screen.innerHTML = `
       <div class="ticket ticket--over">
         <div class="tk-main">
@@ -771,7 +774,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
             <span class="tk-arrow">↘</span>
           </div>
           <div class="tk-hero">
-            <div class="tk-tag tk-tag--pink"><span class="t-meta">THE GAME CAUGHT ${STORY.player.toUpperCase()}:</span><span class="tk-title">CAUGHT<br>${pad(distance, 4)}M</span><span class="t-meta go-quip">${STORY.player.toUpperCase()}: “${quip}”</span></div>
+            <div class="tk-tag tk-tag--pink${newBest ? " is-record" : ""}"><span class="t-meta">${story.kicker}</span><span class="tk-title">${story.title.join("<br>")}</span></div>
             <div class="tk-stats">
               <div><span class="t-meta">SCORE</span><b>${pad(score, 6)}</b></div>
               <div><span class="t-meta">DISTANCE</span><b>${pad(distance, 4)}<em>M</em></b></div>
@@ -779,6 +782,10 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
               <div><span class="t-meta">${newBest ? "NEW BEST ★" : "BEST"}</span><b>${pad(best, 6)}</b></div>
             </div>
           </div>
+          ${story.log.length ? `<div class="go-log">
+            <div class="go-log-head"><span class="t-meta">LOW GAMMA // SESSION LOG</span><span class="t-meta">${story.stamp}</span></div>
+            <p>${story.log.map((line, i) => `<span style="--l:${i}">${line}</span>`).join(" ")}</p>
+          </div>` : ""}
           ${renderRewards(missions && rewards ? { ...rewards, completed: [] } : rewards, meta ?? { shards: 0, rank: 1 })}
           ${renderOrders(missions, { title: "ORDERS // THIS RUN", note: missions?.some((m) => m.done) ? "REWARDS BANKED ✓" : "KEEP PUSHING" })}
           ${build.length ? `<div class="go-build"><span class="t-meta">BUILD</span>${build.map((b) => `<em>${b}</em>`).join("")}</div>` : ""}
@@ -841,7 +848,7 @@ export function createRunnerHud({ isTouch = false, music = null } = {}) {
     screen.classList.toggle("is-meta", ["armory", "missions", "records", "upgrade"].includes(mode));
     screen.classList.toggle("is-music", mode === "music");
     if (mode === "start") {
-      renderStart(data.best ?? 0, data.special, data.meta ?? null, data.style ?? "neon");
+      renderStart(data.best ?? 0, data.special, data.meta ?? null, data.style ?? "neon", data.narration ?? "");
     } else if (mode === "armory") {
       screen.innerHTML = renderArmory(data.meta);
     } else if (mode === "missions") {

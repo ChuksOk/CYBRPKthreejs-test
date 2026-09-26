@@ -31,7 +31,7 @@ import {
 import { createSpecials } from "../weapon/createSpecials.js";
 import { WEAPONS } from "../weapon/weaponTypes.js";
 import { RUNNER } from "./runnerConfig.js";
-import { STORY } from "../app/credits.js";
+import { NARRATOR, narrateGameOver, narrateStart } from "./narrator.js";
 import { createProgression } from "./progression.js";
 import { createRunMods, rollUpgradeChoices, UPGRADES } from "./upgrades.js";
 import { rr, rrDrone, rrPick, rrRange, rrShuffle, rrWeighted, setRunSeed, todayKey } from "./rng.js";
@@ -544,6 +544,11 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       special: specials.state.type,
       meta: metaSummary(),
       style: visualStyle?.get() ?? "neon",
+      narration: narrateStart({
+        runs: meta.runs,
+        best: Math.floor(game.best),
+        bestDistance: meta.records.reduce((max, r) => Math.max(max, r.distance ?? 0), 0),
+      }),
     });
   }
 
@@ -601,7 +606,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     setState("countdown");
   }
 
-  function beginRun(label = `RUN, ${STORY.player.toUpperCase()}`) {
+  function beginRun(label = NARRATOR.dive()) {
     hud.hideScreen();
     hud.showBanner(label, 1.1);
     audio.play("go");
@@ -705,7 +710,8 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   function finalStats() {
-    return { score: game.score, distance: game.distance, kills: game.kills, daily: game.daily };
+    // Whole points only (score accrues fractionally with distance).
+    return { score: Math.floor(game.score), distance: Math.floor(game.distance), kills: game.kills, daily: game.daily };
   }
 
   function photoView(shot) {
@@ -713,6 +719,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   }
 
   function showGameOver() {
+    const previousBest = Math.floor(game.daily ? meta.daily.best ?? 0 : game.best);
     const newBest = game.score > game.best;
     if (newBest) {
       game.best = game.score;
@@ -736,7 +743,29 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.setVisible(false);
     hud.setBoss(null);
     hud.setPrompt(null);
+    const narration = narrateGameOver({
+      distance: game.distance,
+      score: Math.floor(game.score),
+      kills: game.kills,
+      cause: game.deathCause,
+      detail: game.deathDetail,
+      sector: game.sector,
+      time: game.clock,
+      nearMisses: runStats.nearMisses,
+      cleanDistance: runStats.cleanDistance,
+      energy: runStats.shards,
+      flights: runStats.flights ?? 0,
+      bossKills: runStats.bossKills,
+      missionsDone: rewards.completed.length,
+      newBest: game.daily ? rewards.dailyBest : newBest,
+      best: previousBest,
+      runs: meta.runs,
+      daily: game.daily,
+      weather: weather?.getLabel?.() ?? null,
+      dayLabel: dayNight?.getLabel?.() ?? null,
+    });
     hud.showScreen("gameover", {
+      narration,
       score: game.score,
       distance: game.distance,
       kills: game.kills,
@@ -761,7 +790,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
     hud.setVisible(true);
     prepareRun();
     controls.requestPointerLock();
-    beginRun("GO");
+    beginRun(NARRATOR.again());
   }
 
   hud.onStart(startCountdown);
@@ -834,7 +863,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
       }
       case "share":
         shareRun({
-          score: game.score,
+          score: Math.floor(game.score),
           distance: game.distance,
           kills: game.kills,
           cause: game.deathCause,
@@ -981,7 +1010,7 @@ export async function createRunnerGame({ scene, renderer, camera, world, baseFov
   function finishTutorial() {
     game.tutorial = -1;
     hud.setPrompt(null);
-    hud.showBanner("WARMED UP — NOW RUN", 1.8);
+    hud.showBanner(NARRATOR.warmedUp(), 1.8);
     progression.setTutorialDone();
     game.nextObstacleX = controls.state.x + 40;
     game.droneTimer = 2;

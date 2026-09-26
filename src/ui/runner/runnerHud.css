@@ -3328,14 +3328,84 @@ html.runner-playing.runner-touch body .audio-btn-root {
   }
 }
 
-/* Anaiis's line on the game-over ticket. */
-.go-quip {
-  max-width: 17em;
-  margin-top: 10px;
-  padding: 4px 7px;
+/* ── Narrator (the game speaking about Anaiis, third person) ─────── */
+.go-log {
+  margin: 0 0 12px;
+  padding: 10px 14px 12px;
   background: var(--t-ink);
+  color: var(--t-paper);
+  clip-path: var(--t-notch-sm);
+  border-left: 4px solid var(--t-pink);
+}
+
+.go-log-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
   color: var(--t-acid);
-  font-size: 10px;
-  line-height: 1.35;
-  text-transform: none;
+}
+
+.go-log p {
+  margin: 0;
+  font-family: var(--t-display);
+  font-weight: 600;
+  font-size: 19px;
+  line-height: 1.28;
+  letter-spacing: 0.01em;
+}
+
+/* Sentences arrive one after another, like a log being written. */
+.go-log p span {
+  animation: go-log-in 0.55s var(--ui-out) backwards;
+  animation-delay: calc(0.35s + var(--l) * 0.55s);
+}
+
+.go-log p span:last-child {
+  color: var(--t-acid);
+}
+
+@keyframes go-log-in {
+  from { opacity: 0; filter: blur(3px); }
+}
+
+.tk-tag.is-record {
+  border-top-color: var(--t-acid);
+  background: var(--t-acid);
+}
+
+.tk-narr {
+  margin: 4px 0 2px;
+  font-family: var(--t-display);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.25;
+  color: var(--t-ink);
+}
+
+.lb-narr {
+  max-width: 24em;
+  margin: 10px 0 0;
+  font-family: var(--t-display);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+  .go-log p {
+    font-size: 15px;
+  }
+
+  .tk-narr {
+    font-size: 13px;
+  }
+}
+
+/* PC: menu + game-over tickets 25% wider (860 → 1075 px). */
+@media (min-width: 1100px) and (min-height: 561px) and (hover: hover) and (pointer: fine) {
+  .ticket--start,
+  .ticket--over {
+    width: min(1075px, 100%);
+  }
 }

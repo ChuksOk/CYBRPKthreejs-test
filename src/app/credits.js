@@ -21,16 +21,6 @@ export const STORY = {
   premise:
     "In 2223, Anaiis takes a break and dives into LOW GAMMA, an immersive FPS runner set on Old Earth.",
   goal: "She races through a stylized simulation, dodging obstacles, collecting energy and seeing how far she can get before the game catches her.",
-  /** Anaiis between runs (game-over ticket). */
-  quips: [
-    "BREAK'S NOT OVER. ONE MORE.",
-    "THE GAME GOT LUCKY.",
-    "OLD EARTH WAS LOUDER THAN THEY SAID.",
-    "NEXT TIME: FURTHER.",
-    "SHE'S ALMOST GOT ITS PATTERN.",
-    "FIVE MORE MINUTES. MAYBE TEN.",
-    "THE SIM KNOWS HER NAME NOW.",
-  ],
 };
 export const AUTHOR_NAME = "Adair Interactive";
 export const AUTHOR_URL = "https://adair.lovable.app/";

@@ -10,10 +10,17 @@
 | City | The Old Earth simulation (countdown "SYNCING TO OLD EARTH") |
 | Shards (`◆`) | **Energy**: pickups, Armory currency, missions (internal ids stay `shards`) |
 | Drones / carriers | The game hunting her ("THE GAME SENDS A CARRIER", sectors "THE GAME ADAPTS") |
-| Death | **CAUGHT** at N m. The game-over ticket leads with distance plus a random Anaiis quip (`STORY.quips`) |
+| Death | **CAUGHT** at N m (**RECORD** on a new best). The game-over ticket carries a **session log** from `narrateGameOver` |
 | Retry / menu | "ONE MORE RUN" / "STILL ON BREAK", start button "DIVE IN", pause "SIM ON HOLD" |
 
-Keep new UI copy in this voice, and read names and years from `STORY` instead of hard-coding them.
+**Narrator** (`src/runner/narrator.js`): the player plays *as* Anaiis, and Anaiis is playing LOW GAMMA, so the game always speaks about her in the **third person**. It never says "you" and never quotes her. Its voice is dry, observant and a little proud of its drones, aware that its "Old Earth" is a costume.
+
+- `narrateGameOver(run)` builds the kicker, title and a three-part session log:
+  - an opener (distance, sector, time, and a cause clause per death type),
+  - one observation picked from the most notable stat (carrier kills, a Sky Run, kills or pacifism, close calls, clean distance, energy, orders, a very short run),
+  - a closer (record / near / far from her best, the real local clock after midnight, or run count).
+- `narrateStart` writes the start-ticket line, and `NARRATOR` holds the in-run banners and the pause line.
+- Pools avoid repeating their last pick. New copy belongs in these pools, not inline, and names and years come from `STORY`.
 
 Primary code:
 

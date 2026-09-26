@@ -92,7 +92,7 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   ctx.font = mono(22);
   ctx.fillText("SCORE:", 128, 230);
   ctx.font = display(170);
-  ctx.fillText(String(score).padStart(6, "0"), 120, 400);
+  ctx.fillText(String(Math.floor(score)).padStart(6, "0"), 120, 400);
   ctx.font = mono(22);
   ctx.fillText(`CAUGHT · ${cause}`.slice(0, 30), 128, 470);
 
@@ -162,7 +162,7 @@ export async function drawShareCard({ score, distance, kills, cause, build = [],
   ctx.fillText("HOW FAR CAN YOU GET?", 100, 1080);
   ctx.font = mono(22);
   ctx.fillText(`BY ${AUTHOR_NAME.toUpperCase()} · ${AUTHOR_URL.replace(/^https?:\/\//, "").replace(/\/$/, "").toUpperCase()}`, 100, 1120);
-  barcode(ctx, 100, 1150, W - 200, 100, score % 97 + 5);
+  barcode(ctx, 100, 1150, W - 200, 100, Math.floor(score) % 97 + 5);
 
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
@@ -198,8 +198,8 @@ export function downloadBlob(blob, filename) {
 
 export async function shareRun(stats) {
   const blob = await drawShareCard(stats);
-  const text = `Made it ${Math.floor(stats.distance)} m across ${STORY.world} before ${GAME_TITLE} caught me — ${stats.score} pts, ${stats.kills} drones down${stats.daily ? " (Daily Run)" : ""}. How far can you get?`;
-  return shareImage(blob, `low-gamma-redux-${stats.score}.png`, text);
+  const text = `${STORY.player} made it ${Math.floor(stats.distance)} m across ${STORY.world} before ${GAME_TITLE} caught her — ${Math.floor(stats.score)} pts, ${stats.kills} drones down${stats.daily ? " (Daily Run)" : ""}. How far can you get her?`;
+  return shareImage(blob, `low-gamma-redux-${Math.floor(stats.score)}.png`, text);
 }
 
 /** Draws `source` into the box, cropped to cover it (like CSS object-fit). */
@@ -288,7 +288,7 @@ export async function drawPhotoCard(shot, { score, distance, kills, daily = fals
   ctx.fillText(daily ? "DAILY RUN · FINAL" : "FINAL", 60, sy + 26);
   ctx.font = display(120);
   ctx.fillStyle = C.acid;
-  ctx.fillText(String(score).padStart(6, "0"), 54, sy + 142);
+  ctx.fillText(String(Math.floor(score)).padStart(6, "0"), 54, sy + 142);
   ctx.textAlign = "right";
   ctx.fillStyle = C.paper;
   ctx.font = display(52);
@@ -308,13 +308,13 @@ export async function drawPhotoCard(shot, { score, distance, kills, daily = fals
 
 export async function sharePhoto(shot, stats) {
   const blob = await drawPhotoCard(shot, stats);
-  const text = `Caught mid-run in ${GAME_TITLE}: ${stats.score} pts, ${Math.floor(stats.distance)} m.`;
-  return shareImage(blob, `low-gamma-redux-photo-${stats.score}.png`, text);
+  const text = `${STORY.player}, mid-run in ${GAME_TITLE}: ${Math.floor(stats.score)} pts, ${Math.floor(stats.distance)} m before the game caught her.`;
+  return shareImage(blob, `low-gamma-redux-photo-${Math.floor(stats.score)}.png`, text);
 }
 
 export async function savePhoto(shot, stats) {
   const blob = await drawPhotoCard(shot, stats);
   if (blob) {
-    downloadBlob(blob, `low-gamma-redux-photo-${stats.score}.png`);
+    downloadBlob(blob, `low-gamma-redux-photo-${Math.floor(stats.score)}.png`);
   }
 }
